@@ -90,6 +90,107 @@ const MIGRATIONS: string[] = [
     received_at TEXT NOT NULL
   );
   `,
+  `
+  -- Social: a display name and a shareable friend code per player.
+  CREATE TABLE profiles (
+    principal_id TEXT PRIMARY KEY REFERENCES principals(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    friend_code TEXT UNIQUE NOT NULL,
+    color TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  -- requester -> addressee; accepted rows are friendships in both directions.
+  CREATE TABLE friendships (
+    requester TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    addressee TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+    created_at TEXT NOT NULL,
+    responded_at TEXT,
+    PRIMARY KEY (requester, addressee)
+  );
+
+  CREATE TABLE conversations (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('direct', 'table', 'night')),
+    ref TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, ref)
+  );
+  CREATE TABLE messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    sender_id TEXT REFERENCES principals(id) ON DELETE SET NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX messages_by_conversation ON messages (conversation_id, created_at);
+  CREATE TABLE conversation_reads (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    last_read_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, principal_id)
+  );
+
+  -- Online tables. Seats are fixed positions 0-3; the dealer rotates each hand.
+  CREATE TABLE tables (
+    id TEXT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    host_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL CHECK (mode IN ('live', 'turn')),
+    status TEXT NOT NULL CHECK (status IN ('lobby', 'playing', 'between', 'closed')),
+    seats TEXT NOT NULL,
+    settings TEXT NOT NULL,
+    scores TEXT NOT NULL,
+    hand_number INTEGER NOT NULL DEFAULT 0,
+    night_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE games (
+    id TEXT PRIMARY KEY,
+    table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+    hand_number INTEGER NOT NULL,
+    dealer INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('playing', 'ended')),
+    deadline TEXT,
+    log TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (table_id, hand_number)
+  );
+
+  -- Game Night: plan an in-person game.
+  CREATE TABLE nights (
+    id TEXT PRIMARY KEY,
+    host_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    location TEXT,
+    time_zone TEXT NOT NULL,
+    invite_token TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('polling', 'confirmed', 'cancelled')),
+    confirmed_slot TEXT,
+    seats TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE night_slots (
+    id TEXT PRIMARY KEY,
+    night_id TEXT NOT NULL REFERENCES nights(id) ON DELETE CASCADE,
+    starts_at TEXT NOT NULL
+  );
+  CREATE TABLE night_members (
+    night_id TEXT NOT NULL REFERENCES nights(id) ON DELETE CASCADE,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    rsvp TEXT NOT NULL CHECK (rsvp IN ('pending', 'yes', 'maybe', 'no')),
+    votes TEXT NOT NULL DEFAULT '[]',
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (night_id, principal_id)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

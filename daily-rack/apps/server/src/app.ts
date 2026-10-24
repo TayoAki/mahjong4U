@@ -13,6 +13,9 @@ import {
 import { transaction, type Db } from './db.ts';
 import { nextPublicationAt, type Content } from './content.ts';
 import { deletePrincipal, insertAttempt, progressFor, readSplit, type AttemptRow, type Principal } from './store.ts';
+import { Hub } from './realtime.ts';
+import { TableService, type TableServiceOptions } from './tables.ts';
+import { registerPlayRoutes } from './play-routes.ts';
 
 export interface AppConfig {
   brand: string;
@@ -61,14 +64,37 @@ const EventsBody = z.object({
     .max(50),
 });
 
-type Env = { Variables: { requestId: string; principal: Principal | null } };
+export type Env = { Variables: { requestId: string; principal: Principal | null } };
+export type Fail = (
+  c: Context<Env>,
+  status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 429 | 500,
+  code: string,
+  message: string,
+  extra?: object,
+) => Response;
 
-export function createApp({ db, content, config }: { db: Db; content: Content; config: AppConfig }) {
+export interface Services {
+  hub: Hub;
+  tables: TableService;
+}
+
+export function createServices(db: Db, options: Partial<TableServiceOptions> = {}): Services {
+  const hub = new Hub();
+  const tables = new TableService(db, hub, {
+    now: options.now ?? (() => new Date()),
+    botDelayMs: options.botDelayMs ?? 900,
+    liveTimeouts: options.liveTimeouts ?? { pass: 90, turn: 60, claim: 12 },
+  });
+  return { hub, tables };
+}
+
+export function createApp({ db, content, config, services }: { db: Db; content: Content; config: AppConfig; services?: Services }) {
   const now = config.now ?? (() => new Date());
+  const { hub, tables } = services ?? createServices(db, { now, botDelayMs: 0 });
   const app = new Hono<Env>();
   const limiter = new RateLimiter();
 
-  const fail = (c: Context<Env>, status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 429 | 500, code: string, message: string, extra: object = {}) =>
+  const fail: Fail = (c, status, code, message, extra = {}) =>
     c.json({ error: { code, message, retryable: status === 429 || status === 500, requestId: c.get('requestId'), ...extra } }, status);
 
   app.use('*', async (c, next) => {
@@ -273,6 +299,7 @@ export function createApp({ db, content, config }: { db: Db; content: Content; c
     if (c.req.header('x-confirm-delete') !== 'delete-my-data') {
       return fail(c, 400, 'confirmation_required', 'Confirm that you want to delete your data.');
     }
+    tables.removePrincipal(principal.id);
     deletePrincipal(db, content, principal.id, now());
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return c.json({ deleted: true });
@@ -347,6 +374,7 @@ export function createApp({ db, content, config }: { db: Db; content: Content; c
     return c.json({ accepted });
   });
 
+  registerPlayRoutes(api, { db, config, hub, tables, fail, limiter, now, clientAddress });
   app.route('/v1', api);
   return app;
 }
@@ -426,7 +454,7 @@ function clientAddress(c: Context): string {
   return forwarded || incoming?.socket?.remoteAddress || 'unknown';
 }
 
-class RateLimiter {
+export class RateLimiter {
   private buckets = new Map<string, { count: number; resetAt: number }>();
 
   allow(key: string, limit: number, windowMs: number): boolean {
