@@ -1,0 +1,109 @@
+{
+  "puzzleId": "demo-charleston-001",
+  "revisionId": "demo-charleston-001-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "DOT_2"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "DOT_2"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "DOT_4"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "DOT_6"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "DOT_8"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "BAMBOO_2"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "BAMBOO_4"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "BAMBOO_6"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "CHARACTER_7"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "CHARACTER_9"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "DRAGON_RED"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "DRAGON_WHITE"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "FLOWER_1"
+    }
+  ],
+  "sections": [
+    {
+      "id": "evens",
+      "label": "2468"
+    },
+    {
+      "id": "consecutive",
+      "label": "Consecutive Run"
+    },
+    {
+      "id": "any-like",
+      "label": "Any Like Numbers"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "evens",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "headline": "Keep your even tiles connected.",
+      "explanation": "Your even tiles (2, 4, 6, 8) work well together and give you flexible options across suits.",
+      "reasons": {
+        "t09": "Set aside an unpaired odd tile.",
+        "t10": "Keep the focus on your evens.",
+        "t11": "Make room for your chosen direction."
+      }
+    },
+    "alternates": [
+      {
+        "tileInstanceIds": [
+          "t09",
+          "t10",
+          "t12"
+        ],
+        "note": "Passing the white dragon instead of the red keeps a different dragon option open."
+      }
+    ]
+  }
+}

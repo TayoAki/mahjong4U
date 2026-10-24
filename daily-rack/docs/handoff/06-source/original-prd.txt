@@ -1,0 +1,259 @@
+Mahjong App PRD
+Oct 24, 2026 · @Taco Trader
+Build a daily American mahjong puzzle app where every answer exports as a 9:16 rack video in the format that wins on Instagram, so playing the app is making content.
+Why this app
+The most repeatable American mahjong winner on Instagram is one decision on one rack, so the app's core moment is exactly that decision, and each answer comes out as a clip in the same look. The research covered 48 torn-down reels and 2,587 scanned reels from 61 creators (October 2026). "× typical" means times that account's median views.
+Pattern in the research
+Proof
+What the app does with it
+One decision at one moment of the game: picking a hand, the Charleston, right after the deal
+@thetileteacher_ "When in doubt, count it out": 554K views, 35× typical. "Charleston tips for the 2026 card": 425K, 27×. @ladiesthatmahj "how I practise with 13 random tiles": 435K, 25×
+The daily puzzle: a dealt 13-tile rack, you choose what to pass and which section to aim for
+A weekly series the audience waits for
+@mahjongwithlo "What to Pass Wednesday": 31 of its 104 reels. @mahjonthebeach card-section explainers: 2.7× its other reels
+One themed puzzle drop each weekday, so players and creators have a reason to come back and post
+Memory tricks and songs for the tiles and the card
+@mywifeplaysmahjong tile song: 86× typical. @commongroundmahjong reading Chinese characters: 1.05M, 134×
+A Learn mode of short memory tricks, each one a shareable card
+Rule mistakes and "spot the mistake" quizzes
+@ladiesthatmahj "You can't do that!": 302K, 17×. @ohmymahjong "Can you spot the mistake?": 206K, 8×
+A Rules quiz with a wrong rack to fix; the clip asks viewers to answer in the comments
+Relatable mahjong-night jokes
+@saltlakemahjongclub "The time you play mahjong says a lot about you": 35×. @themahjmom "Mahjong 101 inner monologue": 216K, 25×
+A "what kind of player are you" result card built from how you play
+Not enough players
+2-player: 18.5×. "Messy mahjong" for under four: 23×. 3-player: 7×
+Game night: invite friends, find a fourth, pick a variant for 2 or 3
+Faceless works
+Overhead hands-only strategy reels: median about 29×. Person on camera: about 17× (6 vs 9 reels)
+Every export is an overhead rack render: no camera, no face
+Events and socials go big
+@852mahjongsocial pool-party table: 285× its followers. @madam.mahjong Friday night: 1.09M
+Later: a game-night recap clip from the night's hands
+Who it's for
+The first user is the newer American mahjong player who freezes at the rack between weekly games; the second is the creator or teacher who needs something to post every week.
+User
+What they're trying to do
+What they do today
+Where that falls short
+Learner (first 2 years of play)
+Pick a hand fast, pass well in the Charleston, keep up with each year's new card
+Watches strategy reels (the top ones get 400K+ views), practises alone by pulling 13 random tiles, collects cheat sheets through comment-keyword freebies
+Reels can't check their answer; solo practice has no feedback; no record of getting better
+Host of a regular game
+Get four people to the same table on the same night
+Group texts; switches to 2- or 3-player rules when someone drops out
+Scheduling jokes go viral because the pain is real; variant rules are scattered across reels
+Creator or teacher
+Post a reliable weekly series that teaches
+Films their own rack every week ("What to Pass Wednesday", "You can't do that!")
+Each episode is filmed from scratch; no easy way to let followers try the hand themselves
+The learner is the one to build for first: they make up the audience that the 25–35× strategy reels reach.
+Product principles
+Sharing should be the natural end of every session, not a button people have to be talked into.
+1. The answer is the content. Every finished puzzle renders as a 9:16 clip in the winning format: overhead rack, title banner, the player's reasoning as captions.
+2. One decision per clip. One moment of the game per puzzle (which three to pass, which section to aim for), because that is what the 25–35× reels teach.
+3. Everyone gets the same rack each day. A shared daily deal makes answers comparable, so "you passed the 6s?!" becomes a comment thread.
+4. Show the split. After answering, players see what share of everyone passed each tile. Disagreement is what people post about.
+5. Faceless by default. No one ever needs to be on camera; the overhead render looks like the reels that did best.
+6. Built for creators too. A creator can post the day's rack as their own episode with their voiceover, and viewers can play the same hand from a link.
+7. A weekly rhythm with our own names. A themed drop each weekday, under names that belong to the app, not to any creator's series.
+The viral loop
+The clip is the ad, the shared rack is the landing page, and the streak turns a visitor into a player who solves tomorrow's rack.
+MVP features
+The first release is the daily rack, the clip export and the answer split; everything else gives people more racks and more reasons to send one.
+Priority
+Feature
+What it does
+How it spreads
+Research basis
+P0
+Daily Rack
+Everyone gets the same 13-tile deal each day. Pick the section to aim for and the three tiles to pass, then see the reasoning
+The result clip and "you passed that?" comparisons
+Charleston and pick-a-hand reels: 25–35× typical
+P0
+Clip export
+Renders a 9:16 overhead rack video: title banner, word-by-word captions of your reasoning, optional voiceover recorded in the app. Saves or shares straight to Reels and TikTok
+Posts look native to the feed; the end card says "Play today's rack" with the app's name
+Faceless overhead reels did best (about 29×)
+P0
+The split
+After you answer, the share of players who passed each tile
+Disagreement drives comments and duets
+"Spot the mistake" and debate hooks: 8–17×
+P0
+Streaks and progress
+Daily streak, accuracy by card section, racks solved
+A streak card to share at milestones
+Daily-habit loop; supports the weekly series rhythm
+P1
+Weekday drops
+Mon Pick the Section, Tue Rule Check, Wed Charleston Call, Thu Tile Trick, Fri Table Talk
+Named days give creators a series to post and players a reason to return
+Doubled-down series: 31 of 104 reels at @mahjongwithlo
+P1
+Rule Check
+A rack with one illegal move (a joker in a pair, a discard called for a pair). Find it
+Clip ends "Spot it? Comment"
+"You can't do that!": 17×
+P1
+Tile Tricks
+15-second memory tricks (dragons and suits, winds and odds or evens)
+Each one is a saveable clip
+Tile songs and tricks: 27–134×
+P1
+Player type card
+After 7 racks, a funny "what kind of player you are" card from your choices
+Identity cards get tagged and sent to friends
+Relatable humour: 16–35×
+P1
+Game Night
+Make a night, invite by link, RSVP, seat order; when someone drops, it suggests 2- or 3-player rules
+Every invite reaches people who don't have the app
+Scheduling skits 17×; variants 7–23×
+P2
+Creator links
+A creator posts today's rack as their episode; a link lets viewers play that exact hand, credited to the creator
+Creators bring their audiences; plays per creator show who drives growth
+Teaching accounts with 50K–270K followers already post weekly series
+P2
+Night recap
+After a game night, a recap clip of the best hands
+Events and socials go biggest (up to 285× followers)
+@852mahjongsocial, @madam.mahjong
+User flows
+A new player should finish a rack and hold a postable clip within 60 seconds of opening the app, before any sign-up.
+1. First open
+1. The app opens straight on today's rack: "Today's rack: pick your section, pass three." No sign-up wall.
+2. Two quick taps: which card they play (this year's or "I'm learning") and how often they play (new, weekly, I teach).
+3. The rack shows 13 tiles with a one-tap sort by suit. Card sections show as chips to choose from.
+4. They pick a section, drag three tiles to the pass tray and submit.
+5. Result screen: their pass next to the suggested one, one line of why per tile, and the split of all players.
+6. "Make my clip": a 9:16 preview of their rack, with an optional 20-second voiceover. Share to Reels or TikTok, or save.
+7. Only now, "Keep your streak": sign in with Apple or Google.
+2. Daily return
+1. A push at the time they chose: today's themed drop (for example, Wednesday is Charleston Call).
+2. They answer, see the split and their streak goes up.
+3. The share prompt appears only on moments worth posting: a 7-day streak, a rare answer ("only 4% passed this"), a perfect week.
+3. Arriving from a friend's clip
+1. A viewer sees a rack clip in their feed. The end card and caption say "Play this rack", with a link in the poster's bio or sent by comment keyword.
+2. The link opens that exact rack in an instant, install-free version (App Clip on iOS, Instant App on Android, or the web).
+3. They play it, then see their pass next to the poster's.
+4. "Get tomorrow's rack and keep a streak" leads to the install.
+4. Game night
+1. The host taps "Plan a night", offers two or three dates and shares the link in the group chat.
+2. Friends vote from the link without installing; the most-voted date locks and goes into everyone's calendar.
+3. On the day, the app sets seats (who is East) and offers a warm-up rack.
+4. If someone drops, it suggests 3- or 2-player rules and shows the setup.
+5. Afterwards (P2), it offers a recap clip of the night's best hands.
+5. Creator episode
+1. A creator taps "Post as my episode" on today's rack and records their voiceover over the overhead render.
+2. The clip carries their handle and a link that opens the same rack.
+3. Their profile in the app counts plays from their link, so they can see what their audience solved.
+Key screens
+The whole MVP is five screens, and three of them (rack, result, clip) are the product.
+The share button sits exactly where the session ends, so posting is the next tap, not a separate decision.
+Screen
+What it shows
+Main action
+Today
+Today's themed drop, the streak, the day's split teaser ("62% passed a flower")
+Play today's rack
+Rack
+13 tiles on a rack seen from above, a sort button, card-section chips, a pass tray for three tiles
+Submit the pass
+Result
+Your pass beside the suggested one, one line of why per tile, the split bars, your streak
+Make my clip
+Clip
+A 9:16 preview of the overhead render with title banner and captions; record-voiceover button
+Share to Reels or TikTok, or save
+Game night
+Date poll, who's in, seat order, "we're three tonight" variant switch
+Send the invite
+The share clip
+The exported clip copies the look of the top strategy reels so it reads as native content, not an ad: an overhead rack, a title banner over it, word-by-word captions and the player's own voice. Sizes below are measured from those reels' frames.
+Element
+Spec
+Taken from
+Frame
+1080×1920 (9:16), overhead view of the rack and pass tray; no face
+Every faceless strategy winner
+Title banner, first 3 s
+The day's question in bold sentence case ("What would you pass?"), magenta letters (#99028F) on a white rounded box, 1–2 lines, each about 6–8% of the frame height (112–158 px), centred over the rack, 25–43% down the frame
+@thetileteacher_ hook banners
+Spoken hook
+Names the pain in one line, e.g. "Not sure what to pass? Here's my rack." Recorded by the player; optional
+7 of 15 strategy winners open with a spoken line; the rest rely on the banner
+Captions
+Word by word, all caps, white bold letters on a coloured box (#1B4F9C at 95% or #B5179E), current word highlighted, about 2–5% of the frame height (36–96 px), 72–86% down the frame
+@ladiesthatmahj captions
+Audio
+The player's voice and no music; a captions-only version when they skip the voiceover
+14 of 15 strategy winners use only the speaker's voice
+Order
+Question → the rack → the three tiles slide out one at a time, each with one line of why → the split → "What would you pass? Comment below"
+Pick-a-hand and Charleston reel structure: hook, promise, steps, recap, CTA
+Length
+30–60 s for a daily rack; under 20 s for Tile Tricks
+Winning Charleston and trick reels ran 46–77 s
+End card
+App name and "Play today's rack"; the poster's handle on creator clips
+Comment-keyword and follow CTAs on 7 of 15 winners
+Metrics
+The number that decides this product is installs per sharing player. The targets below are starting assumptions to replace with real numbers after the first four weeks, not benchmarks.
+Metric
+Definition
+90-day target
+Viral coefficient (K)
+New players brought in by each active player's shares and invites, over 7 days
+0.3 at launch, 0.5 by day 90
+Share rate
+Finished racks that are exported or shared
+15%
+Link-to-play
+Opens of a shared rack link that end in a finished rack
+40%
+Play-to-install
+Instant-play finishers who install the app
+25%
+Retention
+Players who come back on day 1 / day 7 / day 30
+40% / 20% / 10%
+Creator episodes
+Creators posting an app rack as an episode at least weekly
+20
+Game nights
+Nights created per week, and invitees per night who weren't players yet
+Tracked from P1; no target until the first month of data
+Roadmap
+A phase opens only when the one before it shows people are sharing; if a gate misses, the next step is fixing the clip or the link, not adding features.
+Risks and open questions
+The biggest risk is the card: the National Mah Jongg League's annual card is copyrighted, so the app must never reproduce it.
+Risk
+What we know
+What we do about it
+Card rights
+The annual card is protected by copyright (its layout, typography and other expression), while the game and its rules are not (Lerner David, July 2026). I Love Mahj offers its own clearly labelled card for this reason (I Love Mahj)
+Never show or copy the card. Puzzles name sections and describe hands in our own words, and players check them against their own card. Get a lawyer's review before launch; ask the League about a licence
+Official competition
+NMJL Online is the League's official online game. It requires the physical card plus a membership ($4.99 a month or $49.99 a year) and is built for full games
+Don't compete on full online games. Win the 2-minute daily decision and the clip, which it doesn't offer
+Wrong answers
+A bad "suggested pass" kills trust fast, and strong players disagree
+Show the split, not one "correct" answer; check suggestions with simulations plus a teacher's review; label it "one strong pass"
+Cold start
+K of 0.3 means most players still come from content we post
+Post the daily rack clip from day one on our own account; invite 10 teaching creators to post racks with creator links
+Instagram links
+Reels can't carry tappable links
+A short web address on the end card, plus comment-a-word DMs (5 of 15 strategy winners already use them)
+[ ] Lawyer's review of how puzzles refer to the card
+[ ] Decide: our own practice card, a League licence, or both
+[ ] Pick the app name and check the trademark
+Sources
+• Mahjong Instagram research, October 2026: 2,587 reels scanned from 61 creators, 48 reels torn down (format, hooks, captions, measured on-screen text), 16 large American mahjong accounts scanned about 96 reels deep. Research preview
+• Copyright Issues in America's Fast-Growing Mah Jongg Craze, Lerner David, July 2026
+• Starting a Game, I Love Mahj knowledge base
+• NMJL Online, App Store listing

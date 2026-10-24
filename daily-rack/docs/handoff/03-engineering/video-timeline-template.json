@@ -1,0 +1,70 @@
+{
+  "templateOnly": true,
+  "implemented": false,
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "durationSeconds": 32,
+  "voiceoverMaxSeconds": 20,
+  "sourceRevisionId": "demo-charleston-001-r1",
+  "sourceAttempt": "illustrative-only",
+  "shareUrl": null,
+  "segments": [
+    {
+      "start": 0,
+      "end": 3,
+      "type": "hook",
+      "text": "What would you pass?"
+    },
+    {
+      "start": 3,
+      "end": 7,
+      "type": "rack",
+      "text": "Pick a direction."
+    },
+    {
+      "start": 7,
+      "end": 11,
+      "type": "tile-explanation",
+      "tileInstanceId": "t09",
+      "text": "Set aside an unpaired odd tile."
+    },
+    {
+      "start": 11,
+      "end": 15,
+      "type": "tile-explanation",
+      "tileInstanceId": "t10",
+      "text": "Keep the focus on your evens."
+    },
+    {
+      "start": 15,
+      "end": 19,
+      "type": "tile-explanation",
+      "tileInstanceId": "t11",
+      "text": "Make room for your chosen direction."
+    },
+    {
+      "start": 19,
+      "end": 25,
+      "type": "split",
+      "syntheticFixtureOnly": true
+    },
+    {
+      "start": 25,
+      "end": 29,
+      "type": "question",
+      "text": "What would you pass? Comment below."
+    },
+    {
+      "start": 29,
+      "end": 32,
+      "type": "end-card",
+      "brand": "Daily Rack",
+      "text": "Play today's rack",
+      "url": "Populate only after a real destination is configured."
+    }
+  ],
+  "captionSchedule": "Compute readable word timing from the exact approved script; voice alignment requires consent and verification.",
+  "audioPolicy": "User recording optional; local by default; no bundled music."
+}
+

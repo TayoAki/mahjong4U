@@ -1,0 +1,96 @@
+{
+  "$schema_note": "Proposed implementation tokens, not pixel measurements or a runtime dependency.",
+  "version": "1.0",
+  "workingName": "Daily Rack",
+  "status": "concept",
+  "color": {
+    "canvas": "#FAF7F0",
+    "ink": "#173F36",
+    "primary": "#99028F",
+    "surface": "#FFFFFF",
+    "sage": "#EEF1E7",
+    "pink": "#FCE8F3",
+    "muted": "#667069",
+    "border": "#DEDCD4",
+    "captionBlue": "#1B4F9C",
+    "captionMagenta": "#B5179E",
+    "tileIvory": "#FFF8E9",
+    "tileGreen": "#164D3F",
+    "tileRed": "#B62226"
+  },
+  "typography": {
+    "display": {
+      "family": "Editorial serif - license/selection pending",
+      "size": 32,
+      "lineHeight": 38,
+      "weight": "bold"
+    },
+    "body": {
+      "family": "System sans-serif",
+      "size": 16,
+      "lineHeight": 24
+    },
+    "label": {
+      "size": 13,
+      "lineHeight": 18
+    },
+    "action": {
+      "size": 17,
+      "lineHeight": 22,
+      "weight": "semibold"
+    }
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40
+  ],
+  "layout": {
+    "screenPadding": 20,
+    "sectionGap": 24,
+    "cardPadding": 16,
+    "minimumTouchTarget": 44,
+    "units": "logical pixels",
+    "safeArea": "provided by native runtime exactly once"
+  },
+  "radius": {
+    "card": 20,
+    "button": 16,
+    "chip": 14,
+    "tile": 8
+  },
+  "export": {
+    "width": 1080,
+    "height": 1920,
+    "framesPerSecond": 30,
+    "dailyDurationSeconds": {
+      "min": 30,
+      "max": 60
+    },
+    "voiceoverMaxSeconds": 20,
+    "hook": {
+      "text": "#99028F",
+      "background": "#FFFFFF",
+      "verticalFraction": {
+        "min": 0.25,
+        "max": 0.43
+      }
+    },
+    "captions": {
+      "text": "#FFFFFF",
+      "background": "#1B4F9C",
+      "alternate": "#B5179E",
+      "verticalFraction": {
+        "min": 0.72,
+        "max": 0.86
+      }
+    },
+    "encoding": "MP4 with codec/audio proven in F00; no encoder implemented"
+  }
+}
+

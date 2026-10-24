@@ -1,0 +1,30 @@
+{
+  "name": "daily-rack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Daily American mahjong rack puzzle where every answer exports as a 9:16 clip",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @daily-rack/server & npm run dev --workspace @daily-rack/web",
+    "build": "npm run build --workspace @daily-rack/web",
+    "start": "npm run start --workspace @daily-rack/server",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/web",
+    "content:check": "tsx scripts/check-content.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

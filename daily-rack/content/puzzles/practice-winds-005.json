@@ -1,0 +1,100 @@
+{
+  "puzzleId": "practice-winds-005",
+  "revisionId": "practice-winds-005-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "WIND_EAST"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "WIND_EAST"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "WIND_SOUTH"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "WIND_WEST"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "WIND_NORTH"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "WIND_NORTH"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "DRAGON_RED"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "DRAGON_GREEN"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "DRAGON_WHITE"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "DOT_3"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "BAMBOO_6"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "CHARACTER_8"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "FLOWER_6"
+    }
+  ],
+  "sections": [
+    {
+      "id": "winds-dragons",
+      "label": "Winds & Dragons"
+    },
+    {
+      "id": "any-like",
+      "label": "Any Like Numbers"
+    },
+    {
+      "id": "369",
+      "label": "369"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "winds-dragons",
+      "tileInstanceIds": [
+        "t10",
+        "t11",
+        "t12"
+      ],
+      "headline": "Winds and dragons are calling.",
+      "explanation": "All four winds and all three dragons are already in your rack, with pairs of East and North.",
+      "reasons": {
+        "t10": "Number tiles don't help this hand.",
+        "t11": "6 bam has no partners.",
+        "t12": "8 crak can go too."
+      }
+    },
+    "alternates": []
+  }
+}

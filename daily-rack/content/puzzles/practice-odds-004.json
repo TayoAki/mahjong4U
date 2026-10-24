@@ -1,0 +1,109 @@
+{
+  "puzzleId": "practice-odds-004",
+  "revisionId": "practice-odds-004-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "BAMBOO_1"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "BAMBOO_3"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "BAMBOO_5"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "BAMBOO_7"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "BAMBOO_9"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "DOT_1"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "DOT_3"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "DOT_5"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "CHARACTER_2"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "CHARACTER_4"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "DOT_8"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "WIND_SOUTH"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "FLOWER_5"
+    }
+  ],
+  "sections": [
+    {
+      "id": "odds",
+      "label": "13579"
+    },
+    {
+      "id": "evens",
+      "label": "2468"
+    },
+    {
+      "id": "consecutive",
+      "label": "Consecutive Run"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "odds",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "headline": "Lean into your odd numbers.",
+      "explanation": "Every bam from 1 to 9 in odd steps, plus odd dots, points straight at 13579.",
+      "reasons": {
+        "t09": "Even tiles don't fit 13579.",
+        "t10": "4 crak is another even.",
+        "t11": "8 dot is the last even in your rack."
+      }
+    },
+    "alternates": [
+      {
+        "tileInstanceIds": [
+          "t09",
+          "t10",
+          "t12"
+        ],
+        "note": "Passing the wind and keeping 8 dot one more round also works."
+      }
+    ]
+  }
+}

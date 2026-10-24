@@ -1,0 +1,13 @@
+{
+  "timeZone": "America/New_York",
+  "note": "Publication calendar. Days without an entry fall back to a rotation only when DEV_ROTATE=1.",
+  "days": {
+    "2026-10-24": "demo-charleston-001-r1",
+    "2026-10-25": "practice-run-002-r1",
+    "2026-10-26": "practice-like-003-r1",
+    "2026-10-27": "practice-odds-004-r1",
+    "2026-10-28": "practice-winds-005-r1",
+    "2026-10-29": "practice-369-006-r1",
+    "2026-10-30": "practice-pairs-007-r1"
+  }
+}

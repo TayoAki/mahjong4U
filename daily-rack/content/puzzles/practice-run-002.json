@@ -1,0 +1,109 @@
+{
+  "puzzleId": "practice-run-002",
+  "revisionId": "practice-run-002-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "BAMBOO_3"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "BAMBOO_4"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "BAMBOO_5"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "BAMBOO_6"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "BAMBOO_7"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "DOT_4"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "DOT_5"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "DOT_6"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "CHARACTER_1"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "CHARACTER_9"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "WIND_NORTH"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "DRAGON_GREEN"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "FLOWER_2"
+    }
+  ],
+  "sections": [
+    {
+      "id": "consecutive",
+      "label": "Consecutive Run"
+    },
+    {
+      "id": "odds",
+      "label": "13579"
+    },
+    {
+      "id": "winds-dragons",
+      "label": "Winds & Dragons"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "consecutive",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "headline": "Your run is already rolling.",
+      "explanation": "Bams 3 through 7 and dots 4 through 6 give you two runs that can grow in either direction.",
+      "reasons": {
+        "t09": "A lone 1 crak sits far from your runs.",
+        "t10": "9 crak is too far from 3 to 7.",
+        "t11": "One wind with no partners."
+      }
+    },
+    "alternates": [
+      {
+        "tileInstanceIds": [
+          "t09",
+          "t10",
+          "t12"
+        ],
+        "note": "Passing the green dragon instead of the wind works the same way for a run."
+      }
+    ]
+  }
+}

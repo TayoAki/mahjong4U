@@ -1,0 +1,100 @@
+{
+  "puzzleId": "practice-369-006",
+  "revisionId": "practice-369-006-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "DOT_3"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "DOT_3"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "DOT_6"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "DOT_9"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "BAMBOO_3"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "BAMBOO_6"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "BAMBOO_9"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "CHARACTER_6"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "CHARACTER_1"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "BAMBOO_5"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "DOT_7"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "WIND_NORTH"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "JOKER"
+    }
+  ],
+  "sections": [
+    {
+      "id": "369",
+      "label": "369"
+    },
+    {
+      "id": "consecutive",
+      "label": "Consecutive Run"
+    },
+    {
+      "id": "singles-pairs",
+      "label": "Singles & Pairs"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "369",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "headline": "Threes, sixes and nines line up.",
+      "explanation": "You hold 3, 6 and 9 in dots and bams already. Keep the joker: it can never be passed.",
+      "reasons": {
+        "t09": "1 crak isn't a 3, 6 or 9.",
+        "t10": "5 bam won't fit 369.",
+        "t11": "7 dot sits outside 369."
+      }
+    },
+    "alternates": []
+  }
+}

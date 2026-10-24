@@ -1,0 +1,192 @@
+{
+  "fixtureOnly": true,
+  "teacherReviewed": false,
+  "productionApproved": false,
+  "notice": "Illustrative data for handoff. PNG symbols/counts may differ. Validate the ruleset and review the strategy before use.",
+  "puzzle": {
+    "id": "demo-charleston-001",
+    "revisionId": "demo-charleston-001-r1",
+    "mode": "charleston-pass",
+    "publicationDay": null,
+    "question": "What would you pass?",
+    "tiles": [
+      {
+        "instanceId": "t01",
+        "faceCode": "DOT_2",
+        "spokenLabel": "Two dot"
+      },
+      {
+        "instanceId": "t02",
+        "faceCode": "DOT_2",
+        "spokenLabel": "Two dot"
+      },
+      {
+        "instanceId": "t03",
+        "faceCode": "DOT_4",
+        "spokenLabel": "Four dot"
+      },
+      {
+        "instanceId": "t04",
+        "faceCode": "DOT_6",
+        "spokenLabel": "Six dot"
+      },
+      {
+        "instanceId": "t05",
+        "faceCode": "DOT_8",
+        "spokenLabel": "Eight dot"
+      },
+      {
+        "instanceId": "t06",
+        "faceCode": "BAMBOO_2",
+        "spokenLabel": "Two bamboo"
+      },
+      {
+        "instanceId": "t07",
+        "faceCode": "BAMBOO_4",
+        "spokenLabel": "Four bamboo"
+      },
+      {
+        "instanceId": "t08",
+        "faceCode": "BAMBOO_6",
+        "spokenLabel": "Six bamboo"
+      },
+      {
+        "instanceId": "t09",
+        "faceCode": "CHARACTER_7",
+        "spokenLabel": "Seven character"
+      },
+      {
+        "instanceId": "t10",
+        "faceCode": "CHARACTER_9",
+        "spokenLabel": "Nine character"
+      },
+      {
+        "instanceId": "t11",
+        "faceCode": "DRAGON_RED",
+        "spokenLabel": "Red dragon"
+      },
+      {
+        "instanceId": "t12",
+        "faceCode": "DRAGON_WHITE",
+        "spokenLabel": "White dragon"
+      },
+      {
+        "instanceId": "t13",
+        "faceCode": "FLOWER_1",
+        "spokenLabel": "Flower"
+      }
+    ],
+    "sections": [
+      {
+        "id": "evens",
+        "label": "2468"
+      },
+      {
+        "id": "consecutive",
+        "label": "Consecutive Run"
+      },
+      {
+        "id": "any-like",
+        "label": "Any Like Numbers"
+      }
+    ]
+  },
+  "illustrativeAttempt": {
+    "sectionId": "evens",
+    "selectedTileInstanceIds": [
+      "t09",
+      "t10",
+      "t11"
+    ]
+  },
+  "postSubmissionOnly": {
+    "suggestion": {
+      "label": "One strong pass",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "reasons": {
+        "t09": "Set aside an unpaired odd tile.",
+        "t10": "Keep the focus on your evens.",
+        "t11": "Make room for your chosen direction."
+      }
+    },
+    "split": {
+      "synthetic": true,
+      "scope": "all",
+      "denominator": 100,
+      "minimumSampleThreshold": 30,
+      "rows": [
+        {
+          "tileInstanceId": "t01",
+          "count": 8,
+          "rate": 0.08
+        },
+        {
+          "tileInstanceId": "t02",
+          "count": 7,
+          "rate": 0.07
+        },
+        {
+          "tileInstanceId": "t03",
+          "count": 12,
+          "rate": 0.12
+        },
+        {
+          "tileInstanceId": "t04",
+          "count": 12,
+          "rate": 0.12
+        },
+        {
+          "tileInstanceId": "t05",
+          "count": 10,
+          "rate": 0.1
+        },
+        {
+          "tileInstanceId": "t06",
+          "count": 10,
+          "rate": 0.1
+        },
+        {
+          "tileInstanceId": "t07",
+          "count": 8,
+          "rate": 0.08
+        },
+        {
+          "tileInstanceId": "t08",
+          "count": 7,
+          "rate": 0.07
+        },
+        {
+          "tileInstanceId": "t09",
+          "count": 38,
+          "rate": 0.38
+        },
+        {
+          "tileInstanceId": "t10",
+          "count": 51,
+          "rate": 0.51
+        },
+        {
+          "tileInstanceId": "t11",
+          "count": 64,
+          "rate": 0.64
+        },
+        {
+          "tileInstanceId": "t12",
+          "count": 30,
+          "rate": 0.3
+        },
+        {
+          "tileInstanceId": "t13",
+          "count": 43,
+          "rate": 0.43
+        }
+      ],
+      "note": "Synthetic counts sum to 300 selections across 100 three-tile attempts. Do not present as observed community data."
+    }
+  }
+}
+

@@ -1,0 +1,109 @@
+{
+  "puzzleId": "practice-pairs-007",
+  "revisionId": "practice-pairs-007-r1",
+  "revision": 1,
+  "mode": "charleston-pass",
+  "title": "Charleston Call",
+  "question": "What would you pass?",
+  "prompt": "Pick a section, then choose 3 tiles.",
+  "tiles": [
+    {
+      "instanceId": "t01",
+      "faceCode": "DOT_1"
+    },
+    {
+      "instanceId": "t02",
+      "faceCode": "DOT_1"
+    },
+    {
+      "instanceId": "t03",
+      "faceCode": "BAMBOO_4"
+    },
+    {
+      "instanceId": "t04",
+      "faceCode": "BAMBOO_4"
+    },
+    {
+      "instanceId": "t05",
+      "faceCode": "CHARACTER_7"
+    },
+    {
+      "instanceId": "t06",
+      "faceCode": "CHARACTER_7"
+    },
+    {
+      "instanceId": "t07",
+      "faceCode": "DRAGON_GREEN"
+    },
+    {
+      "instanceId": "t08",
+      "faceCode": "DRAGON_GREEN"
+    },
+    {
+      "instanceId": "t09",
+      "faceCode": "DOT_6"
+    },
+    {
+      "instanceId": "t10",
+      "faceCode": "BAMBOO_2"
+    },
+    {
+      "instanceId": "t11",
+      "faceCode": "CHARACTER_9"
+    },
+    {
+      "instanceId": "t12",
+      "faceCode": "WIND_EAST"
+    },
+    {
+      "instanceId": "t13",
+      "faceCode": "FLOWER_7"
+    }
+  ],
+  "sections": [
+    {
+      "id": "singles-pairs",
+      "label": "Singles & Pairs"
+    },
+    {
+      "id": "any-like",
+      "label": "Any Like Numbers"
+    },
+    {
+      "id": "consecutive",
+      "label": "Consecutive Run"
+    }
+  ],
+  "review": {
+    "teacherReviewed": false,
+    "notes": "Practice draft written for development. Needs a qualified teacher's review before publication."
+  },
+  "answer": {
+    "suggestion": {
+      "label": "One strong pass",
+      "sectionId": "singles-pairs",
+      "tileInstanceIds": [
+        "t09",
+        "t10",
+        "t11"
+      ],
+      "headline": "Four pairs already.",
+      "explanation": "Pairs of 1 dot, 4 bam, 7 crak and green dragon point toward a singles-and-pairs hand.",
+      "reasons": {
+        "t09": "6 dot has no pair yet.",
+        "t10": "2 bam is a single with no partner.",
+        "t11": "9 crak doesn't match anything."
+      }
+    },
+    "alternates": [
+      {
+        "tileInstanceIds": [
+          "t09",
+          "t10",
+          "t12"
+        ],
+        "note": "Passing the wind instead of 9 crak keeps the same pairs."
+      }
+    ]
+  }
+}
