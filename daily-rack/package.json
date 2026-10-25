@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @daily-rack/server & npm run start --workspace @daily-rack/mobile",
+    "phone": "bash scripts/codespace.sh",
     "build": "npm run build:web --workspace @daily-rack/mobile",
     "start": "npm run start --workspace @daily-rack/server",
     "test": "vitest run",

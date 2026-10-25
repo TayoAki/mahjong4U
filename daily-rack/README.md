@@ -5,7 +5,7 @@ An American mahjong app with two halves:
 - **The daily rack.** Everyone gets the same 13-tile deal each day. You pick a section, pass three tiles, compare your pass with one strong pass and with how everyone else passed, then export your answer as a 9:16 clip for Reels or TikTok.
 - **Sit down to a game.** Full four-seat American mahjong (Charleston, courtesy pass, calling discards, jokers and joker swaps, Mahjong and payments) against computer players or with friends, live or turn-based. Friends add each other by code, chat, and plan in-person **Game Nights** with time votes, RSVPs and a calendar file, with an online table as the fallback when the group can't meet.
 
-It is one Expo app for iOS, Android and the web. A shared link opens in any phone browser with nothing to install.
+It is one Expo app for iOS, Android and the web. There is no sign-in: each player is a guest on their device. A shared link opens in any phone browser with nothing to install.
 
 Built from the product handoff in [`docs/handoff/`](docs/handoff/README.md). What is done, what is verified and what is still open is tracked in [`BUILD-STATUS.md`](BUILD-STATUS.md).
 
@@ -53,14 +53,30 @@ npm run build                  # export the Expo web build to apps/mobile/dist
 DEV_ROTATE=1 npm start         # serves the web app and API on http://localhost:8787
 ```
 
-On a phone, run the API as above, then start Expo pointing at your computer's LAN address:
+### On your iPhone from a GitHub Codespace
+
+A phone can't reach a Codespace's `localhost`, so both the Expo dev server (port 8081, the app's code) and the API (port 8787) need public URLs. The repo's dev container forwards both ports, and one command does the rest:
+
+```bash
+npm run phone
+```
+
+It builds the web app if needed, starts the API, tries to make ports 8787 and 8081 public, and starts Expo with `EXPO_PUBLIC_API_URL` and `EXPO_PACKAGER_PROXY_URL` pointing at the Codespace's `https://<codespace>-<port>.app.github.dev` addresses. Install **Expo Go** from the App Store, then scan the QR code with the iPhone Camera.
+
+- If it says it couldn't make the ports public, open the **Ports** tab, right-click 8787 and 8081, and choose **Port Visibility > Public**. Anyone with those links can reach them while the Codespace runs.
+- If Expo Go can't load the app through the forwarded port, use Expo's tunnel for the dev server instead: run `npx expo login` once (free Expo account), then `TUNNEL=1 npm run phone`. The API still goes through port 8787.
+- The Codespace stops after a period of inactivity, and the URLs only work while it runs. TestFlight and App Store builds need the API hosted permanently, with `EXPO_PUBLIC_API_URL` set to that address at build time.
+
+### On your own computer
+
+Run the API as above, then start Expo pointing at your computer's LAN address, with the phone on the same Wi-Fi:
 
 ```bash
 cd apps/mobile
 EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 ```
 
-Open it in Expo Go or a development build. `npm run dev` runs the API with reload and the Expo dev server together.
+`npm run dev` runs the API with reload and the Expo dev server together.
 
 `DEV_ROTATE=1` serves a daily rack every day by rotating through the content. Without it, only days listed in `content/schedule.json` have a rack, and other days show "The next rack is on its way". Games, friends and Game Night work every day.
 
@@ -87,6 +103,7 @@ Open it in Expo Go or a development build. `npm run dev` runs the API with reloa
 | `npm test` | Core, game engine and API tests (Vitest) |
 | `npm run typecheck` | Type-check core, server and the Expo app |
 | `npm run build` | Export the Expo web build |
+| `npm run phone` | In a GitHub Codespace: start the API and Expo with public URLs so Expo Go on a phone can open the app |
 | `npm run content:check` | Validate all puzzles and the schedule; lists any not yet teacher-reviewed |
 | `npm run seed:demo -- [revisionId] [count]` | Add labelled demo answers so the split can be seen in development |
 | `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, and a Game Night from invite to calendar file. Start the server on a fresh database with `BOT_DELAY_MS=120` first. Set `E2E_SKIP_CLIP=1` to skip the video export. |

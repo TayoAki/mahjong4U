@@ -1,0 +1,16 @@
+{
+  "name": "Daily Rack",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "forwardPorts": [8787, 8081],
+  "portsAttributes": {
+    "8787": { "label": "Daily Rack API and web app", "onAutoForward": "silent" },
+    "8081": { "label": "Expo dev server (Metro)", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "cd daily-rack && npm install",
+  "customizations": {
+    "codespaces": { "openFiles": ["daily-rack/README.md"] }
+  }
+}
