@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   feltTitle: { fontSize: 20, fontWeight: '700', color: '#F4EFE3' },
   feltBody: { fontSize: 15, lineHeight: 21, color: 'rgba(244,239,227,0.88)' },
   joinRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  input: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 14, fontSize: 18, letterSpacing: 3, color: colors.ink },
+  input: { flex: 1, minWidth: 0, minHeight: 46, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 14, fontSize: 18, letterSpacing: 3, color: colors.ink },
   tableRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14 },
   tableTitle: { fontSize: 16, fontWeight: '700', color: colors.ink },
 });

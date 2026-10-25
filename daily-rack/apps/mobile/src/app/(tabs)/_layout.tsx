@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { Tabs, useFocusEffect } from 'expo-router';
 import { api } from '../../lib/api.ts';
 import { useRealtimeMessages } from '../../lib/realtime.tsx';
@@ -29,8 +29,9 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: '#FFFFFF', borderTopColor: colors.border },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        // The web build has no safe-area inset to grow into, so give the labels room.
+        tabBarStyle: { backgroundColor: '#FFFFFF', borderTopColor: colors.border, ...(Platform.OS === 'web' ? { height: 60, paddingBottom: 6 } : null) },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon('home') }} />

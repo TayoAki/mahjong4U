@@ -20,7 +20,7 @@ interface Props {
   leave: () => void;
 }
 
-const SIDES = ['right', 'across', 'left'] as const;
+const SIDES = ['on your right', 'across from you', 'on your left'] as const;
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
 
 /** A hand in progress (or just finished) at a four-seat table. */
@@ -224,7 +224,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
                   {info.name}
                 </Text>
                 <Text style={styles.oppMeta}>
-                  {SEAT_WINDS[seat]} · on your {SIDES[offset - 1]} · {player.handCount} tiles · {formatScore(scoreOf(seat))}
+                  {SEAT_WINDS[seat]} · {SIDES[offset - 1]} · {player.handCount} tiles · {formatScore(scoreOf(seat))}
                 </Text>
                 {player.exposures.length > 0 && <Exposures exposures={player.exposures} width={17} />}
               </View>

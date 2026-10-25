@@ -1,9 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { shortLabel } from '@daily-rack/core';
 import {
   HOUSE_CARD,
   GameError,
   applyAction,
   botAction,
+  faceOf,
   newGame,
   pendingSeats,
   playerView,
@@ -99,6 +101,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LOG_LIMIT = 80;
 const card = HOUSE_CARD;
 const WINDS = ['East', 'South', 'West', 'North'];
+const GROUP_NAMES: Record<number, string> = { 3: 'pung', 4: 'kong', 5: 'quint', 6: 'sextet' };
 
 export class TableService {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -419,11 +422,11 @@ export class TableService {
         case 'draw':
           return `${who} drew.`;
         case 'discard':
-          return `${who} discarded.`;
+          return `${who} discarded ${shortLabel(faceOf(event.tile))}.`;
         case 'call':
-          return `${who} called and exposed ${event.size}.`;
+          return `${who} called ${shortLabel(faceOf(event.tile))} for a ${GROUP_NAMES[event.size] ?? `group of ${event.size}`}.`;
         case 'exchange':
-          return `${who} swapped for a joker.`;
+          return `${who} swapped ${shortLabel(faceOf(event.tile))} for a joker.`;
         case 'mahjong':
           return `${who} declared Mahjong!`;
         case 'wall-game':
@@ -538,7 +541,7 @@ export class TableService {
   }
 }
 
-const BOT_NAMES = ['Mabel', 'Rosie', 'Dot', 'Bea'];
+const BOT_NAMES = ['Mabel', 'Rosie', 'Dot', 'Hazel'];
 export function botName(position: number): string {
   return `${BOT_NAMES[position % BOT_NAMES.length]} (computer)`;
 }

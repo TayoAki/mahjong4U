@@ -6,7 +6,8 @@ import { Platform } from 'react-native';
  * same-origin. Native builds need EXPO_PUBLIC_API_URL (or extra.apiUrl in app.json).
  */
 export const API_BASE: string = (() => {
-  const configured = process.env.EXPO_PUBLIC_API_URL ?? (Constants.expoConfig?.extra?.apiUrl as string | null | undefined) ?? null;
+  const fromConfig: unknown = Constants.expoConfig?.extra?.apiUrl;
+  const configured = process.env.EXPO_PUBLIC_API_URL || (typeof fromConfig === 'string' && fromConfig ? fromConfig : null);
   if (Platform.OS === 'web') return configured ?? '';
   return configured ?? 'http://localhost:8787';
 })();
