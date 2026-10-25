@@ -4,8 +4,10 @@
 //   3. Two guests become friends by code and chat.
 //   4. The friends sit at the same live table and play a hand together, with table chat.
 //   5. Game Night: plan, invite link, vote, RSVP, lock in, calendar file, play online instead.
+//   6. Safety: community rules, the word filter, reporting a message, blocking and unblocking.
 // Usage: BASE_URL=http://localhost:8787 node scripts/e2e.mjs
 //   (server running on a fresh DB with the web build: npm run build && BOT_DELAY_MS=120 npm start)
+//   Set E2E_ADMIN_TOKEN to the server's ADMIN_TOKEN to also check the moderator view.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -214,11 +216,18 @@ try {
   await page.goto(`${BASE}/friends`);
   await page.getByTestId('friend-code-input').fill(beaCode);
   await page.getByTestId('add-friend').click();
+  // The first social action asks the player to agree to the community rules.
+  await page.getByTestId('agree-rules').waitFor();
+  check('community rules come before the first friend request', true);
+  await page.waitForTimeout(700); // let the sheet finish sliding in
+  await shot(page, '09a-community-rules');
+  await page.getByTestId('agree-rules').click();
   await page.getByText(/Request sent to Bea/).waitFor();
   await beaPage.goto(`${BASE}/friends`);
   await beaPage.getByText('Requests').waitFor();
   await shot(beaPage, '09-friend-request');
   await beaPage.getByRole('button', { name: 'Accept' }).click();
+  await beaPage.getByTestId('agree-rules').click();
   await beaPage.getByRole('button', { name: 'Chat with Ann' }).first().waitFor();
   await page.getByRole('button', { name: /Chat with Bea/ }).first().waitFor({ timeout: 10_000 });
   check('friend request accepted on both sides', true);
@@ -233,6 +242,10 @@ try {
   check('unread chat shows on the friends list', await page.getByText('1 new').isVisible());
   await page.getByRole('button', { name: /Chat with Bea/ }).first().click();
   await page.getByLabel('Bea: Game tonight?').waitFor();
+  await page.getByTestId('chat-input').fill('this shit is fun');
+  await page.getByTestId('chat-send').click();
+  await page.getByText(/includes words we don’t allow/).waitFor({ timeout: 5000 }).catch(() => undefined);
+  check('the word filter stops profanity', await page.getByText(/includes words we don’t allow/).isVisible());
   await page.getByTestId('chat-input').fill('Yes! Setting up a table.');
   await page.getByTestId('chat-send').click();
   await beaPage.getByLabel('Ann: Yes! Setting up a table.').waitFor({ timeout: 10_000 }).catch(() => undefined);
@@ -314,9 +327,9 @@ try {
   check('RSVPs are counted', await page.getByText('2 going', { exact: true }).isVisible());
   await shot(page, '21-night-voting');
   await page.getByTestId('confirm-1').click();
-  await page.getByText('Confirmed').first().waitFor();
-  await beaPage.getByText('Confirmed').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
-  check('locking in a time reaches everyone', await beaPage.getByText('Confirmed').first().isVisible());
+  await page.getByTestId('add-calendar').waitFor();
+  await beaPage.getByTestId('add-calendar').waitFor({ timeout: 10_000 }).catch(() => undefined);
+  check('locking in a time reaches everyone', await beaPage.getByTestId('add-calendar').isVisible());
   const [ics] = await Promise.all([page.waitForEvent('download', { timeout: 15_000 }), page.getByTestId('add-calendar').click()]);
   const icsPath = join(OUT, 'game-night.ics');
   await ics.saveAs(icsPath);
@@ -329,6 +342,45 @@ try {
   await page.getByText('Held for Bea').waitFor({ timeout: 5000 }).catch(() => undefined);
   check('play online instead opens a table with a held seat', await page.getByText('Held for Bea').isVisible());
   await shot(page, '23-night-online-table');
+
+  // ------------------------------------------------------------------ 6. Report and block
+  await beaPage.goto(`${BASE}/friends`);
+  await beaPage.getByRole('button', { name: 'Chat with Ann' }).first().click();
+  await beaPage.waitForURL('**/chat/**');
+  await beaPage.getByRole('button', { name: 'Ann: Yes! Setting up a table.' }).click();
+  await beaPage.getByTestId('safety-report').click();
+  await beaPage.getByTestId('reason-harassment').click();
+  await shot(beaPage, '25-report-message');
+  await beaPage.getByTestId('submit-report').click();
+  await beaPage.getByTestId('safety-done').waitFor();
+  check('a chat message can be reported', (await beaPage.getByTestId('safety-done').textContent())?.includes('within 24 hours') ?? false);
+  await beaPage.getByRole('button', { name: 'OK' }).click();
+  await beaPage.getByLabel('Ann: Yes! Setting up a table.').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
+  check('the reported message disappears for the reporter', (await beaPage.getByLabel('Ann: Yes! Setting up a table.').count()) === 0);
+  if (process.env.E2E_ADMIN_TOKEN) {
+    const reports = await (await fetch(`${BASE}/v1/admin/reports`, { headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN } })).json();
+    const filed = reports.reports?.find((r) => r.reported?.body === 'Yes! Setting up a table.');
+    check('moderators see the report with the message text', Boolean(filed), filed ? `${filed.reason}, about ${filed.target.name}` : 'missing');
+  }
+
+  await beaPage.getByRole('button', { name: 'Report or block Ann' }).click();
+  await beaPage.getByTestId('safety-block').click();
+  await beaPage.getByTestId('confirm-block').click();
+  await beaPage.getByTestId('safety-done').waitFor();
+  await shot(beaPage, '26-blocked');
+  await beaPage.getByRole('button', { name: 'OK' }).click();
+  await beaPage.waitForURL('**/friends', { timeout: 10_000 }).catch(() => undefined);
+  await page.goto(`${BASE}/friends`);
+  await page.getByText('Friends', { exact: true }).first().waitFor();
+  await page.waitForTimeout(500);
+  check('blocking ends the friendship on both sides', (await page.getByRole('button', { name: /Chat with Bea/ }).count()) === 0);
+  await beaPage.goto(`${BASE}/you`);
+  await beaPage.getByRole('button', { name: 'Unblock' }).waitFor();
+  await beaPage.getByRole('button', { name: 'Unblock' }).scrollIntoViewIfNeeded();
+  await shot(beaPage, '27-blocked-list');
+  await beaPage.getByRole('button', { name: 'Unblock' }).click();
+  await beaPage.getByText('You haven’t blocked anyone.').waitFor({ timeout: 10_000 }).catch(() => undefined);
+  check('players can unblock from the You tab', await beaPage.getByText('You haven’t blocked anyone.').isVisible());
 
   // Shared rack link still works for a brand-new guest.
   const carl = await browser.newContext(phone);

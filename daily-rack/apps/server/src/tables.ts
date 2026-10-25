@@ -16,6 +16,7 @@ import {
   type GameState,
   type Seat,
 } from '@daily-rack/core/mahjong';
+import { isBlockedEitherWay } from './blocks.ts';
 import { transaction, type Db } from './db.ts';
 import type { Hub } from './realtime.ts';
 import { conversationFor, ensureProfile } from './social.ts';
@@ -179,6 +180,9 @@ export class TableService {
     const existing = seats.findIndex((s) => s.principalId === principalId);
     if (existing !== -1) return existing;
     if (row.status === 'closed') throw new TableError(409, 'table_closed', 'This table has closed.');
+    if (seats.some((s) => s.principalId && isBlockedEitherWay(this.db, principalId, s.principalId))) {
+      throw new TableError(403, 'blocked', 'You can’t join this table.');
+    }
     // A held seat first, then any open seat; once a game is running, a bot seat can be taken over.
     let position = seats.findIndex((s) => s.reservedFor === principalId && !s.principalId);
     if (position === -1) position = seats.findIndex((s) => !s.principalId && !s.bot && !s.reservedFor);

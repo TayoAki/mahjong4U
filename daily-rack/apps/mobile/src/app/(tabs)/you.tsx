@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { api, type Progress } from '../../lib/api.ts';
+import { api, getConfig, type Profile, type Progress } from '../../lib/api.ts';
 import { updatePrefs, usePrefs } from '../../lib/prefs.ts';
+import { useSafety } from '../../lib/safety.tsx';
 import { forgetSession, useSession } from '../../lib/session.tsx';
 import { clearAll } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
@@ -18,6 +19,9 @@ export default function YouScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'card' | 'delete' | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [blocked, setBlocked] = useState<Profile[]>([]);
+  const [supportEmail, setSupportEmail] = useState<string | null>(null);
+  const { openRules, version } = useSafety();
 
   useEffect(() => setName(profile?.name ?? ''), [profile?.name]);
   const load = useCallback(() => {
@@ -25,8 +29,14 @@ export default function YouScreen() {
       .progress()
       .then(setProgress)
       .catch((e: Error) => setError(e.message));
+    api
+      .blocks()
+      .then((r) => setBlocked(r.blocked))
+      .catch(() => undefined);
+    void getConfig().then((c) => setSupportEmail(c.supportEmail));
   }, []);
   useFocusEffect(load);
+  useEffect(load, [load, version]);
 
   const save = async () => {
     setError(null);
@@ -143,6 +153,37 @@ export default function YouScreen() {
             { value: 'magenta', label: 'Magenta' },
           ]}
         />
+      </Card>
+
+      <Card style={{ gap: 10 }}>
+        <Heading>Safety</Heading>
+        <Body small muted>
+          Report or block anyone from their name, a chat message, a table seat or a game night. Blocked players can’t see your messages, send you requests or join your tables.
+        </Body>
+        {blocked.length === 0 ? (
+          <Body small>You haven’t blocked anyone.</Body>
+        ) : (
+          blocked.map((p) => (
+            <Row key={p.id} gap={10}>
+              <Avatar name={p.name} color={p.color} size={32} />
+              <Text style={{ flex: 1, fontSize: 16, color: colors.ink }} numberOfLines={1}>
+                {p.name}
+              </Text>
+              <Button
+                title="Unblock"
+                compact
+                variant="secondary"
+                onPress={async () => {
+                  await api.unblock(p.id).catch((e: Error) => setError(e.message));
+                  load();
+                }}
+                testID={`unblock-${p.code}`}
+              />
+            </Row>
+          ))
+        )}
+        <Button title="Community rules" variant="text" icon="help" onPress={openRules} />
+        {supportEmail && <Button title={`Contact us: ${supportEmail}`} variant="text" icon="send" onPress={() => void Linking.openURL(`mailto:${supportEmail}?subject=Daily%20Rack`)} />}
       </Card>
 
       <Card style={{ gap: 10 }}>

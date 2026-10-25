@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { api, getConfig, type NightDetail, type Rsvp } from '../../lib/api.ts';
+import { ApiError, api, getConfig, type NightDetail, type Rsvp } from '../../lib/api.ts';
 import { addToCalendar } from '../../lib/calendar';
 import { publicLink } from '../../lib/config.ts';
 import { formatWhen } from '../../lib/dates.ts';
 import { useRealtimeMessages } from '../../lib/realtime.tsx';
+import { useSafety } from '../../lib/safety.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { shareLink } from '../../lib/share.ts';
 import { track } from '../../lib/analytics.ts';
 import { ChatPanel } from '../../components/ChatPanel.tsx';
-import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Heading, Icon, Loading, Notice, Row, Screen, Segmented, Sheet, TopBar } from '../../components/ui.tsx';
+import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Heading, Icon, IconButton, Loading, Notice, Row, Screen, Segmented, Sheet, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
 
 const WINDS = ['East', 'South', 'West', 'North'];
@@ -29,6 +30,7 @@ export default function NightScreen() {
   const { id = '', created } = useLocalSearchParams<{ id: string; created?: string }>();
   const router = useRouter();
   const { principalId } = useSession();
+  const { openPlayer, version } = useSafety();
   const [night, setNight] = useState<NightDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -36,16 +38,22 @@ export default function NightScreen() {
   const [mode, setMode] = useState<'live' | 'turn'>('live');
   const [cancelling, setCancelling] = useState(false);
 
+  const loaded = useRef(false);
   const load = useCallback(() => {
     api
       .night(id)
       .then((n) => {
+        loaded.current = true;
         setNight(n);
         setError(null);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => {
+        // Blocking the host (or being removed) takes you out of the night.
+        if (e instanceof ApiError && (e.status === 403 || e.status === 404) && loaded.current) router.replace('/nights');
+        else setError(e.message);
+      });
   }, [id]);
-  useEffect(load, [load]);
+  useEffect(load, [load, version]);
   useRealtimeMessages((m) => {
     if (m.type === 'night' && m.nightId === id) load();
   });
@@ -211,6 +219,7 @@ export default function NightScreen() {
               {m.id === night.hostId ? ' · host' : ''}
             </Text>
             <Text style={[styles.rsvp, m.rsvp === 'yes' && { color: colors.online }, m.rsvp === 'no' && { color: colors.danger }]}>{RSVP_LABEL[m.rsvp]}</Text>
+            {m.id !== principalId && <IconButton icon="more" label={`Report or block ${m.name}`} color={colors.muted} onPress={() => openPlayer(m)} />}
           </View>
         ))}
       </View>

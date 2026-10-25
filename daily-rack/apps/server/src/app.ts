@@ -23,6 +23,12 @@ export interface AppConfig {
   publicBaseUrl: string | null;
   secureCookies: boolean;
   splitThreshold: number;
+  /** Shown in the app as the place to reach a person about safety or support. */
+  supportEmail?: string | null;
+  /** Unlocks the moderator endpoints under /v1/admin (sent as the x-admin-token header). */
+  adminToken?: string | null;
+  /** Slack- or Discord-style webhook that hears about every new report. */
+  reportWebhookUrl?: string | null;
   now?: () => Date;
 }
 
@@ -44,6 +50,8 @@ const CLIENT_EVENTS = new Set([
   'friend_added',
   'night_created',
   'night_invite_shared',
+  'report_filed',
+  'player_blocked',
 ]);
 
 const AttemptBody = z.object({
@@ -123,6 +131,7 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
       publicBaseUrl: config.publicBaseUrl,
       splitThreshold: config.splitThreshold,
       timeZone: content.schedule.timeZone,
+      supportEmail: config.supportEmail ?? null,
     }),
   );
 

@@ -16,6 +16,9 @@ const config = {
   publicBaseUrl: env.PUBLIC_BASE_URL?.replace(/\/$/, '') || null,
   secureCookies: env.NODE_ENV === 'production',
   splitThreshold: Number(env.SPLIT_THRESHOLD ?? 30),
+  supportEmail: env.SUPPORT_EMAIL || null,
+  adminToken: env.ADMIN_TOKEN || null,
+  reportWebhookUrl: env.REPORT_WEBHOOK_URL || null,
 };
 
 const db = openDb(env.DATABASE_PATH ?? join(root, 'data/daily-rack.db'));

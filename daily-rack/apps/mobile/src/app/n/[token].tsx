@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api, type InvitePreview } from '../../lib/api.ts';
 import { formatWhen } from '../../lib/dates.ts';
+import { useSafety } from '../../lib/safety.tsx';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Loading, Row, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
 
@@ -10,6 +11,7 @@ import { colors } from '../../theme.ts';
 export default function NightInviteScreen() {
   const { token = '' } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
+  const { guard } = useSafety();
   const [invite, setInvite] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,7 +27,11 @@ export default function NightInviteScreen() {
     setBusy(true);
     setError(null);
     try {
-      const night = await api.joinNight(token);
+      const night = await guard(() => api.joinNight(token));
+      if (!night) {
+        setBusy(false);
+        return;
+      }
       router.replace(`/night/${night.id}`);
     } catch (e) {
       setError((e as Error).message);

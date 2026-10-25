@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '../../lib/api.ts';
+import { useSafety } from '../../lib/safety.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { track } from '../../lib/analytics.ts';
 import { Body, Button, Card, Display, ErrorPanel, Screen, TopBar } from '../../components/ui.tsx';
@@ -11,6 +12,7 @@ export default function FriendInviteScreen() {
   const { code = '' } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
   const { profile } = useSession();
+  const { guard } = useSafety();
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +24,8 @@ export default function FriendInviteScreen() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api.addFriend(code.toUpperCase());
+      const r = await guard(() => api.addFriend(code.toUpperCase()));
+      if (!r) return;
       track('friend_added', { result: r.result, via: 'link' });
       setDone(r.result === 'requested' ? `Request sent to ${r.friend.name}.` : `You and ${r.friend.name} are friends.`);
     } catch (e) {

@@ -11,6 +11,7 @@
     "@daily-rack/core": "0.1.0",
     "@hono/node-server": "^2.1.5",
     "hono": "^4.13.13",
+    "obscenity": "^0.4.6",
     "ws": "^8.22.0",
     "zod": "^4.6.7"
   },

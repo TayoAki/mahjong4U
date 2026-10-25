@@ -5,6 +5,8 @@ import type { Db } from './db.ts';
 import type { AppConfig, Env, Fail, RateLimiter } from './app.ts';
 import type { Hub } from './realtime.ts';
 import { TableError, type SeatInput, type TableService } from './tables.ts';
+import { ModerationError, isObjectionable, requireSocial, safetyStatus } from './moderation.ts';
+import { registerSafetyRoutes } from './safety-routes.ts';
 import {
   MESSAGE_MAX,
   acceptFriend,
@@ -100,7 +102,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     return parsed.success ? parsed.data : null;
   };
   const handle = (c: Context<Env>, error: unknown) => {
-    if (error instanceof TableError || error instanceof NightError) return fail(c, error.status, error.code, error.message);
+    if (error instanceof TableError || error instanceof NightError || error instanceof ModerationError) return fail(c, error.status, error.code, error.message);
     if (error instanceof GameError) return fail(c, 422, error.code, error.message);
     throw error;
   };
@@ -115,12 +117,13 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
 
   // ---------------------------------------------------------------- profile
 
-  api.get('/me/profile', (c) => c.json(ensureProfile(db, me(c)!.id, now())));
+  api.get('/me/profile', (c) => c.json({ ...ensureProfile(db, me(c)!.id, now()), ...safetyStatus(db, me(c)!.id, now()) }));
 
   api.put('/me/profile', async (c) => {
     const input = await body(c, z.object({ name: z.string() }));
     const name = input ? cleanName(input.name) : null;
     if (!name) return fail(c, 400, 'bad_name', 'Use 1 to 24 characters for your name.');
+    if (isObjectionable(name)) return fail(c, 400, 'bad_name', 'Please choose a different name.');
     const profile = renameProfile(db, me(c)!.id, name, now());
     hub.sendMany(friendIds(db, profile.id), { type: 'friends' });
     return c.json(profile);
@@ -136,6 +139,11 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     if (!limiter.allow(`friend:${me(c)!.id}`, 30, 3_600_000)) return fail(c, 429, 'rate_limited', 'Too many friend requests. Try again later.');
     const input = await body(c, z.object({ code: z.string().min(4).max(16) }));
     if (!input) return fail(c, 400, 'invalid_input', 'Enter a friend code.');
+    try {
+      requireSocial(db, me(c)!.id, now());
+    } catch (error) {
+      return handle(c, error);
+    }
     const result = requestFriend(db, me(c)!.id, input.code, now());
     if (!result) return fail(c, 404, 'code_not_found', 'No player has that friend code.');
     hub.sendMany([me(c)!.id, result.friend.id], { type: 'friends' });
@@ -143,6 +151,11 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   });
 
   api.post('/friends/:id/accept', (c) => {
+    try {
+      requireSocial(db, me(c)!.id, now());
+    } catch (error) {
+      return handle(c, error);
+    }
     if (!acceptFriend(db, me(c)!.id, c.req.param('id'), now())) return fail(c, 404, 'request_not_found', 'That friend request is no longer waiting.');
     hub.sendMany([me(c)!.id, c.req.param('id')], { type: 'friends' });
     return c.json({ accepted: true });
@@ -173,7 +186,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   api.get('/conversations/:id/messages', (c) => {
     const conversation = memberConversation(c);
     if (!conversation) return fail(c, 404, 'conversation_not_found', 'That conversation is not available.');
-    const messages = listMessages(db, conversation.id, c.req.query('before') ?? null);
+    const messages = listMessages(db, conversation.id, me(c)!.id, c.req.query('before') ?? null);
     const senders = [...new Set(messages.flatMap((m) => (m.senderId ? [m.senderId] : [])))];
     return c.json({ messages, people: Object.fromEntries(senders.map((id) => [id, ensureProfile(db, id, now())])) });
   });
@@ -185,6 +198,12 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     const input = await body(c, z.object({ body: z.string() }));
     const text = input?.body.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim() ?? '';
     if (text.length === 0 || text.length > MESSAGE_MAX) return fail(c, 400, 'bad_message', `Messages can be 1 to ${MESSAGE_MAX} characters.`);
+    try {
+      requireSocial(db, me(c)!.id, now());
+    } catch (error) {
+      return handle(c, error);
+    }
+    if (isObjectionable(text)) return fail(c, 400, 'objectionable', 'That message includes words we don’t allow. Please rephrase it.');
     return c.json(postMessage(db, hub, conversation, me(c)!.id, text, now()), 201);
   });
 
@@ -284,7 +303,9 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   api.post('/nights', async (c) => {
     const input = await body(c, NightBody);
     if (!input) return fail(c, 400, 'invalid_input', 'Give the night a name and one to three times.');
+    if (isObjectionable(`${input.title} ${input.location ?? ''}`)) return fail(c, 400, 'objectionable', 'The name or place includes words we don’t allow.');
     try {
+      requireSocial(db, me(c)!.id, now());
       const id = createNight(db, me(c)!.id, { ...input, location: input.location ?? null }, now());
       return c.json(nightDetail(db, hub, id, me(c)!.id, now()), 201);
     } catch (error) {
@@ -358,7 +379,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
 
   api.get('/night-invites/:token', (c) => {
     try {
-      return c.json(invitePreview(db, c.req.param('token'), now()));
+      return c.json(invitePreview(db, c.req.param('token'), now(), me(c)?.id ?? null));
     } catch (error) {
       return handle(c, error);
     }
@@ -367,10 +388,13 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   api.post('/night-invites/:token/join', (c) => {
     if (!me(c)) return fail(c, 401, 'missing_identity', 'Start a session first.');
     try {
+      requireSocial(db, me(c)!.id, now());
       const nightId = joinNight(db, hub, c.req.param('token'), me(c)!.id, now());
       return c.json(nightDetail(db, hub, nightId, me(c)!.id, now()));
     } catch (error) {
       return handle(c, error);
     }
   });
+
+  registerSafetyRoutes(api, { db, hub, fail, limiter, now, config: deps.config, handle, body });
 }

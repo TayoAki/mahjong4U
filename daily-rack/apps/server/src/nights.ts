@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { isBlockedEitherWay } from './blocks.ts';
 import { transaction, type Db } from './db.ts';
 import type { Hub } from './realtime.ts';
 import { conversationFor, ensureProfile } from './social.ts';
@@ -140,9 +141,9 @@ export function listNights(db: Db, principalId: string) {
   });
 }
 
-export function invitePreview(db: Db, token: string, now: Date) {
+export function invitePreview(db: Db, token: string, now: Date, viewerId: string | null = null) {
   const row = db.prepare('SELECT * FROM nights WHERE invite_token = ?').get(token) as NightRow | undefined;
-  if (!row || row.status === 'cancelled') throw new NightError(404, 'invite_not_found', 'This invite is no longer active.');
+  if (!row || row.status === 'cancelled' || (viewerId && isBlockedEitherWay(db, viewerId, row.host_id))) throw new NightError(404, 'invite_not_found', 'This invite is no longer active.');
   const slots = db.prepare('SELECT id, starts_at FROM night_slots WHERE night_id = ? ORDER BY starts_at').all(row.id) as { id: string; starts_at: string }[];
   return {
     nightId: row.id,
@@ -157,7 +158,10 @@ export function invitePreview(db: Db, token: string, now: Date) {
 
 export function joinNight(db: Db, hub: Hub, token: string, principalId: string, now: Date): string {
   const row = db.prepare('SELECT * FROM nights WHERE invite_token = ?').get(token) as NightRow | undefined;
-  if (!row || row.status === 'cancelled') throw new NightError(404, 'invite_not_found', 'This invite is no longer active.');
+  // Someone the host blocked (or who blocked the host) sees the same as an expired invite.
+  if (!row || row.status === 'cancelled' || isBlockedEitherWay(db, principalId, row.host_id)) {
+    throw new NightError(404, 'invite_not_found', 'This invite is no longer active.');
+  }
   db.prepare(`INSERT OR IGNORE INTO night_members (night_id, principal_id, rsvp, votes, joined_at) VALUES (?, ?, 'pending', '[]', ?)`).run(row.id, principalId, now.toISOString());
   notify(db, hub, row.id);
   return row.id;

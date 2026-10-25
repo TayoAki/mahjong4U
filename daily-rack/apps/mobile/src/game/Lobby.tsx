@@ -4,7 +4,8 @@ import type { BotLevel } from '@daily-rack/core/mahjong';
 import { api, getConfig, type FriendsOverview, type SeatChoice, type TablePayload, type TableSeat } from '../lib/api.ts';
 import { publicLink } from '../lib/config.ts';
 import { copyText, shareLink } from '../lib/share.ts';
-import { Avatar, Body, Button, Card, ErrorPanel, Eyebrow, Heading, Icon, Notice, Row, Screen, Segmented, Sheet } from '../components/ui.tsx';
+import { useSafety } from '../lib/safety.tsx';
+import { Avatar, Body, Button, Card, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Notice, Row, Screen, Segmented, Sheet } from '../components/ui.tsx';
 import { colors, fonts } from '../theme.ts';
 
 interface Props {
@@ -24,6 +25,7 @@ export const LEVEL_LABEL: Record<BotLevel, string> = { easy: 'Easy', normal: 'St
 export function Lobby({ data, header, principalId, busy, error, start, setSeat, leave }: Props) {
   const { table } = data;
   const isHost = table.hostId === principalId;
+  const { openPlayer } = useSafety();
   const [friends, setFriends] = useState<FriendsOverview['friends']>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -107,6 +109,9 @@ export function Lobby({ data, header, principalId, busy, error, start, setSeat, 
                 </Body>
               </View>
               {canEdit && <Button variant="text" compact title="Change" onPress={() => setEditing(seat.position)} testID={`seat-${seat.position}-change`} />}
+              {seat.kind === 'human' && seat.principalId && seat.principalId !== principalId && (
+                <IconButton icon="more" label={`Report or block ${seat.name}`} color={colors.muted} onPress={() => openPlayer({ id: seat.principalId!, name: seat.name })} />
+              )}
             </View>
           );
         })}

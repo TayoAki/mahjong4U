@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { api, type Message, type Profile } from '../lib/api.ts';
 import { useRealtimeMessages } from '../lib/realtime.tsx';
+import { useSafety } from '../lib/safety.tsx';
 import { useSession } from '../lib/session.tsx';
 import { colors } from '../theme.ts';
 import { Body, ErrorPanel, Icon, Loading } from './ui.tsx';
@@ -11,6 +12,7 @@ const MAX = 500;
 /** Messages for one conversation (direct, table or game night), live over the socket. */
 export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say hello.', height }: { conversationId: string; emptyText?: string; height?: number }) {
   const { principalId } = useSession();
+  const { guard, openMessage, version } = useSafety();
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [people, setPeople] = useState<Record<string, Profile>>({});
   const [draft, setDraft] = useState('');
@@ -29,7 +31,8 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
       })
       .catch((e: Error) => setError(e.message));
   }, [conversationId]);
-  useEffect(load, [load]);
+  // Reload after a block or report so hidden messages disappear.
+  useEffect(load, [load, version]);
 
   useRealtimeMessages((m) => {
     if (m.type !== 'message' || m.conversationId !== conversationId) return;
@@ -51,7 +54,8 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
     if (!body || sending) return;
     setSending(true);
     try {
-      const message = await api.sendMessage(conversationId, body);
+      const message = await guard(() => api.sendMessage(conversationId, body));
+      if (!message) return;
       setDraft('');
       setMessages((prev) => (prev && !prev.some((x) => x.id === message.id) ? [...prev, message] : prev));
       setError(null);
@@ -79,11 +83,19 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
             const sender = item.senderId ? people[item.senderId] : null;
             return (
               <View key={item.id} style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]}>
-                <View style={[styles.bubble, mine ? styles.mine : styles.theirs]} accessible accessibilityLabel={`${mine ? 'You' : (sender?.name ?? 'Someone')}: ${item.body}`}>
+                <Pressable
+                  style={[styles.bubble, mine ? styles.mine : styles.theirs]}
+                  accessibilityRole={mine ? 'text' : 'button'}
+                  accessibilityLabel={`${mine ? 'You' : (sender?.name ?? 'Someone')}: ${item.body}`}
+                  accessibilityHint={mine ? undefined : 'Opens options to report the message or block the sender'}
+                  disabled={mine || !item.senderId}
+                  onPress={() => item.senderId && openMessage({ id: item.id, senderId: item.senderId, name: sender?.name ?? 'this player', body: item.body })}
+                  onLongPress={() => item.senderId && !mine && openMessage({ id: item.id, senderId: item.senderId, name: sender?.name ?? 'this player', body: item.body })}
+                >
                   {!mine && <Text style={[styles.sender, { color: sender?.color ?? colors.muted }]}>{sender?.name ?? 'Someone'}</Text>}
                   <Text style={[styles.text, mine && { color: '#fff' }]}>{item.body}</Text>
                   <Text style={[styles.time, mine && { color: 'rgba(255,255,255,0.75)' }]}>{new Date(item.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</Text>
-                </View>
+                </Pressable>
               </View>
             );
           })}

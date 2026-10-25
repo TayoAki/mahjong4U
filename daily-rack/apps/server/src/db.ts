@@ -191,6 +191,37 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (night_id, principal_id)
   );
   `,
+  `
+  -- Safety: community rules, blocking, reports and moderation.
+  ALTER TABLE profiles ADD COLUMN rules_accepted_at TEXT;
+  ALTER TABLE profiles ADD COLUMN suspended_at TEXT;
+  ALTER TABLE messages ADD COLUMN hidden_at TEXT;
+
+  CREATE TABLE blocks (
+    blocker_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    blocked_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (blocker_id, blocked_id)
+  );
+  CREATE INDEX blocks_by_blocked ON blocks (blocked_id);
+
+  -- snapshot keeps what was reported (message text, name) even if it later changes.
+  CREATE TABLE reports (
+    id TEXT PRIMARY KEY,
+    reporter_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    note TEXT,
+    snapshot TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'dismissed', 'actioned')),
+    action TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+  );
+  CREATE INDEX reports_by_status ON reports (status, created_at);
+  CREATE INDEX reports_by_message ON reports (message_id);
+  `,
 ];
 
 export type Db = DatabaseSync;

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { api } from '../../lib/api.ts';
 import { deviceTimeZone, formatWhen } from '../../lib/dates.ts';
 import { track } from '../../lib/analytics.ts';
+import { useSafety } from '../../lib/safety.tsx';
 import { Body, Button, Chip, ErrorPanel, Heading, IconButton, Notice, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
 
@@ -31,6 +32,7 @@ const timeLabel = (minutes: number) => {
 /** Plan a game night: a name, an optional place, and one to three times to vote on. */
 export default function NewNightScreen() {
   const router = useRouter();
+  const { guard } = useSafety();
   const timeZone = useMemo(deviceTimeZone, []);
   const [title, setTitle] = useState('Mahjong night');
   const [location, setLocation] = useState('');
@@ -49,7 +51,11 @@ export default function NewNightScreen() {
     setError(null);
     try {
       const unique = [...new Set(slots.map((s) => slotDate(s).toISOString()))];
-      const night = await api.createNight({ title: title.trim() || 'Mahjong night', location: location.trim() || null, timeZone, slots: unique });
+      const night = await guard(() => api.createNight({ title: title.trim() || 'Mahjong night', location: location.trim() || null, timeZone, slots: unique }));
+      if (!night) {
+        setBusy(false);
+        return;
+      }
       track('night_created', { slots: unique.length });
       router.replace({ pathname: '/night/[id]', params: { id: night.id, created: '1' } });
     } catch (e) {

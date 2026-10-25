@@ -17,6 +17,7 @@
     "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/mobile",
     "content:check": "tsx scripts/check-content.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
+    "reports": "node scripts/reports.mjs",
     "e2e": "node scripts/e2e.mjs"
   },
   "engines": {

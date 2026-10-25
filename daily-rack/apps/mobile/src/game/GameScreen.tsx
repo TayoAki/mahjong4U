@@ -3,7 +3,8 @@ import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SEAT_WINDS, isJoker, passTarget, type Action, type Exposure, type Seat } from '@daily-rack/core/mahjong';
 import type { TablePayload } from '../lib/api.ts';
 import { updatePrefs, usePrefs } from '../lib/prefs.ts';
-import { Avatar, Body, Button, Card, Chip, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen } from '../components/ui.tsx';
+import { useSafety } from '../lib/safety.tsx';
+import { Avatar, Body, Button, Card, Chip, ErrorPanel, Eyebrow, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
 import { Tile, TileButton } from '../components/Tile.tsx';
 import { HandHints, Pattern } from './CardView.tsx';
 import { faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
@@ -31,6 +32,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
   const prompt = view.prompt;
   const phase = view.phase;
   const prefs = usePrefs();
+  const { openPlayer } = useSafety();
   const { width } = useWindowDimensions();
   const [sort, setSort] = useState<SortMode>('suit');
   const [selected, setSelected] = useState<number[]>([]);
@@ -217,9 +219,9 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
           const player = view.players[seat]!;
           const active = (phase.kind === 'turn' && phase.seat === seat) || ('waitingFor' in phase && phase.waitingFor.includes(seat));
           return (
-            <View key={seat} style={[styles.opponent, active && styles.active]} accessible accessibilityLabel={`${info.name}, ${SIDES[offset - 1]}, ${SEAT_WINDS[seat]} wind, ${player.handCount} tiles, score ${scoreOf(seat)}${active ? ', to play' : ''}`}>
+            <View key={seat} style={[styles.opponent, active && styles.active]}>
               <Avatar name={info.name} color={info.color} size={38} online={info.kind === 'human' ? info.online : undefined} />
-              <View style={{ flex: 1, gap: 4 }}>
+              <View style={{ flex: 1, gap: 4 }} accessible accessibilityLabel={`${info.name}, ${SIDES[offset - 1]}, ${SEAT_WINDS[seat]} wind, ${player.handCount} tiles, score ${scoreOf(seat)}${active ? ', to play' : ''}`}>
                 <Text style={styles.oppName} numberOfLines={1}>
                   {info.name}
                 </Text>
@@ -228,6 +230,9 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
                 </Text>
                 {player.exposures.length > 0 && <Exposures exposures={player.exposures} width={17} />}
               </View>
+              {info.kind === 'human' && info.principalId && (
+                <IconButton icon="more" label={`Report or block ${info.name}`} color={colors.muted} onPress={() => openPlayer({ id: info.principalId!, name: info.name })} />
+              )}
             </View>
           );
         })}

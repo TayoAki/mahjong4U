@@ -7,6 +7,7 @@ import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import { Anton_400Regular } from '@expo-google-fonts/anton';
 import { SessionProvider, useSession } from '../lib/session.tsx';
 import { RealtimeProvider } from '../lib/realtime.tsx';
+import { SafetyProvider } from '../lib/safety.tsx';
 import { ErrorPanel, Loading, Screen } from '../components/ui.tsx';
 import { colors } from '../theme.ts';
 
@@ -18,7 +19,9 @@ export default function RootLayout() {
       <SessionProvider>
         <RealtimeProvider>
           <SessionGate ready={fontsLoaded}>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+            <SafetyProvider>
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+            </SafetyProvider>
           </SessionGate>
         </RealtimeProvider>
       </SessionProvider>

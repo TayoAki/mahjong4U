@@ -85,9 +85,10 @@ export function Heading({ children, style }: { children: ReactNode; style?: Styl
   );
 }
 
-export function Body({ children, muted, small, center, bold, style, numberOfLines }: { children: ReactNode; muted?: boolean; small?: boolean; center?: boolean; bold?: boolean; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
+export function Body({ children, muted, small, center, bold, style, numberOfLines, testID }: { children: ReactNode; muted?: boolean; small?: boolean; center?: boolean; bold?: boolean; style?: StyleProp<TextStyle>; numberOfLines?: number; testID?: string }) {
   return (
     <Text
+      testID={testID}
       numberOfLines={numberOfLines}
       style={[styles.body, muted && { color: colors.muted }, small && { fontSize: 14, lineHeight: 20 }, center && { textAlign: 'center' }, bold && { fontWeight: '700' }, style]}
     >
@@ -308,7 +309,10 @@ export type IconName =
   | 'trash'
   | 'send'
   | 'copy'
-  | 'bulb';
+  | 'bulb'
+  | 'more'
+  | 'flag'
+  | 'block';
 
 const ICONS: Record<IconName, ReactNode> = {
   back: <Path d="M15 5l-7 7 7 7" />,
@@ -345,6 +349,14 @@ const ICONS: Record<IconName, ReactNode> = {
   send: <Path d="M4 12l16-8-6 16-3-6z" />,
   copy: <Path d="M8 8h11v12H8zM5 16V4h11" />,
   bulb: <Path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z" />,
+  more: <Path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={3.2} />,
+  flag: <Path d="M5 21V4M5 4h11l-2 4 2 4H5" />,
+  block: (
+    <>
+      <Circle cx={12} cy={12} r={9} />
+      <Path d="M5.6 5.6l12.8 12.8" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 24, color = colors.ink }: { name: IconName; size?: number; color?: string }) {

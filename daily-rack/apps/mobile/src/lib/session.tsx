@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { api, getBearer, setBearer, type Profile } from './api.ts';
+import { api, getBearer, setBearer, type MyProfile } from './api.ts';
 
 // One guest identity per device, created on first launch. Native keeps its token in the
 // keychain/keystore; the web build relies on the server's HttpOnly cookie.
@@ -12,7 +12,7 @@ interface Session {
   ready: boolean;
   error: string | null;
   principalId: string | null;
-  profile: Profile | null;
+  profile: MyProfile | null;
   refreshProfile: () => Promise<void>;
   retry: () => void;
 }
@@ -36,7 +36,7 @@ async function storedToken(): Promise<string | null> {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ ready: boolean; error: string | null; principalId: string | null; profile: Profile | null }>({
+  const [state, setState] = useState<{ ready: boolean; error: string | null; principalId: string | null; profile: MyProfile | null }>({
     ready: false,
     error: null,
     principalId: null,

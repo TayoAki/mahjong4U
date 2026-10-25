@@ -1,12 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api, getConfig, type FriendsOverview, type InboxEntry, type Profile } from '../../lib/api.ts';
 import { publicLink } from '../../lib/config.ts';
 import { useRealtimeMessages } from '../../lib/realtime.tsx';
+import { useSafety } from '../../lib/safety.tsx';
 import { copyText, shareLink } from '../../lib/share.ts';
 import { track } from '../../lib/analytics.ts';
-import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, IconButton, Loading, Notice, Row, Screen, Sheet } from '../../components/ui.tsx';
+import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, IconButton, Loading, Notice, Row, Screen } from '../../components/ui.tsx';
 import { colors, fonts } from '../../theme.ts';
 
 export default function FriendsScreen() {
@@ -17,7 +18,7 @@ export default function FriendsScreen() {
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<Profile | null>(null);
+  const { guard, openPlayer, version } = useSafety();
 
   const load = useCallback(() => {
     Promise.all([api.friends(), api.inbox()])
@@ -29,6 +30,7 @@ export default function FriendsScreen() {
       .catch((e: Error) => setError(e.message));
   }, []);
   useFocusEffect(load);
+  useEffect(load, [load, version]);
   useRealtimeMessages((m) => {
     if (m.type === 'friends' || m.type === 'message' || m.type === 'presence') load();
   });
@@ -38,7 +40,8 @@ export default function FriendsScreen() {
     setMessage(null);
     setError(null);
     try {
-      const r = await api.addFriend(code.trim().toUpperCase());
+      const r = await guard(() => api.addFriend(code.trim().toUpperCase()));
+      if (!r) return;
       track('friend_added', { result: r.result });
       setMessage(
         r.result === 'accepted'
@@ -67,7 +70,7 @@ export default function FriendsScreen() {
   const chat = async (friend: Profile) => {
     try {
       const { conversationId } = await api.directConversation(friend.id);
-      router.push({ pathname: '/chat/[conversationId]', params: { conversationId, name: friend.name } });
+      router.push({ pathname: '/chat/[conversationId]', params: { conversationId, name: friend.name, friendId: friend.id } });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -147,7 +150,7 @@ export default function FriendsScreen() {
                     title="Accept"
                     compact
                     onPress={async () => {
-                      await api.acceptFriend(p.id).catch((e: Error) => setError(e.message));
+                      await guard(() => api.acceptFriend(p.id)).catch((e: Error) => setError(e.message));
                       load();
                     }}
                     testID={`accept-${p.code}`}
@@ -161,6 +164,7 @@ export default function FriendsScreen() {
                       load();
                     }}
                   />
+                  <IconButton icon="more" label={`More options for ${p.name}`} color={colors.muted} onPress={() => openPlayer(p)} />
                 </View>
               ))}
             </View>
@@ -188,7 +192,22 @@ export default function FriendsScreen() {
                   </Pressable>
                   <IconButton icon="chat" label={`Chat with ${f.name}`} onPress={() => chat(f)} />
                   <IconButton icon="play" label={`Play with ${f.name}`} color={colors.primary} onPress={() => router.push({ pathname: '/table/new', params: { friend: f.id } })} />
-                  <IconButton icon="close" label={`Remove ${f.name}`} color={colors.muted} onPress={() => setRemoving(f)} />
+                  <IconButton
+                    icon="more"
+                    label={`More options for ${f.name}`}
+                    color={colors.muted}
+                    onPress={() =>
+                      openPlayer(f, [
+                        {
+                          label: `Remove ${f.name} as a friend`,
+                          onPress: async () => {
+                            await api.removeFriend(f.id).catch((e: Error) => setError(e.message));
+                            load();
+                          },
+                        },
+                      ])
+                    }
+                  />
                 </View>
               );
             })}
@@ -217,19 +236,6 @@ export default function FriendsScreen() {
         </>
       )}
 
-      <Sheet visible={removing !== null} title={`Remove ${removing?.name ?? ''}?`} onClose={() => setRemoving(null)}>
-        <Body>You'll stop seeing each other's online status, and your chat closes. You can add each other again any time.</Body>
-        <Button
-          title="Remove friend"
-          variant="danger"
-          onPress={async () => {
-            if (removing) await api.removeFriend(removing.id).catch((e: Error) => setError(e.message));
-            setRemoving(null);
-            load();
-          }}
-        />
-        <Button title="Keep" variant="text" onPress={() => setRemoving(null)} />
-      </Sheet>
     </Screen>
   );
 }

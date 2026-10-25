@@ -114,6 +114,7 @@ export interface AppConfig {
   publicBaseUrl: string | null;
   splitThreshold: number;
   timeZone: string;
+  supportEmail: string | null;
 }
 
 export interface Profile {
@@ -122,6 +123,14 @@ export interface Profile {
   code: string;
   color: string;
 }
+
+/** Your own profile, with where you stand on the community rules. */
+export interface MyProfile extends Profile {
+  rulesAccepted: boolean;
+  suspended: boolean;
+}
+
+export type ReportReason = 'harassment' | 'hate' | 'sexual' | 'spam' | 'cheating' | 'other';
 
 export interface FriendsOverview {
   me: Profile;
@@ -264,7 +273,13 @@ export const api = {
   sharedRack: (token: string) => request<SharedRack>('GET', `/v1/share-links/${encodeURIComponent(token)}`),
   deleteMe: () => request<{ deleted: boolean }>('DELETE', '/v1/me', undefined, { 'x-confirm-delete': 'delete-my-data' }),
 
-  profile: () => request<Profile>('GET', '/v1/me/profile'),
+  profile: () => request<MyProfile>('GET', '/v1/me/profile'),
+  acceptRules: () => request<{ rulesAccepted: boolean }>('POST', '/v1/me/rules'),
+  blocks: () => request<{ blocked: Profile[] }>('GET', '/v1/blocks'),
+  block: (playerId: string) => request<{ blocked: boolean }>('POST', '/v1/blocks', { playerId }),
+  unblock: (playerId: string) => request<{ unblocked: boolean }>('DELETE', `/v1/blocks/${playerId}`),
+  report: (body: { playerId?: string; messageId?: string; reason: ReportReason; note?: string | null; block?: boolean }) =>
+    request<{ reported: boolean; id: string; blocked: boolean }>('POST', '/v1/reports', body),
   rename: (name: string) => request<Profile>('PUT', '/v1/me/profile', { name }),
   realtimeTicket: () => request<{ ticket: string }>('POST', '/v1/realtime/tickets'),
 
@@ -307,6 +322,6 @@ export const api = {
 
 let configPromise: Promise<AppConfig> | null = null;
 export function getConfig(): Promise<AppConfig> {
-  configPromise ??= api.config().catch(() => ({ brand: 'Daily Rack', publicBaseUrl: null, splitThreshold: 30, timeZone: 'America/New_York' }));
+  configPromise ??= api.config().catch(() => ({ brand: 'Daily Rack', publicBaseUrl: null, splitThreshold: 30, timeZone: 'America/New_York', supportEmail: null }));
   return configPromise;
 }

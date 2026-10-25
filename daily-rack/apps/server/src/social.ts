@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { isBlockedEitherWay } from './blocks.ts';
 import type { Db } from './db.ts';
 import type { Hub } from './realtime.ts';
 
@@ -110,7 +111,8 @@ export type FriendRequestResult = 'requested' | 'accepted' | 'already-friends';
 /** Sends a request by friend code. If they already asked you, this accepts it. */
 export function requestFriend(db: Db, principalId: string, code: string, now: Date): { result: FriendRequestResult; friend: Profile } | null {
   const target = db.prepare('SELECT * FROM profiles WHERE friend_code = ?').get(code.trim().toUpperCase()) as ProfileRow | undefined;
-  if (!target || target.principal_id === principalId) return null;
+  // A block either way looks the same as a wrong code, so nobody learns they were blocked.
+  if (!target || target.principal_id === principalId || isBlockedEitherWay(db, principalId, target.principal_id)) return null;
   const friend = toProfile(target);
   if (areFriends(db, principalId, friend.id)) return { result: 'already-friends', friend };
   const reverse = db.prepare(`SELECT 1 FROM friendships WHERE requester = ? AND addressee = ? AND status = 'pending'`).get(friend.id, principalId);
@@ -123,6 +125,7 @@ export function requestFriend(db: Db, principalId: string, code: string, now: Da
 }
 
 export function acceptFriend(db: Db, principalId: string, requesterId: string, now: Date): boolean {
+  if (isBlockedEitherWay(db, principalId, requesterId)) return false;
   const result = db
     .prepare(`UPDATE friendships SET status = 'accepted', responded_at = ? WHERE requester = ? AND addressee = ? AND status = 'pending'`)
     .run(now.toISOString(), requesterId, principalId);
@@ -197,16 +200,26 @@ export function postMessage(db: Db, hub: Hub, conversation: ConversationRow, sen
     message.createdAt,
   );
   markRead(db, conversation.id, senderId, now);
-  hub.sendMany(conversationMembers(db, conversation), { type: 'message', conversationId: conversation.id, message });
+  const recipients = conversationMembers(db, conversation).filter((id) => id === senderId || !isBlockedEitherWay(db, senderId, id));
+  hub.sendMany(recipients, { type: 'message', conversationId: conversation.id, message });
   return message;
 }
 
-export function listMessages(db: Db, conversationId: string, before: string | null, limit = 50): Message[] {
-  const rows = (
-    before
-      ? db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?').all(conversationId, before, limit)
-      : db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?').all(conversationId, limit)
-  ) as { id: string; conversation_id: string; sender_id: string | null; body: string; created_at: string }[];
+/**
+ * Messages one player can see: not removed by a moderator, not from a suspended player,
+ * not from anyone they blocked or who blocked them, and not ones they reported.
+ */
+export function listMessages(db: Db, conversationId: string, viewerId: string, before: string | null, limit = 50): Message[] {
+  const rows = db
+    .prepare(
+      `SELECT m.* FROM messages m LEFT JOIN profiles p ON p.principal_id = m.sender_id
+       WHERE m.conversation_id = ? AND m.created_at < ? AND m.hidden_at IS NULL AND p.suspended_at IS NULL
+         AND (m.sender_id IS NULL OR m.sender_id NOT IN (
+           SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?))
+         AND m.id NOT IN (SELECT message_id FROM reports WHERE reporter_id = ? AND message_id IS NOT NULL)
+       ORDER BY m.created_at DESC LIMIT ?`,
+    )
+    .all(conversationId, before ?? '9999', viewerId, viewerId, viewerId, limit) as { id: string; conversation_id: string; sender_id: string | null; body: string; created_at: string }[];
   return rows.reverse().map((r) => ({ id: r.id, conversationId: r.conversation_id, senderId: r.sender_id, body: r.body, createdAt: r.created_at }));
 }
 
@@ -223,13 +236,13 @@ export function directInbox(db: Db, principalId: string, now: Date) {
     .map((friendId) => {
       const conversation = conversationFor(db, 'direct', directKey(principalId, friendId), now);
       const last = db
-        .prepare('SELECT body, sender_id, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1')
+        .prepare('SELECT body, sender_id, created_at FROM messages WHERE conversation_id = ? AND hidden_at IS NULL ORDER BY created_at DESC LIMIT 1')
         .get(conversation.id) as { body: string; sender_id: string | null; created_at: string } | undefined;
       const read = db
         .prepare('SELECT last_read_at FROM conversation_reads WHERE conversation_id = ? AND principal_id = ?')
         .get(conversation.id, principalId) as { last_read_at: string } | undefined;
       const unread = db
-        .prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND created_at > ? AND (sender_id IS NULL OR sender_id != ?)')
+        .prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND created_at > ? AND hidden_at IS NULL AND (sender_id IS NULL OR sender_id != ?)')
         .get(conversation.id, read?.last_read_at ?? '', principalId) as { n: number };
       return {
         conversationId: conversation.id,

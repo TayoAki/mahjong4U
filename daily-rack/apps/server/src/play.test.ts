@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
 import { TILE_FACES, type PlayerView } from '@daily-rack/core/mahjong';
 import { createApp, createServices, type Services } from './app.ts';
@@ -10,7 +10,7 @@ import { openDb, type Db } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
 
 const content = loadContent(join(import.meta.dirname, '../../../content'), { devRotate: true });
-const config = { brand: 'Daily Rack', publicBaseUrl: 'https://dailyrack.test', secureCookies: false, splitThreshold: 30 };
+const config = { brand: 'Daily Rack', publicBaseUrl: 'https://dailyrack.test', secureCookies: false, splitThreshold: 30, adminToken: 'test-moderator-token' };
 
 let db: Db;
 let services: Services;
@@ -26,7 +26,7 @@ function setup(options: Parameters<typeof createServices>[1] = {}) {
 beforeEach(() => setup());
 afterEach(() => services.tables.stopAll());
 
-async function device(name?: string) {
+async function device(name?: string, { rules = true }: { rules?: boolean } = {}) {
   let cookie = '';
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await app.request(path, {
@@ -47,6 +47,7 @@ async function device(name?: string) {
   };
   const session = await call('POST', '/v1/guest-sessions');
   if (name) await call('PUT', '/v1/me/profile', { name });
+  if (rules) await call('POST', '/v1/me/rules');
   const profile = (await call('GET', '/v1/me/profile')).body;
   return { call, id: session.body.principalId as string, token: session.body.token as string, profile };
 }
@@ -359,5 +360,146 @@ describe('deleting data', () => {
     const view = (await ann.call('GET', `/v1/tables/${created.body.table.id}`)).body;
     expect(view.table.seats[1].kind).toBe('bot');
     expect((await ann.call('GET', '/v1/friends')).body.friends).toEqual([]);
+  });
+});
+
+describe('safety', () => {
+  const moderator = (method: string, path: string, body?: unknown, token = 'test-moderator-token') =>
+    app.request(path, { method, headers: { 'content-type': 'application/json', 'x-admin-token': token }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const openReports = async (): Promise<any> => (await moderator('GET', '/v1/admin/reports')).json();
+
+  /** Ann hosts a table with Bea and Cy seated; returns the table chat id. */
+  async function tableOfThree() {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    const cy = await device('Cy');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'open' }, { type: 'open' }, { type: 'bot' }] });
+    await bea.call('POST', '/v1/tables/join', { code: created.body.table.code });
+    await cy.call('POST', '/v1/tables/join', { code: created.body.table.code });
+    return { ann, bea, cy, tableId: created.body.table.id as string, chat: created.body.conversationId as string };
+  }
+  const bodies = async (d: Device, chat: string) => ((await d.call('GET', `/v1/conversations/${chat}/messages`)).body.messages as { body: string }[]).map((m) => m.body);
+
+  it('asks players to agree to the community rules before chatting or adding friends', async () => {
+    const ann = await device('Ann');
+    const cy = await device('Cy', { rules: false });
+    expect((await cy.call('GET', '/v1/me/profile')).body).toMatchObject({ rulesAccepted: false, suspended: false });
+    const refused = await cy.call('POST', '/v1/friends/requests', { code: ann.profile.code });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error.code).toBe('rules_required');
+    await cy.call('POST', '/v1/me/rules');
+    expect((await cy.call('GET', '/v1/me/profile')).body.rulesAccepted).toBe(true);
+    expect((await cy.call('POST', '/v1/friends/requests', { code: ann.profile.code })).status).toBe(200);
+  });
+
+  it('filters slurs and profanity from messages, names and game nights', async () => {
+    const { ann, chat } = await tableOfThree();
+    expect((await ann.call('PUT', '/v1/me/profile', { name: 'Sh1t Head' })).body.error.code).toBe('bad_name');
+    const message = await ann.call('POST', `/v1/conversations/${chat}/messages`, { body: 'what a shitty pass' });
+    expect(message.status).toBe(400);
+    expect(message.body.error.code).toBe('objectionable');
+    expect((await ann.call('POST', `/v1/conversations/${chat}/messages`, { body: 'Nice pass!' })).status).toBe(201);
+    const night = await ann.call('POST', '/v1/nights', { title: 'Fuck night', timeZone: 'America/New_York', slots: [new Date(Date.now() + 86_400_000).toISOString()] });
+    expect(night.body.error.code).toBe('objectionable');
+  });
+
+  it('blocking ends the friendship and keeps the two players apart everywhere', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    const table = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }] });
+    await bea.call('POST', `/v1/tables/${table.body.table.id}/join`);
+    const chat = table.body.conversationId;
+    await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'Before the block' });
+
+    expect((await ann.call('POST', '/v1/blocks', { playerId: bea.id })).status).toBe(200);
+    expect((await ann.call('GET', '/v1/friends')).body.friends).toEqual([]);
+    expect((await bea.call('GET', '/v1/friends')).body.friends).toEqual([]);
+    expect((await ann.call('GET', '/v1/blocks')).body.blocked).toMatchObject([{ id: bea.id, name: 'Bea' }]);
+    expect((await bea.call('GET', '/v1/blocks')).body.blocked).toEqual([]);
+
+    // Messages disappear both ways, and new ones are not pushed to the other player.
+    const sendMany = vi.spyOn(services.hub, 'sendMany');
+    await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'After the block' });
+    const pushedTo = sendMany.mock.calls.find(([, m]) => m.type === 'message')?.[0] ?? [];
+    expect(pushedTo).toContain(bea.id);
+    expect(pushedTo).not.toContain(ann.id);
+    await ann.call('POST', `/v1/conversations/${chat}/messages`, { body: 'From Ann' });
+    expect(await bodies(ann, chat)).toEqual(['From Ann']);
+    expect(await bodies(bea, chat)).toEqual(['Before the block', 'After the block']);
+
+    // A blocked player can't send a request, join the blocker's tables or open their invites.
+    expect((await bea.call('POST', '/v1/friends/requests', { code: ann.profile.code })).status).toBe(404);
+    const second = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'open' }, { type: 'bot' }, { type: 'bot' }] });
+    const join = await bea.call('POST', '/v1/tables/join', { code: second.body.table.code });
+    expect(join.status).toBe(403);
+    expect(join.body.error.code).toBe('blocked');
+    const night = await ann.call('POST', '/v1/nights', { title: 'Mahjong night', timeZone: 'America/New_York', slots: [new Date(Date.now() + 86_400_000).toISOString()] });
+    const token = night.body.invitePath.split('/').pop();
+    expect((await bea.call('GET', `/v1/night-invites/${token}`)).status).toBe(404);
+    expect((await bea.call('POST', `/v1/night-invites/${token}/join`)).status).toBe(404);
+
+    // Unblocking lets them connect again.
+    await ann.call('DELETE', `/v1/blocks/${bea.id}`);
+    expect((await bea.call('POST', '/v1/friends/requests', { code: ann.profile.code })).body.result).toBe('requested');
+  });
+
+  it('hides a reported message for the reporter, then for everyone, and lets a moderator suspend the sender', async () => {
+    const { ann, bea, cy, chat } = await tableOfThree();
+    const sent = await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'You all play like idiots' });
+    const messageId = sent.body.id;
+
+    const first = await ann.call('POST', '/v1/reports', { messageId, reason: 'harassment', note: 'Rude to the table' });
+    expect(first.status).toBe(201);
+    expect(await bodies(ann, chat)).toEqual([]);
+    expect(await bodies(cy, chat)).toEqual(['You all play like idiots']);
+    await cy.call('POST', '/v1/reports', { messageId, reason: 'harassment' });
+    expect(await bodies(cy, chat)).toEqual([]);
+    expect(await bodies(bea, chat)).toEqual([]);
+
+    // Players can't report themselves or messages they can't see.
+    expect((await bea.call('POST', '/v1/reports', { messageId, reason: 'spam' })).status).toBe(400);
+    const outsider = await device('Dee');
+    expect((await outsider.call('POST', '/v1/reports', { messageId, reason: 'spam' })).status).toBe(404);
+
+    const open = await openReports();
+    expect(open.reports).toHaveLength(2);
+    expect(open.reports[0]).toMatchObject({ reason: 'harassment', note: 'Rude to the table', reported: { kind: 'message', body: 'You all play like idiots', name: 'Bea' }, target: { id: bea.id, reportsAgainst: 2 } });
+
+    const resolved = await moderator('POST', `/v1/admin/reports/${open.reports[0].id}`, { action: 'suspend' });
+    expect(resolved.status).toBe(200);
+    expect((await openReports()).reports).toEqual([]);
+    expect((await bea.call('GET', '/v1/me/profile')).body.suspended).toBe(true);
+    const muted = await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'Sorry' });
+    expect(muted.status).toBe(403);
+    expect(muted.body.error.code).toBe('suspended');
+    expect((await bea.call('POST', '/v1/friends/requests', { code: ann.profile.code })).body.error.code).toBe('suspended');
+
+    await moderator('POST', `/v1/admin/players/${bea.id}/unsuspend`);
+    expect((await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'Sorry' })).status).toBe(201);
+  });
+
+  it('reports a player and blocks them in one step', async () => {
+    const { ann, bea } = await tableOfThree();
+    const report = await ann.call('POST', '/v1/reports', { playerId: bea.id, reason: 'cheating', block: true });
+    expect(report.body).toMatchObject({ reported: true, blocked: true });
+    expect((await ann.call('GET', '/v1/blocks')).body.blocked).toMatchObject([{ id: bea.id }]);
+    const open = await openReports();
+    expect(open.reports[0]).toMatchObject({ reason: 'cheating', reported: { kind: 'player', name: 'Bea' } });
+  });
+
+  it('keeps moderator tools behind the token', async () => {
+    expect((await moderator('GET', '/v1/admin/reports', undefined, 'wrong')).status).toBe(401);
+    const closed = createApp({ db, content, config: { ...config, adminToken: null }, services });
+    expect((await closed.request('/v1/admin/reports', { headers: { 'x-admin-token': 'test-moderator-token' } })).status).toBe(404);
+  });
+
+  it('removes blocks and reports with deleted data', async () => {
+    const { ann, bea, chat } = await tableOfThree();
+    const sent = await bea.call('POST', `/v1/conversations/${chat}/messages`, { body: 'Hello' });
+    await ann.call('POST', '/v1/reports', { messageId: sent.body.id, reason: 'spam', block: true });
+    await app.request('/v1/me', { method: 'DELETE', headers: { 'x-confirm-delete': 'delete-my-data', authorization: `Bearer ${bea.token}` } });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM blocks').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM reports').get()).toEqual({ n: 0 });
   });
 });
