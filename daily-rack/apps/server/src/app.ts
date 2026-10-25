@@ -39,6 +39,11 @@ const CLIENT_EVENTS = new Set([
   'clip_save_succeeded',
   'share_handoff_opened',
   'shared_link_opened',
+  'table_created',
+  'table_joined',
+  'friend_added',
+  'night_created',
+  'night_invite_shared',
 ]);
 
 const AttemptBody = z.object({

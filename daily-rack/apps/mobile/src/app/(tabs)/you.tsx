@@ -1,0 +1,191 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { api, type Progress } from '../../lib/api.ts';
+import { updatePrefs, usePrefs } from '../../lib/prefs.ts';
+import { forgetSession, useSession } from '../../lib/session.tsx';
+import { clearAll } from '../../lib/storage.ts';
+import { Avatar, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
+import { CardView } from '../../game/CardView.tsx';
+import { colors, fonts } from '../../theme.ts';
+
+export default function YouScreen() {
+  const { profile, refreshProfile, retry } = useSession();
+  const prefs = usePrefs();
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [name, setName] = useState(profile?.name ?? '');
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<'card' | 'delete' | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => setName(profile?.name ?? ''), [profile?.name]);
+  const load = useCallback(() => {
+    api
+      .progress()
+      .then(setProgress)
+      .catch((e: Error) => setError(e.message));
+  }, []);
+  useFocusEffect(load);
+
+  const save = async () => {
+    setError(null);
+    try {
+      await api.rename(name);
+      await refreshProfile();
+      setSaved(true);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const deleteEverything = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteMe();
+      await clearAll();
+      await forgetSession();
+      setSheet(null);
+      if (Platform.OS === 'web') window.location.assign('/');
+      else retry();
+    } catch (e) {
+      setError((e as Error).message);
+      setDeleting(false);
+      setSheet(null);
+    }
+  };
+
+  const maxSection = Math.max(1, ...(progress?.sections.map((s) => s.count) ?? [1]));
+
+  return (
+    <Screen>
+      <View style={{ paddingTop: 12 }}>
+        <Eyebrow>Profile and settings</Eyebrow>
+        <Display size={38}>You</Display>
+      </View>
+      {error && <ErrorPanel message={error} onRetry={load} />}
+
+      <Card style={{ gap: 10 }}>
+        <Row gap={12}>
+          {profile && <Avatar name={profile.name} color={profile.color} size={48} />}
+          <View style={{ flex: 1 }}>
+            <Body small muted>
+              Name friends see at the table
+            </Body>
+            <TextInput
+              value={name}
+              onChangeText={(t) => {
+                setName(t.slice(0, 24));
+                setSaved(false);
+              }}
+              style={styles.input}
+              accessibilityLabel="Your name"
+              testID="profile-name"
+            />
+          </View>
+        </Row>
+        <Button title={saved ? 'Saved' : 'Save name'} compact variant="secondary" disabled={!name.trim() || name === profile?.name} onPress={save} testID="save-name" />
+        {profile && (
+          <Body small muted>
+            Friend code: <Text style={{ fontFamily: fonts.caption, letterSpacing: 2, color: colors.ink }}>{profile.code}</Text>
+          </Body>
+        )}
+      </Card>
+
+      {progress && (
+        <View style={styles.stats}>
+          <Stat value={progress.streak} label="day streak" />
+          <Stat value={progress.bestStreak} label="best streak" />
+          <Stat value={progress.racksSolved} label="racks solved" />
+          <Stat value={progress.strongPasses} label="strong passes" />
+        </View>
+      )}
+      {progress && progress.sections.length > 0 && (
+        <Card>
+          <Heading>Sections you practise</Heading>
+          {progress.sections.map((s) => (
+            <Row key={s.label} gap={10}>
+              <Text style={{ width: 110, color: colors.ink }}>{s.label}</Text>
+              <View style={styles.bar}>
+                <View style={[styles.barFill, { width: `${(s.count / maxSection) * 100}%` }]} />
+              </View>
+              <Text style={{ width: 28, textAlign: 'right', fontWeight: '700', color: colors.ink }}>{s.count}</Text>
+            </Row>
+          ))}
+        </Card>
+      )}
+
+      <Card style={{ gap: 10 }}>
+        <Heading>At the table</Heading>
+        <Body small muted>
+          Show the closest hands on the card while you play.
+        </Body>
+        <Segmented
+          label="Hints"
+          value={prefs.showHints ? 'on' : 'off'}
+          onChange={(v) => updatePrefs({ showHints: v === 'on' })}
+          options={[
+            { value: 'on', label: 'Hints on' },
+            { value: 'off', label: 'Hints off' },
+          ]}
+        />
+        <Button title="Read the house card" variant="text" icon="card" onPress={() => setSheet('card')} />
+      </Card>
+
+      <Card style={{ gap: 10 }}>
+        <Heading>Clip captions</Heading>
+        <Segmented
+          label="Caption colour"
+          value={prefs.captionStyle}
+          onChange={(captionStyle) => updatePrefs({ captionStyle })}
+          options={[
+            { value: 'blue', label: 'Blue' },
+            { value: 'magenta', label: 'Magenta' },
+          ]}
+        />
+      </Card>
+
+      <Card style={{ gap: 10 }}>
+        <Heading>Your data</Heading>
+        <Body small muted>
+          You play as a guest on this device. Voiceovers never leave your phone. Deleting removes your answers, games, friends, messages and game nights, and takes your answers out of
+          the community split.
+        </Body>
+        <Button title="Delete my data" variant="danger" onPress={() => setSheet('delete')} />
+      </Card>
+
+      <Notice>
+        Daily Rack is an independent app. It is not affiliated with or endorsed by the National Mah Jongg League and does not reproduce any official card. Games use the original Daily Rack house
+        card.
+      </Notice>
+
+      <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
+        <CardView />
+      </Sheet>
+      <Sheet visible={sheet === 'delete'} title="Delete your data?" onClose={() => setSheet(null)}>
+        <Body>This removes your streak, answers, share links, friends, chats and game nights for good. Computer players take your seats at any open tables. It can’t be undone.</Body>
+        <Button title="Delete everything" variant="danger" loading={deleting} onPress={deleteEverything} />
+        <Button title="Keep my data" variant="text" onPress={() => setSheet(null)} />
+      </Sheet>
+    </Screen>
+  );
+}
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  input: { minHeight: 44, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 12, fontSize: 17, color: colors.ink, marginTop: 4 },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  stat: { flexBasis: '46%', flexGrow: 1, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14 },
+  statValue: { fontFamily: fonts.serif, fontSize: 32, color: colors.primary },
+  statLabel: { fontSize: 14, color: colors.muted },
+  bar: { flex: 1, height: 10, borderRadius: 5, backgroundColor: '#EBE8DF', overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 5 },
+});

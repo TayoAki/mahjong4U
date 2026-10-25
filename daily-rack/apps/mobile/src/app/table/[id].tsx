@@ -1,0 +1,205 @@
+import { useCallback, useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import type { Action } from '@daily-rack/core/mahjong';
+import { ApiError, api, type SeatChoice, type TablePayload } from '../../lib/api.ts';
+import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
+import { useSession } from '../../lib/session.tsx';
+import { track } from '../../lib/analytics.ts';
+import { ChatPanel } from '../../components/ChatPanel.tsx';
+import { Body, Button, Card, Display, ErrorPanel, IconButton, Loading, Row, Screen, Sheet, TopBar } from '../../components/ui.tsx';
+import { CardView } from '../../game/CardView.tsx';
+import { GameScreen } from '../../game/GameScreen.tsx';
+import { Lobby } from '../../game/Lobby.tsx';
+
+export default function TableScreen() {
+  const { id = '' } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { principalId } = useSession();
+  const { connected } = useRealtime();
+  const [data, setData] = useState<TablePayload | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  const load = useCallback(() => {
+    api
+      .table(id)
+      .then((d) => {
+        setData(d);
+        setLoadError(null);
+      })
+      .catch((e: Error) => setLoadError(e.message));
+  }, [id]);
+  // Reload on (re)connect so nothing pushed while the socket was down is missed.
+  useEffect(load, [load, connected]);
+
+  useRealtimeMessages((m) => {
+    if (m.type === 'table' && m.tableId === id) {
+      if (m.payload?.table) setData(m.payload as TablePayload);
+      else load();
+    }
+    if (m.type === 'message' && data && m.conversationId === data.conversationId && sheet !== 'chat' && m.message?.senderId !== principalId) {
+      setUnread((n) => n + 1);
+    }
+  });
+
+  const run = async (fn: () => Promise<TablePayload | unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await fn();
+      if (result && typeof result === 'object' && 'table' in result) setData(result as TablePayload);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'stale') load();
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const act = (action: Action) => run(() => api.act(id, action, data?.game?.version));
+  const back = () => (router.canGoBack() ? router.back() : router.replace('/play'));
+
+  if (loadError && !data) {
+    return (
+      <Screen>
+        <TopBar title="Table" onBack={back} />
+        <ErrorPanel message={loadError} onRetry={load} />
+      </Screen>
+    );
+  }
+  if (!data) return <Loading label="Pulling up a chair" />;
+
+  const { table } = data;
+  const header = (
+    <TopBar
+      title={`Table ${table.code}`}
+      onBack={back}
+      right={
+        <Row gap={0}>
+          <IconButton icon="card" label="House card" onPress={() => setSheet('card')} />
+          <IconButton
+            icon="chat"
+            label={unread ? `Table chat, ${unread} new` : 'Table chat'}
+            badge={unread}
+            onPress={() => {
+              setUnread(0);
+              setSheet('chat');
+            }}
+          />
+        </Row>
+      }
+    />
+  );
+
+  const sheets = (
+    <>
+      <Sheet visible={sheet === 'chat'} title="Table chat" onClose={() => setSheet(null)}>
+        <ChatPanel conversationId={data.conversationId} height={420} emptyText="Say hello to the table." />
+      </Sheet>
+      <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
+        <CardView />
+      </Sheet>
+      <Sheet visible={sheet === 'leave'} title={table.status === 'lobby' && table.hostId === principalId ? 'Close this table?' : 'Leave the table?'} onClose={() => setSheet(null)}>
+        <Body>
+          {table.status === 'lobby'
+            ? table.hostId === principalId
+              ? 'Everyone waiting here will be sent back.'
+              : 'Your seat opens up for someone else.'
+            : 'A computer player takes your seat so the others can finish.'}
+        </Body>
+        <Button
+          title={table.status === 'lobby' && table.hostId === principalId ? 'Close table' : 'Leave'}
+          variant="danger"
+          onPress={async () => {
+            setSheet(null);
+            await run(() => api.leaveTable(id));
+            router.replace('/play');
+          }}
+          testID="confirm-leave"
+        />
+        <Button title="Stay" variant="text" onPress={() => setSheet(null)} />
+      </Sheet>
+    </>
+  );
+
+  if (table.status === 'closed') {
+    return (
+      <Screen>
+        {header}
+        <Card>
+          <Display size={28}>This table has closed</Display>
+          <Body muted>The host closed it. Start a new game from the Play tab.</Body>
+        </Card>
+        <Button title="Back to Play" onPress={() => router.replace('/play')} />
+      </Screen>
+    );
+  }
+
+  if (data.mySeat === null) {
+    const held = table.seats.some((s) => s.reservedFor === principalId && s.kind === 'open');
+    const open = table.seats.some((s) => s.kind === 'open' && !s.reservedFor) || (table.status !== 'lobby' && table.seats.some((s) => s.kind === 'bot'));
+    return (
+      <Screen>
+        {header}
+        {error && <ErrorPanel message={error} />}
+        <Card tone="felt" style={{ gap: 8 }}>
+          <Display size={30} style={{ color: '#F4EFE3' }}>
+            {held ? 'A seat is waiting for you' : 'Join this table?'}
+          </Display>
+          <Body style={{ color: '#F4EFE3' }}>
+            {table.seats.filter((s) => s.kind === 'human').map((s) => s.name).join(', ') || 'Someone'} {table.status === 'lobby' ? 'is setting up' : 'is playing'} a{' '}
+            {table.mode === 'live' ? 'live' : 'turn-based'} game.
+            {table.status !== 'lobby' && !held ? ' You would take over from a computer player.' : ''}
+          </Body>
+        </Card>
+        <View style={{ gap: 10 }}>
+          <Button
+            title="Take a seat"
+            icon="play"
+            disabled={!held && !open}
+            loading={busy}
+            onPress={() =>
+              run(async () => {
+                const joined = await api.joinTable(id);
+                track('table_joined', { tableId: id, mode: table.mode });
+                return joined;
+              })
+            }
+            testID="join-table"
+          />
+          {!held && !open && <Body muted center>Every seat is taken.</Body>}
+        </View>
+        {sheets}
+      </Screen>
+    );
+  }
+
+  if (table.status === 'lobby' || !data.game) {
+    return (
+      <>
+        <Lobby
+          data={data}
+          header={header}
+          principalId={principalId}
+          busy={busy}
+          error={error}
+          start={() => run(() => api.startTable(id))}
+          setSeat={(position: number, seat: SeatChoice) => run(() => api.setSeat(id, position, seat))}
+          leave={() => setSheet('leave')}
+        />
+        {sheets}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <GameScreen data={data} header={header} busy={busy} error={error} act={act} nextHand={() => run(() => api.nextHand(id))} leave={() => setSheet('leave')} />
+      {sheets}
+    </>
+  );
+}

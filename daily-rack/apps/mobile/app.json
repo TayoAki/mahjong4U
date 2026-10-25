@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Daily Rack",
+    "slug": "daily-rack",
+    "scheme": "dailyrack",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FAF7F0",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.dailyrack.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Record an optional voiceover for your rack clip.",
+        "NSPhotoLibraryAddUsageDescription": "Save your rack clips to Photos."
+      }
+    },
+    "android": {
+      "package": "app.dailyrack.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#173F36",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "name": "Daily Rack",
+      "shortName": "Daily Rack",
+      "themeColor": "#FAF7F0",
+      "backgroundColor": "#FAF7F0",
+      "description": "American mahjong: a daily rack puzzle, online games with friends or the computer, and Game Night planning."
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-font",
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-web-browser",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Save your rack clips to Photos.",
+          "savePhotosPermission": "Save your rack clips to Photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": null
+    }
+  }
+}

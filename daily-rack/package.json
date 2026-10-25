@@ -2,18 +2,18 @@
   "name": "daily-rack",
   "private": true,
   "version": "0.1.0",
-  "description": "Daily American mahjong rack puzzle where every answer exports as a 9:16 clip",
+  "description": "Daily American mahjong rack puzzle plus full games with friends or the computer, as an Expo app",
   "type": "module",
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @daily-rack/server & npm run dev --workspace @daily-rack/web",
-    "build": "npm run build --workspace @daily-rack/web",
+    "dev": "npm run dev --workspace @daily-rack/server & npm run start --workspace @daily-rack/mobile",
+    "build": "npm run build:web --workspace @daily-rack/mobile",
     "start": "npm run start --workspace @daily-rack/server",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/web",
+    "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/mobile",
     "content:check": "tsx scripts/check-content.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "e2e": "node scripts/e2e.mjs"
@@ -26,5 +26,9 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
