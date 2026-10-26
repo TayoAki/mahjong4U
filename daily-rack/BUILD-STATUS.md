@@ -31,7 +31,7 @@ Status date: October 25, 2026. Feature IDs follow [`docs/handoff/04-delivery/BUI
 | F09 | Exact shared-rack links | Verified on web | E2E and API tests: `/r/:token` opens the exact revision, hides the poster's pass until the visitor answers, shows it only if the poster opted in, and revoked links return 410. The app registers the `dailyrack://` scheme; universal links need the production domain. |
 | F10 | Measurement and monitoring | Implemented, basic | Client milestone events with unique ids (deduplicated on retry) plus server-side `attempt_submitted` and `shared_rack_completed`. No dashboard, no install attribution yet (installs are unknown until the store builds exist). Errors log as structured JSON with a request id. |
 | F11 | Accessibility and safe recovery | Partly done | Spoken tile labels and slot announcements, tap-only play, 44 px targets, reduced-motion support, honest error and retry states, delete-my-data (verified by an API test). **Not yet audited with VoiceOver, TalkBack or large text sizes.** |
-| F12 | Release candidate verification | Not started | No hosting, domain, store builds or policy pages yet |
+| F12 | Release candidate verification | Started | Hosted on Railway (https://daily-rack-production.up.railway.app) with a persistent volume; a smoke test from outside passed (guest session, daily rack, a game against the computer, live WebSocket, moderator lock). No custom domain, store builds or policy pages yet. |
 | F20, F22, F23 | Weekday modes, reminders, player-type card | Not started | P1 |
 | F21 | Game Night | Verified on web | See the multiplayer table below. |
 | F30–F31 | Creator attribution, night recaps | Not started | P2 |
@@ -63,8 +63,8 @@ Status date: October 25, 2026. Feature IDs follow [`docs/handoff/04-delivery/BUI
 2. Get a teacher to review the first 14 racks, then set `teacherReviewed`.
 3. Get a lawyer to review how racks refer to the card, and decide between an original practice card, a League licence, or both.
 4. Pick the app name and run a trademark check.
-5. Choose hosting, set `PUBLIC_BASE_URL`, and add privacy, support and terms pages.
-6. Try the app on an iPhone in Expo Go from a Codespace (`npm run phone`, see the README), then set up EAS builds for TestFlight and Play internal testing. Store builds need the API hosted somewhere permanent: a Codespace stops when idle.
-7. Set `ADMIN_TOKEN`, `SUPPORT_EMAIL` and ideally `REPORT_WEBHOOK_URL` on the hosted server, decide who reviews reports every day, and paste the App Review note from `docs/MODERATION.md` into the submission.
+5. Add privacy, support and terms pages. (Hosting is done: the server runs on Railway at https://daily-rack-production.up.railway.app with a persistent volume; turn on volume backups in the dashboard.)
+6. Try the app on an iPhone in Expo Go from a Codespace (`API_URL=https://daily-rack-production.up.railway.app npm run phone`, see the README), then set up EAS builds for TestFlight and Play internal testing with `EXPO_PUBLIC_API_URL` set to the Railway address.
+7. `ADMIN_TOKEN` is set on Railway. Add `SUPPORT_EMAIL` and ideally `REPORT_WEBHOOK_URL`, decide who reviews reports every day, and paste the App Review note from `docs/MODERATION.md` into the submission.
 8. Add push notifications for turn-based moves, table invites and Game Night reminders.
 9. Have a teacher review the house card and its point values.

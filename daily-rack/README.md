@@ -46,6 +46,22 @@ Tile artwork is drawn in code (`apps/mobile/src/tiles/tileArt.ts`) with the Chin
 - **Live or turn-based.** Live tables give 90 s for a Charleston pass, 60 s for a turn and 12 s to call a discard; when time runs out, the computer makes a safe move for that player. Turn-based tables wait indefinitely. If someone leaves mid-hand, a computer player takes the seat so the game finishes.
 - **Hints.** The table can show the three closest hands on the card for your tiles, with the exact tiles each one needs. Turn them off on the You tab.
 
+## Hosting
+
+Production runs on Railway in the project **daily-rack** (service `daily-rack`, environment `production`):
+
+| Setting | Value |
+| --- | --- |
+| Source | `TayoAki/mahjong4U`, branch `claude/lucid-dirac-krfama`; every push that touches `daily-rack/` redeploys. Switch the branch to `main` once this work is merged. |
+| Root directory | `/daily-rack` |
+| Build / start | Railpack (Node 22): `npm run build`, then `npm start` |
+| Health check | `/v1/config` |
+| Volume | `daily-rack-data` mounted at `/data`; the database is `/data/daily-rack.db` |
+| Replicas | 1. Live games, timers and sockets live in one process, so don't scale it out. |
+| Variables | `DATABASE_PATH`, `PUBLIC_BASE_URL`, `ADMIN_TOKEN`, `DEV_ROTATE=1` (until there are enough scheduled racks), `BOT_DELAY_MS`, `RAILPACK_NODE_VERSION=22`. Add `SUPPORT_EMAIL` and `REPORT_WEBHOOK_URL` in the Railway dashboard. |
+
+The service's settings live on Railway rather than in a repo file (Railway no longer reads `railway.json` for new services). The moderator token is the `ADMIN_TOKEN` variable on the service. Turn on scheduled backups for the `daily-rack-data` volume in the Railway dashboard so a bad deploy can't lose players' data.
+
 ## Player safety
 
 Chat makes this an app with user-generated content, so it has what the App Store asks for (Guideline 1.2). The full runbook is in [`docs/MODERATION.md`](docs/MODERATION.md).
@@ -67,9 +83,19 @@ npm run build                  # export the Expo web build to apps/mobile/dist
 DEV_ROTATE=1 npm start         # serves the web app and API on http://localhost:8787
 ```
 
+### The live server
+
+The server runs on Railway at **https://daily-rack-production.up.railway.app** (the web version of the app is served from the same address). See [Hosting](#hosting) below.
+
 ### On your iPhone from a GitHub Codespace
 
-A phone can't reach a Codespace's `localhost`, so both the Expo dev server (port 8081, the app's code) and the API (port 8787) need public URLs. The repo's dev container forwards both ports, and one command does the rest:
+The quickest way to try the app on a phone uses the live server, so only the Expo dev server runs in the Codespace:
+
+```bash
+API_URL=https://daily-rack-production.up.railway.app npm run phone
+```
+
+To run your own copy of the server in the Codespace instead, leave out `API_URL`. A phone can't reach a Codespace's `localhost`, so both the Expo dev server (port 8081, the app's code) and the API (port 8787) need public URLs. The repo's dev container forwards both ports, and one command does the rest:
 
 ```bash
 npm run phone
@@ -79,7 +105,7 @@ It builds the web app if needed, starts the API, tries to make ports 8787 and 80
 
 - If it says it couldn't make the ports public, open the **Ports** tab, right-click 8787 and 8081, and choose **Port Visibility > Public**. Anyone with those links can reach them while the Codespace runs.
 - If Expo Go can't load the app through the forwarded port, use Expo's tunnel for the dev server instead: run `npx expo login` once (free Expo account), then `TUNNEL=1 npm run phone`. The API still goes through port 8787.
-- The Codespace stops after a period of inactivity, and the URLs only work while it runs. TestFlight and App Store builds need the API hosted permanently, with `EXPO_PUBLIC_API_URL` set to that address at build time.
+- The Codespace stops after a period of inactivity, and the URLs only work while it runs. TestFlight and App Store builds use the live server: set `EXPO_PUBLIC_API_URL=https://daily-rack-production.up.railway.app` at build time.
 
 ### On your own computer
 
