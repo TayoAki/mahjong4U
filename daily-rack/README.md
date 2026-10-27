@@ -44,6 +44,7 @@ Tile artwork is drawn in code (`apps/mobile/src/tiles/tileArt.ts`) with the Chin
 - **Rules.** 152 tiles with 8 jokers and 8 flowers. East starts with 14. The Charleston passes right, across, left; a second Charleston (left, across, right) happens only if everyone agrees; then an optional courtesy pass across. Jokers can't be passed, are used only in groups of three or more, and can be swapped out of any exposure for the matching natural tile. A discard can be called for Mahjong or to expose a group; Mahjong beats an exposure and ties go to the next player in turn. The discarder of the winning tile pays double, others pay single; a self-drawn Mahjong collects double from everyone; jokerless hands double. An empty wall is a wall game.
 - **Computer players.** Easy, Steady and Sharp. They plan toward the closest hands on the card, decide calls, swap jokers and pass sensibly in the Charleston. In tests, Steady players finish about 94% of four-computer hands with a Mahjong.
 - **Live or turn-based.** Live tables give 90 s for a Charleston pass, 60 s for a turn and 12 s to call a discard; when time runs out, the computer makes a safe move for that player. Turn-based tables wait indefinitely. If someone leaves mid-hand, a computer player takes the seat so the game finishes.
+- **The table.** You see it from your chair, like a club's automatic table: the player across holds their tiles up with the blue backs toward you, the players on either side are seen edge-on, and each player's discards lie in rows of six in front of them, turned their way, around a console whose lights show whose move it is. Other hands stay hidden until the hand ends, as at a real table. Your rack sits at the bottom with the current move just above it. It's drawn with ordinary React Native views and a slight perspective tilt, with no 3D engine.
 - **Hints.** The table can show the three closest hands on the card for your tiles, with the exact tiles each one needs. Turn them off on the You tab.
 
 ## Hosting
@@ -136,7 +137,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `NODE_ENV` | unset | `production` marks session cookies Secure |
 | `ADMIN_TOKEN` | unset | Secret for the moderator endpoints and `npm run reports`. Unset means no moderator access. |
 | `REPORT_WEBHOOK_URL` | unset | Slack or Discord incoming webhook that hears about each new report |
-| `SUPPORT_EMAIL` | unset | Contact address shown on the You tab (App Store review expects one) |
+| `SUPPORT_EMAIL` | unset | Contact address shown with the Contact us form on the You tab (App Store review expects one) |
 | `EXPO_PUBLIC_API_URL` | same origin on web, `http://localhost:8787` on native | Where the app finds the API (set at Expo build time) |
 
 ## Scripts
@@ -149,7 +150,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `npm run phone` | In a GitHub Codespace: start the API and Expo with public URLs so Expo Go on a phone can open the app |
 | `npm run content:check` | Validate all puzzles and the schedule; lists any not yet teacher-reviewed |
 | `npm run seed:demo -- [revisionId] [count]` | Add labelled demo answers so the split can be seen in development |
-| `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
+| `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend; `npm run reports feedback` lists Contact us messages (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
 | `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
 
 ## Adding a daily rack

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import {
   HOUSE_CARD,
   SEATS,
@@ -18,11 +19,12 @@ import { updatePrefs, usePrefs } from '../lib/prefs.ts';
 import { useSafety } from '../lib/safety.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, Notice, Row, Screen } from '../components/ui.tsx';
 import { Tile, TileButton } from '../components/Tile.tsx';
+import { Arrive, useAfterFirstRender } from '../components/Arrive.tsx';
 import { HandHints, Pattern } from './CardView.tsx';
 import { Exposures, TableBoard } from './TableBoard.tsx';
 import { faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
 import { formatSeconds, useCountdown } from './useCountdown.ts';
-import { colors, fonts } from '../theme.ts';
+import { colors, fonts, table } from '../theme.ts';
 
 interface Props {
   data: TablePayload;
@@ -35,6 +37,16 @@ interface Props {
 }
 
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
+
+/** A little physical feedback on phones: a tick when picking a tile, a knock when one hits the table. */
+function feel(kind: 'pick' | 'place' | 'nudge') {
+  if (Platform.OS === 'web') return;
+  const done =
+    kind === 'pick'
+      ? Haptics.selectionAsync()
+      : Haptics.impactAsync(kind === 'place' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
+  done.catch(() => undefined);
+}
 const shortName = (name: string) => name.replace(' (computer)', '');
 
 /** Tiles that just arrived from a pass, shown with a "New" badge until you pass or discard. */
@@ -79,7 +91,9 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
     setSelected([]);
     setNotice(null);
     setJokerWarned(false);
+    if (prompt) feel('nudge');
   }, [promptKey]);
+  const ready = useAfterFirstRender();
 
   // Work out which tiles a pass brought in, by comparing the rack before and after the step.
   const stepKey = `${game.id}:${publicPhaseKey(phase)}`;
@@ -121,6 +135,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
 
   const send = (action: Action) => {
     if (action.type === 'charleston-pass' || action.type === 'courtesy-pass' || action.type === 'discard') setReceived(null);
+    feel(action.type === 'discard' || action.type === 'claim' || action.type === 'charleston-pass' || action.type === 'courtesy-pass' ? 'place' : 'pick');
     act(action);
   };
 
@@ -132,6 +147,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
     }
     setNotice(null);
     setJokerWarned(false);
+    feel('pick');
     setSelected((s) => (s.includes(tile) ? s.filter((t) => t !== tile) : need === 1 ? [tile] : s.length < need ? [...s, tile] : [...s.slice(1), tile]));
   };
 
@@ -352,23 +368,26 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
           {myExposures.length > 0 && (
             <View style={styles.myExposures}>
               <Text style={styles.small}>Exposed</Text>
-              <Exposures exposures={myExposures} width={22} />
+              <Exposures exposures={myExposures} width={22} depth="lying" />
             </View>
           )}
           <View style={styles.rack}>
             {hand.map((t, i) => (
-              <TileButton
-                key={t}
-                face={faceOf(t)}
-                label={`${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}`}
-                width={tileWidth}
-                selected={selected.includes(t)}
-                highlight={(view.drawn === t || receivedSet.has(t)) && !selected.includes(t)}
-                badge={receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined}
-                disabled={need === 0}
-                onPress={() => toggle(t)}
-                testID={`rack-tile-${i}`}
-              />
+              // Tiles you draw or are passed drop into the rack.
+              <Arrive key={t} from={{ y: -26 }} animate={ready}>
+                <TileButton
+                  face={faceOf(t)}
+                  depth="standing"
+                  label={`${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}`}
+                  width={tileWidth}
+                  selected={selected.includes(t)}
+                  highlight={(view.drawn === t || receivedSet.has(t)) && !selected.includes(t)}
+                  badge={receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined}
+                  disabled={need === 0}
+                  onPress={() => toggle(t)}
+                  testID={`rack-tile-${i}`}
+                />
+              </Arrive>
             ))}
           </View>
         </>
@@ -517,13 +536,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     rowGap: 10,
-    backgroundColor: colors.wood,
+    // The near edge of the table: your tiles stand on the felt in front of the rim.
+    backgroundColor: table.felt,
     borderRadius: 14,
     paddingTop: 14,
-    paddingBottom: 10,
+    paddingBottom: 12,
     paddingHorizontal: 8,
-    borderBottomWidth: 5,
-    borderBottomColor: colors.woodDark,
+    borderBottomWidth: 7,
+    borderBottomColor: table.rim,
   },
   log: { fontSize: 13, color: colors.muted },
   logTimeout: { color: colors.ink, fontWeight: '700' },

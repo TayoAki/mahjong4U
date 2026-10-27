@@ -9,7 +9,7 @@ Daily Rack lets players message each other (direct chat, table chat, Game Night 
 | A way to report offensive content, with timely responses | Tap any message from someone else, or the **⋯** next to a player (friends list, friend requests, chat header, table seats, Game Night guests), then **Report**. Reports are private. The reported message disappears for the reporter at once, and for everyone once two different players report it. **You must review every report within 24 hours** (see below). |
 | A way to block abusive users | The same menus have **Block**. Blocking works both ways: neither player sees the other's messages, they can't send friend requests, join each other's tables or open each other's game nights, and any friendship ends. The blocked player isn't told. Players can unblock on the You tab. |
 
-Apple also expects published contact information. Set `SUPPORT_EMAIL` on the server and the You tab shows a **Contact us** link. Use the same address as the support URL on the App Store listing.
+Apple also expects published contact information. The You tab has a **Contact us** form: messages are stored on the server (and sent to `REPORT_WEBHOOK_URL` if set); read them with `ADMIN_TOKEN=... API_URL=... npm run reports feedback`. Set `SUPPORT_EMAIL` on the server too and the form shows that address as well. Use the same address as the support URL on the App Store listing.
 
 ## Setting it up on the server
 

@@ -24,6 +24,25 @@ export const colors = {
   chip: '#ECEBE4',
 } as const;
 
+/**
+ * The table, after a club's automatic mahjong table: teal felt, a bright green rim and
+ * tiles with ivory faces and blue backs.
+ */
+export const table = {
+  felt: '#178079',
+  feltDark: '#11665F',
+  feltLine: 'rgba(255,255,255,0.10)',
+  rim: '#37B36F',
+  rimDark: '#258852',
+  tileBack: '#2559C9',
+  tileBackDark: '#183F96',
+  tileBody: '#E9DEC6',
+  console: '#23282C',
+  consoleEdge: '#3A4147',
+  light: '#F2C14E',
+  text: '#F3F7F2',
+} as const;
+
 /** Family names registered by @expo-google-fonts through expo-font. */
 export const fonts = {
   serif: 'DMSerifDisplay_400Regular',
