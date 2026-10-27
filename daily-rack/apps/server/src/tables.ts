@@ -7,7 +7,9 @@ import {
   botAction,
   faceOf,
   newGame,
+  SIMULTANEOUS_ACTIONS,
   pendingSeats,
+  phaseKey,
   playerView,
   rng,
   type Action,
@@ -71,7 +73,7 @@ export interface LogEntry {
   at: string;
   position: number | null;
   text: string;
-  event: Omit<GameEvent, 'seat'> & { position?: number };
+  event: (Omit<GameEvent, 'seat'> | { type: 'timeout' }) & { position?: number };
 }
 
 export class TableError extends Error {
@@ -207,6 +209,13 @@ export class TableService {
       seats[position] = { principalId: null, bot: 'normal', reservedFor: null };
     }
     this.saveSeats(tableId, seats);
+    // A table with nobody left (a finished game against the computer) closes.
+    if (!seats.some((s) => s.principalId)) {
+      this.db.prepare(`UPDATE tables SET status = 'closed', updated_at = ? WHERE id = ?`).run(this.options.now().toISOString(), tableId);
+      this.clearTimer(tableId);
+      this.broadcast(tableId);
+      return;
+    }
     this.broadcast(tableId);
     this.pump(tableId);
   }
@@ -278,24 +287,27 @@ export class TableService {
   }
 
   /** A human move. Throws TableError or GameError when the move is not allowed. */
-  act(tableId: string, principalId: string, action: Action, expectedVersion?: number): void {
+  act(tableId: string, principalId: string, action: Action, expectedVersion?: number, expectedPhase?: string): void {
     const row = this.row(tableId);
     const position = this.seatsOf(row).findIndex((s) => s.principalId === principalId);
     if (position === -1) throw new TableError(403, 'not_seated', 'You are not playing at this table.');
     const game = this.currentGame(tableId);
     if (!game || game.status !== 'playing') throw new TableError(409, 'no_hand', 'There is no hand in play.');
     if (expectedVersion !== undefined && expectedVersion !== game.version) {
-      throw new TableError(409, 'stale', 'The table moved on. Here is the latest.');
+      // In a step everyone takes at once, other players' moves don't make yours stale,
+      // as long as it is still the same step (the same pass of the same Charleston).
+      const samePhase = SIMULTANEOUS_ACTIONS.has(action.type) && expectedPhase === phaseKey((JSON.parse(game.state) as GameState).phase);
+      if (!samePhase) throw new TableError(409, 'stale', 'The table moved on. Here is the latest.');
     }
     const seat = this.engineSeat(position, game.dealer);
     this.apply(row, game, seat, action);
   }
 
-  private apply(row: TableRow, game: GameRow, seat: Seat, action: Action) {
+  private apply(row: TableRow, game: GameRow, seat: Seat, action: Action, notes: LogEntry[] = []) {
     const state = JSON.parse(game.state) as GameState;
     const { state: next, events } = applyAction(card, state, seat, action);
     const now = this.options.now().toISOString();
-    const log = [...(JSON.parse(game.log) as LogEntry[]), ...events.map((e) => this.describe(row, game.dealer, e, now))].slice(-LOG_LIMIT);
+    const log = [...(JSON.parse(game.log) as LogEntry[]), ...notes, ...events.map((e) => this.describe(row, game.dealer, e, now))].slice(-LOG_LIMIT);
     const ended = next.phase.kind === 'ended';
     transaction(this.db, () => {
       const updated = this.db
@@ -333,7 +345,8 @@ export class TableService {
     if (botSeat !== undefined) {
       const level = seats[this.position(botSeat, game.dealer)]!.bot!;
       const step = () => this.moveFor(tableId, game.version, botSeat, level);
-      if (row.mode === 'turn' || this.options.botDelayMs === 0) step();
+      // Computer players take a moment in every mode, so people can follow the play.
+      if (this.options.botDelayMs === 0) step();
       else this.timers.set(tableId, setTimeout(step, this.options.botDelayMs));
       return;
     }
@@ -342,6 +355,8 @@ export class TableService {
     const seconds = kind === 'claim' ? this.options.liveTimeouts.claim : kind === 'turn' ? this.options.liveTimeouts.turn : this.options.liveTimeouts.pass;
     const deadline = new Date(this.options.now().getTime() + seconds * 1000);
     this.db.prepare('UPDATE games SET deadline = ? WHERE id = ? AND version = ?').run(deadline.toISOString(), game.id, game.version);
+    // Players need the deadline to see the countdown.
+    this.broadcast(tableId);
     this.timers.set(
       tableId,
       setTimeout(() => this.timeout(tableId, game.version), seconds * 1000),
@@ -349,23 +364,37 @@ export class TableService {
   }
 
   /** Plays one move for a seat, unless the game has changed since it was scheduled. */
-  private moveFor(tableId: string, version: number, seat: Seat, level: BotLevel) {
+  private moveFor(tableId: string, version: number, seat: Seat, level: BotLevel, timedOut = false) {
     const row = this.row(tableId);
     const game = this.currentGame(tableId);
     if (!game || game.version !== version || game.status !== 'playing') return;
     const state = JSON.parse(game.state) as GameState;
     if (!pendingSeats(state).includes(seat)) return;
-    this.apply(row, game, seat, botAction(card, state, seat, level, this.random));
+    const position = this.position(seat, game.dealer);
+    const notes = timedOut
+      ? [this.entry(position, `${this.nameAt(row, position)} ran out of time, so the computer moved for them.`, { type: 'timeout', position })]
+      : [];
+    this.apply(row, game, seat, botAction(card, state, seat, level, this.random), notes);
   }
 
   /** A live-table player ran out of time: a computer player makes this one move for them. */
+  /** Time ran out: the computer makes a safe move for everyone still to act in this step. */
   timeout(tableId: string, version: number): void {
-    const game = this.currentGame(tableId);
+    let game = this.currentGame(tableId);
     if (!game || game.version !== version || game.status !== 'playing') return;
-    const state = JSON.parse(game.state) as GameState;
-    const seat = pendingSeats(state)[0];
-    if (seat === undefined) return;
-    this.moveFor(tableId, version, seat, 'normal');
+    const phase = (JSON.parse(game.state) as GameState).phase.kind;
+    const simultaneous = phase !== 'turn' && phase !== 'claim';
+    for (;;) {
+      const state = JSON.parse(game.state) as GameState;
+      const seat = pendingSeats(state)[0];
+      if (seat === undefined) return;
+      this.moveFor(tableId, game.version, seat, 'normal', true);
+      const next = this.currentGame(tableId);
+      // Turns and calls move one seat at a time; everyone in a simultaneous step is covered now.
+      if (!simultaneous || !next || next.status !== 'playing' || next.version === game.version) return;
+      if ((JSON.parse(next.state) as GameState).phase.kind !== phase) return;
+      game = next;
+    }
   }
 
   /** Re-arms computer moves and deadlines after a restart. */

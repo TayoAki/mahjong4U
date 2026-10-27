@@ -503,3 +503,113 @@ describe('safety', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM reports').get()).toEqual({ n: 0 });
   });
 });
+
+describe('table fixes from the walkthrough', () => {
+  /** Ann (East) and Bea (South) at a table with two computers, Charleston in progress. */
+  async function twoPlayerTable(mode: 'live' | 'turn') {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    const created = await ann.call('POST', '/v1/tables', { mode, seats: [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }] });
+    const tableId = created.body.table.id as string;
+    await bea.call('POST', `/v1/tables/${tableId}/join`);
+    await ann.call('POST', `/v1/tables/${tableId}/start`);
+    return { ann, bea, tableId };
+  }
+  const free = (view: PlayerView) => view.hand.filter((t) => TILE_FACES[t] !== 'JOKER').slice(0, 3);
+
+  it('accepts a pass made at the same moment as another player’s, but not one from an earlier step', async () => {
+    const { ann, bea, tableId } = await twoPlayerTable('turn');
+    const a = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    const b = (await bea.call('GET', `/v1/tables/${tableId}`)).body;
+    const phase = 'charleston:1:right';
+    expect((await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'charleston-pass', tiles: free(a.game.view) }, version: a.game.version, phase })).status).toBe(200);
+    // Bea's view is one version behind now, but it is still the same pass.
+    const late = await bea.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'charleston-pass', tiles: free(b.game.view) }, version: b.game.version, phase });
+    expect(late.status).toBe(200);
+    // A pass aimed at a step that is over is still refused.
+    const now = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    expect(now.game.view.phase).toMatchObject({ kind: 'charleston', direction: 'across' });
+    const wrong = await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'charleston-pass', tiles: free(now.game.view) }, version: now.game.version - 1, phase });
+    expect(wrong.body.error.code).toBe('stale');
+  });
+
+  it('accepts a call decision made while another player answers the same discard', async () => {
+    const { ann, bea, tableId } = await twoPlayerTable('turn');
+    // Set up the moment after a computer discards, with Ann and Bea both still deciding.
+    const game = db.prepare('SELECT id, dealer, state FROM games WHERE table_id = ?').get(tableId) as { id: string; dealer: number; state: string };
+    const seatOf = (position: number) => (position - game.dealer + 4) % 4;
+    const state = JSON.parse(game.state);
+    const from = seatOf(2);
+    const tile = state.wall.pop();
+    state.discards.push({ tile, seat: from });
+    state.phase = { kind: 'claim', tile, from, responses: [0, 1, 2, 3].map((s) => (s === seatOf(0) || s === seatOf(1) ? null : { type: 'pass' })) };
+    db.prepare('UPDATE games SET state = ? WHERE id = ?').run(JSON.stringify(state), game.id);
+
+    const b = (await bea.call('GET', `/v1/tables/${tableId}`)).body;
+    expect(b.game.view.phase).toMatchObject({ kind: 'claim', tile });
+    const pass = { type: 'claim', response: { type: 'pass' } };
+    expect((await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: pass, version: b.game.version, phase: `claim:${tile}` })).status).toBe(200);
+    // A decision about some other discard is still refused as stale...
+    const other = await bea.call('POST', `/v1/tables/${tableId}/actions`, { action: pass, version: b.game.version, phase: `claim:${tile + 1}` });
+    expect(other.body.error.code).toBe('stale');
+    // ...but Bea's answer to this discard counts, though Ann answered first.
+    expect((await bea.call('POST', `/v1/tables/${tableId}/actions`, { action: pass, version: b.game.version, phase: `claim:${tile}` })).status).toBe(200);
+    // Play moved past this discard (the computers may already be on the next one).
+    const after = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    expect(after.game.view.phase.kind === 'claim' ? after.game.view.phase.tile : null).not.toBe(tile);
+  });
+
+  it('pushes the live deadline to players and says when the computer moved for someone', async () => {
+    services.tables.stopAll();
+    setup({ botDelayMs: 0, liveTimeouts: { pass: 0.05, turn: 0.05, claim: 0.05 } });
+    const { ann, bea, tableId } = await twoPlayerTable('live');
+    const pushed = vi.spyOn(services.hub, 'send');
+    // Nobody moves: after the deadline the computer passes for both of them.
+    let view = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    for (let i = 0; i < 40 && view.game.view.phase.direction === 'right'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      view = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    }
+    expect(view.game.view.phase.direction).not.toBe('right');
+    const timeouts = view.game.log.filter((e: { event: { type: string } }) => e.event.type === 'timeout');
+    expect(timeouts.map((e: { text: string }) => e.text)).toEqual(expect.arrayContaining(['Ann ran out of time, so the computer moved for them.', 'Bea ran out of time, so the computer moved for them.']));
+    const withDeadline = pushed.mock.calls.filter(([id, m]) => id === bea.id && m.type === 'table' && (m.payload as { game?: { deadline: string | null } }).game?.deadline);
+    expect(withDeadline.length).toBeGreaterThan(0);
+  });
+
+  it('paces computer players in turn-based games too', async () => {
+    services.tables.stopAll();
+    setup({ botDelayMs: 40 });
+    const ann = await device('Ann');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], settings: { skipCharleston: true } });
+    const tableId = created.body.table.id;
+    const view = created.body.game.view as PlayerView;
+    const discard = await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'discard', tile: free(view)[0] }, version: created.body.game.version });
+    // Straight after the discard the computers haven't all played yet.
+    const right = discard.body.game.view.phase;
+    expect(right.kind === 'claim' || (right.kind === 'turn' && right.seat !== 0)).toBe(true);
+    await new Promise((r) => setTimeout(r, 600));
+    expect((await ann.call('GET', `/v1/tables/${tableId}`)).body.game.version).toBeGreaterThan(discard.body.game.version);
+  });
+
+  it('closes a table when the last person leaves', async () => {
+    const ann = await device('Ann');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }] });
+    await ann.call('POST', `/v1/tables/${created.body.table.id}/leave`);
+    expect((await ann.call('GET', '/v1/tables')).body.tables).toEqual([]);
+  });
+
+  it('says whose friend code an invite is, and takes Contact us messages', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    expect((await bea.call('GET', `/v1/friend-codes/${ann.profile.code}`)).body).toMatchObject({ name: 'Ann', isYou: false });
+    expect((await bea.call('GET', '/v1/friend-codes/NOPE1234')).status).toBe(404);
+    await ann.call('POST', '/v1/blocks', { playerId: bea.id });
+    expect((await bea.call('GET', `/v1/friend-codes/${ann.profile.code}`)).status).toBe(404);
+
+    expect((await bea.call('POST', '/v1/feedback', { message: 'Love the Charleston!' })).status).toBe(201);
+    const inbox = await (await app.request('/v1/admin/feedback', { headers: { 'x-admin-token': 'test-moderator-token' } })).json() as { feedback: { message: string; from: { name: string } }[] };
+    expect(inbox.feedback).toMatchObject([{ message: 'Love the Charleston!', from: { name: 'Bea' } }]);
+  });
+});

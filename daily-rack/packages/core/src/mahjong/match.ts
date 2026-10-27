@@ -130,3 +130,38 @@ export function exposureOptions(card: Card, concealed: readonly number[], exposu
   }
   return [...sizes].sort((a, b) => a - b);
 }
+
+/**
+ * Lays a winning hand out group by group, in card order, the way a player shows it:
+ * exposed groups as they were called, then the concealed tiles sorted into the rest,
+ * with jokers filling out groups of three or more. Null if the tiles don't make the
+ * named hand (the caller can fall back to a plain sorted row).
+ */
+export function arrangeWin(card: Card, handId: string, label: string, concealed: readonly number[], exposures: readonly Exposure[]): number[][] | null {
+  const concrete = concreteHands(card).find((c) => c.hand.id === handId && c.label === label);
+  if (!concrete) return null;
+  const groups: (number[] | null)[] = concrete.groups.map(() => null);
+  for (const e of exposures) {
+    const i = concrete.groups.findIndex((g, j) => groups[j] === null && g.face === e.key && g.n === e.tiles.length && g.jokerable);
+    if (i === -1) return null;
+    groups[i] = [...e.tiles];
+  }
+  const naturals = new Map<string, number[]>();
+  const jokers: number[] = [];
+  for (const t of concealed) {
+    if (isJoker(t)) jokers.push(t);
+    else naturals.set(keyOf(t), [...(naturals.get(keyOf(t)) ?? []), t]);
+  }
+  // Pairs and singles take naturals first, since jokers can't stand in for them.
+  const order = concrete.groups.map((g, i) => ({ g, i })).sort((a, b) => Number(a.g.jokerable) - Number(b.g.jokerable));
+  for (const { g, i } of order) {
+    if (groups[i] !== null) continue;
+    const pool = naturals.get(g.face) ?? [];
+    const tiles = pool.splice(0, g.n);
+    while (tiles.length < g.n && g.jokerable && jokers.length > 0) tiles.push(jokers.shift()!);
+    if (tiles.length < g.n) return null;
+    groups[i] = tiles;
+  }
+  if (jokers.length > 0 || [...naturals.values()].some((p) => p.length > 0)) return null;
+  return groups as number[][];
+}

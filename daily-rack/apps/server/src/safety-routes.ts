@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { Db } from './db.ts';
@@ -44,7 +45,7 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
   const { db, hub, config, fail, limiter, now, handle, body } = deps;
   const me = (c: Context<Env>) => c.get('principal');
 
-  for (const path of ['/me/rules', '/blocks', '/blocks/*', '/reports']) {
+  for (const path of ['/me/rules', '/blocks', '/blocks/*', '/reports', '/feedback']) {
     api.use(path, async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
   }
 
@@ -103,6 +104,20 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
     }
   });
 
+  // ---------------------------------------------------------------- contact us
+
+  api.post('/feedback', async (c) => {
+    if (!limiter.allow(`feedback:${me(c)!.id}`, 10, 3_600_000)) return fail(c, 429, 'rate_limited', 'You have sent a lot of messages. Try again later.');
+    const input = await body(c, z.object({ message: z.string().trim().min(1).max(2000) }));
+    if (!input) return fail(c, 400, 'invalid_input', 'Write a message first (up to 2,000 characters).');
+    const id = randomUUID();
+    db.prepare('INSERT INTO feedback (id, principal_id, message, created_at) VALUES (?, ?, ?, ?)').run(id, me(c)!.id, input.message, now().toISOString());
+    const name = ensureProfile(db, me(c)!.id, now()).name;
+    console.log(JSON.stringify({ level: 'info', message: 'feedback_received', feedbackId: id }));
+    notifyModerators(config.reportWebhookUrl, `New Daily Rack message from ${name}: ${input.message.slice(0, 300)}`);
+    return c.json({ sent: true }, 201);
+  });
+
   // ---------------------------------------------------------------- moderators
 
   const admin = async (c: Context<Env>, next: () => Promise<void>) => {
@@ -128,4 +143,9 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
   });
 
   api.post('/admin/players/:id/unsuspend', (c) => c.json({ unsuspended: unsuspend(db, c.req.param('id')) }));
+
+  api.get('/admin/feedback', (c) => {
+    const rows = db.prepare('SELECT * FROM feedback ORDER BY created_at DESC LIMIT 200').all() as { id: string; principal_id: string; message: string; created_at: string }[];
+    return c.json({ feedback: rows.map((r) => ({ id: r.id, message: r.message, createdAt: r.created_at, from: ensureProfile(db, r.principal_id, now()) })) });
+  });
 }

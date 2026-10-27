@@ -127,6 +127,27 @@ export function currentDirection(phase: Phase): PassDirection | null {
   return phase.kind === 'charleston' ? CHARLESTON_ROUNDS[phase.round][phase.pass]! : null;
 }
 
+/**
+ * Moves everyone makes at once; another player's move doesn't make yours stale. Calls
+ * count too: several players may be deciding on the same discard.
+ */
+export const SIMULTANEOUS_ACTIONS: ReadonlySet<Action['type']> = new Set(['charleston-pass', 'charleston-vote', 'courtesy-count', 'courtesy-pass', 'claim']);
+
+/**
+ * Identifies one step of the hand, such as the second pass of the first Charleston or the
+ * calls on one particular discard (tile ids are unique). Matches publicPhaseKey for the
+ * same moment, so a client can say which step it acted on.
+ */
+export function phaseKey(phase: Phase): string {
+  if (phase.kind === 'charleston') return `charleston:${phase.round}:${currentDirection(phase)}`;
+  return phase.kind === 'claim' ? `claim:${phase.tile}` : phase.kind;
+}
+
+export function publicPhaseKey(phase: PublicPhase): string {
+  if (phase.kind === 'charleston') return `charleston:${phase.round}:${phase.direction}`;
+  return phase.kind === 'claim' ? `claim:${phase.tile}` : phase.kind;
+}
+
 /** Seats that must act before the game can move on. */
 export function pendingSeats(state: GameState): Seat[] {
   const p = state.phase;

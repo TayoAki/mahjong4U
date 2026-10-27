@@ -4,6 +4,7 @@
 //   ... node scripts/reports.mjs all                                                    list recent reports, any status
 //   ... node scripts/reports.mjs resolve <reportId> dismiss|remove-content|suspend
 //   ... node scripts/reports.mjs unsuspend <playerId>
+//   ... node scripts/reports.mjs feedback                                               messages from Contact us
 //
 // remove-content hides the reported message for everyone. suspend also hides everything the
 // player has written and stops them chatting, adding friends or joining game nights.
@@ -41,6 +42,10 @@ if (command === 'open' || command === 'all') {
     else console.log(`  player:   named “${r.reported?.name}” when reported`);
     if (r.note) console.log(`  note:     ${r.note}`);
   }
+} else if (command === 'feedback') {
+  const { feedback } = await call('GET', '/feedback');
+  if (feedback.length === 0) console.log('No messages yet.');
+  for (const f of feedback) console.log(`\n${f.createdAt}  from ${f.from.name} (${f.from.id})\n  ${f.message}`);
 } else if (command === 'resolve' && id && ['dismiss', 'remove-content', 'suspend'].includes(action)) {
   await call('POST', `/reports/${id}`, { action });
   console.log(`Report ${id}: ${action}.`);
@@ -48,6 +53,6 @@ if (command === 'open' || command === 'all') {
   const { unsuspended } = await call('POST', `/players/${id}/unsuspend`);
   console.log(unsuspended ? `Player ${id} can chat again.` : `Player ${id} was not suspended.`);
 } else {
-  console.error('Usage: node scripts/reports.mjs [open|all] | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId>');
+  console.error('Usage: node scripts/reports.mjs [open|all] | feedback | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId>');
   process.exit(1);
 }

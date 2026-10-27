@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import type { Action } from '@daily-rack/core/mahjong';
+import { publicPhaseKey, type Action } from '@daily-rack/core/mahjong';
 import { ApiError, api, type SeatChoice, type TablePayload } from '../../lib/api.ts';
 import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
 import { useSession } from '../../lib/session.tsx';
@@ -10,6 +10,7 @@ import { ChatPanel } from '../../components/ChatPanel.tsx';
 import { Body, Button, Card, Display, ErrorPanel, IconButton, Loading, Row, Screen, Sheet, TopBar } from '../../components/ui.tsx';
 import { CardView } from '../../game/CardView.tsx';
 import { GameScreen } from '../../game/GameScreen.tsx';
+import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { Lobby } from '../../game/Lobby.tsx';
 
 export default function TableScreen() {
@@ -21,7 +22,7 @@ export default function TableScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | null>(null);
+  const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | 'help' | null>(null);
   const [unread, setUnread] = useState(0);
 
   const load = useCallback(() => {
@@ -60,7 +61,8 @@ export default function TableScreen() {
     }
   };
 
-  const act = (action: Action) => run(() => api.act(id, action, data?.game?.version));
+  // Send the step we acted on too, so a pass made at the same moment as someone else's still counts.
+  const act = (action: Action) => run(() => api.act(id, action, data?.game?.version, data?.game ? publicPhaseKey(data.game.view.phase) : undefined));
   const back = () => (router.canGoBack() ? router.back() : router.replace('/play'));
 
   if (loadError && !data) {
@@ -74,12 +76,15 @@ export default function TableScreen() {
   if (!data) return <Loading label="Pulling up a chair" />;
 
   const { table } = data;
+  // A game against computer players only has no one to share the code with.
+  const solo = table.seats.filter((s) => s.kind === 'human').length === 1 && !table.seats.some((s) => s.kind === 'open') && data.mySeat !== null;
   const header = (
     <TopBar
-      title={`Table ${table.code}`}
+      title={solo ? 'Vs computer' : `Table ${table.code}`}
       onBack={back}
       right={
         <Row gap={0}>
+          <IconButton icon="help" label="How to play" onPress={() => setSheet('help')} />
           <IconButton icon="card" label="House card" onPress={() => setSheet('card')} />
           <IconButton
             icon="chat"
@@ -103,6 +108,7 @@ export default function TableScreen() {
       <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
         <CardView />
       </Sheet>
+      <HowToPlay visible={sheet === 'help'} onClose={() => setSheet(null)} />
       <Sheet visible={sheet === 'leave'} title={table.status === 'lobby' && table.hostId === principalId ? 'Close this table?' : 'Leave the table?'} onClose={() => setSheet(null)}>
         <Body>
           {table.status === 'lobby'

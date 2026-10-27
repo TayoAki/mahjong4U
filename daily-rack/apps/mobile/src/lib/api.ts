@@ -280,10 +280,12 @@ export const api = {
   unblock: (playerId: string) => request<{ unblocked: boolean }>('DELETE', `/v1/blocks/${playerId}`),
   report: (body: { playerId?: string; messageId?: string; reason: ReportReason; note?: string | null; block?: boolean }) =>
     request<{ reported: boolean; id: string; blocked: boolean }>('POST', '/v1/reports', body),
+  feedback: (message: string) => request<{ sent: boolean }>('POST', '/v1/feedback', { message }),
   rename: (name: string) => request<Profile>('PUT', '/v1/me/profile', { name }),
   realtimeTicket: () => request<{ ticket: string }>('POST', '/v1/realtime/tickets'),
 
   friends: () => request<FriendsOverview>('GET', '/v1/friends'),
+  friendCode: (code: string) => request<{ name: string; color: string; isYou: boolean }>('GET', `/v1/friend-codes/${encodeURIComponent(code)}`),
   addFriend: (code: string) => request<{ result: string; friend: Profile }>('POST', '/v1/friends/requests', { code }),
   acceptFriend: (id: string) => request<{ accepted: boolean }>('POST', `/v1/friends/${id}/accept`),
   removeFriend: (id: string) => request<{ removed: boolean }>('DELETE', `/v1/friends/${id}`),
@@ -306,7 +308,8 @@ export const api = {
   nextHand: (id: string) => request<TablePayload>('POST', `/v1/tables/${id}/next-hand`),
   closeTable: (id: string) => request<TablePayload>('POST', `/v1/tables/${id}/close`),
   setSeat: (id: string, position: number, seat: SeatChoice) => request<TablePayload>('PUT', `/v1/tables/${id}/seats/${position}`, seat),
-  act: (id: string, action: Action, version?: number) => request<TablePayload>('POST', `/v1/tables/${id}/actions`, { action, version }),
+  /** `phase` names the step acted on, so a pass made alongside other players isn't refused as stale. */
+  act: (id: string, action: Action, version?: number, phase?: string) => request<TablePayload>('POST', `/v1/tables/${id}/actions`, { action, version, phase }),
 
   nights: () => request<{ nights: NightSummary[] }>('GET', '/v1/nights'),
   createNight: (body: { title: string; location: string | null; timeZone: string; slots: string[] }) => request<NightDetail>('POST', '/v1/nights', body),

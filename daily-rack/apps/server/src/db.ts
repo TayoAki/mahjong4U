@@ -222,6 +222,16 @@ const MIGRATIONS: string[] = [
   CREATE INDEX reports_by_status ON reports (status, created_at);
   CREATE INDEX reports_by_message ON reports (message_id);
   `,
+  `
+  -- Messages players send to the team from the app's Contact us form.
+  CREATE TABLE feedback (
+    id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX feedback_by_time ON feedback (created_at);
+  `,
 ];
 
 export type Db = DatabaseSync;

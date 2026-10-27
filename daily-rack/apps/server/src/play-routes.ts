@@ -5,6 +5,7 @@ import type { Db } from './db.ts';
 import type { AppConfig, Env, Fail, RateLimiter } from './app.ts';
 import type { Hub } from './realtime.ts';
 import { TableError, type SeatInput, type TableService } from './tables.ts';
+import { isBlockedEitherWay } from './blocks.ts';
 import { ModerationError, isObjectionable, requireSocial, safetyStatus } from './moderation.ts';
 import { registerSafetyRoutes } from './safety-routes.ts';
 import {
@@ -62,6 +63,7 @@ const TableBody = z.object({
 const Tiles = z.array(z.number().int().min(0).max(151)).max(3);
 const ActionBody = z.object({
   version: z.number().int().optional(),
+  phase: z.string().max(40).optional(),
   action: z.discriminatedUnion('type', [
     z.object({ type: z.literal('charleston-pass'), tiles: Tiles }),
     z.object({ type: z.literal('charleston-vote'), continue: z.boolean() }),
@@ -111,7 +113,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   hub.onPresence = (principalId, online) => hub.sendMany(friendIds(db, principalId), { type: 'presence', principalId, online });
 
   api.use('/me/profile', async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
-  for (const path of ['/friends', '/friends/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*']) {
+  for (const path of ['/friends', '/friends/*', '/friend-codes/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*']) {
     api.use(path, async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
   }
 
@@ -148,6 +150,15 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     if (!result) return fail(c, 404, 'code_not_found', 'No player has that friend code.');
     hub.sendMany([me(c)!.id, result.friend.id], { type: 'friends' });
     return c.json(result);
+  });
+
+  // Who an invite link's friend code belongs to, so the invite can say who is asking.
+  api.get('/friend-codes/:code', (c) => {
+    if (!limiter.allow(`friend-code:${me(c)!.id}`, 60, 3_600_000)) return fail(c, 429, 'rate_limited', 'Too many lookups. Try again later.');
+    const row = db.prepare('SELECT principal_id FROM profiles WHERE friend_code = ?').get(c.req.param('code').trim().toUpperCase()) as { principal_id: string } | undefined;
+    if (!row || isBlockedEitherWay(db, me(c)!.id, row.principal_id)) return fail(c, 404, 'code_not_found', 'No player has that friend code.');
+    const { name, color } = ensureProfile(db, row.principal_id, now());
+    return c.json({ name, color, isYou: row.principal_id === me(c)!.id });
   });
 
   api.post('/friends/:id/accept', (c) => {
@@ -292,7 +303,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
       if (!limiter.allow(`move:${pid}`, 240, 60_000)) throw new TableError(409, 'rate_limited', 'Too many moves at once.');
       const input = await body(c, ActionBody);
       if (!input) throw new TableError(400, 'invalid_input', 'That move was not readable.');
-      tables.act(id, pid, input.action, input.version);
+      tables.act(id, pid, input.action, input.version, input.phase);
     }),
   );
 

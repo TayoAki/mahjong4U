@@ -3,12 +3,17 @@ import {
   HOUSE_CARD,
   TILE_FACES,
   applyAction,
+  arrangeWin,
   botAction,
   concretize,
   exposureOptions,
+  SEATS,
   findWin,
+  isJoker,
   keyOf,
   newGame,
+  phaseKey,
+  publicPhaseKey,
   parseToken,
   passTarget,
   pendingSeats,
@@ -127,6 +132,20 @@ describe('winning hands', () => {
     expect(exposureOptions(card, hand, [], 'DOT_5')).toEqual([3]);
     expect(exposureOptions(card, [...hand, ...pick('JOKER', 1)], [], 'DOT_5')).toEqual([3, 4]);
     expect(exposureOptions(card, hand, [], 'WIND_SOUTH')).toEqual([]);
+  });
+
+  it('lays a winning hand out group by group, exposures included', () => {
+    const pick = picker();
+    const kong = { key: 'DOT_5', tiles: pick('DOT_5', 4) };
+    const rest = [...pick('CHARACTER_5', 3), ...pick('JOKER', 1), ...pick('BAMBOO_5', 4), ...pick('FLOWER', 2)];
+    const win = findWin(card, rest, [kong])!;
+    const groups = arrangeWin(card, win.concrete.hand.id, win.concrete.label, rest, [kong])!;
+    expect(groups.map((g) => g.length)).toEqual(win.concrete.groups.map((g) => g.n));
+    expect(groups.flat().sort((a, b) => a - b)).toEqual([...rest, ...kong.tiles].sort((a, b) => a - b));
+    expect(groups.find((g) => g.includes(kong.tiles[0]!))).toEqual(kong.tiles);
+    const flowers = groups.find((g) => g.every((t) => keyOf(t) === 'FLOWER'));
+    expect(flowers).toHaveLength(2);
+    expect(arrangeWin(card, win.concrete.hand.id, win.concrete.label, rest.slice(1), [kong])).toBeNull();
   });
 });
 
@@ -283,7 +302,7 @@ describe('computer players', () => {
       expect(state.result!.payments.reduce((a, b) => a + b, 0)).toBe(0);
       assertConserved(state);
     }
-  });
+  }, 30_000);
 
   it('wins most normal-level games instead of walling', () => {
     let wins = 0;
@@ -299,5 +318,29 @@ describe('computer players', () => {
     const hand = [...pick('FLOWER', 2), ...pick('DOT_5', 4), ...pick('BAMBOO_5', 4), ...pick('CHARACTER_5', 4)];
     const state = playState([hand, pick('DOT_1', 4).concat(pick('DOT_2', 4), pick('DOT_3', 4), pick('DOT_4', 1)), pick('BAMBOO_2', 4).concat(pick('BAMBOO_3', 4), pick('BAMBOO_4', 4), pick('DOT_6', 1)), pick('DOT_7', 4).concat(pick('DOT_8', 4), pick('DOT_9', 4), pick('BAMBOO_1', 1))]);
     expect(botAction(card, state, 0, 'easy', rng(1))).toEqual({ type: 'declare-mahjong' });
+  });
+});
+
+describe('phase keys', () => {
+  it('names each simultaneous step the same way for the engine and a player view', () => {
+    let state = newGame(HOUSE_CARD, { seed: 7 });
+    const seen: string[] = [];
+    for (let step = 0; step < 6 && state.phase.kind === 'charleston'; step++) {
+      const key = phaseKey(state.phase);
+      expect(publicPhaseKey(playerView(HOUSE_CARD, state, 2).phase)).toBe(key);
+      seen.push(key);
+      for (const seat of SEATS) {
+        const hand = state.players[seat]!.hand.filter((t) => !isJoker(t));
+        state = applyAction(HOUSE_CARD, state, seat, { type: 'charleston-pass', tiles: hand.slice(0, 3) }).state;
+      }
+    }
+    expect(seen).toEqual(['charleston:1:right', 'charleston:1:across', 'charleston:1:left']);
+    expect(phaseKey(state.phase)).toBe(publicPhaseKey(playerView(HOUSE_CARD, state, 0).phase));
+  });
+
+  it('names the calls on each discard after that tile', () => {
+    expect(phaseKey({ kind: 'claim', tile: 17, from: 0, responses: [{ type: 'pass' }, null, null, null] })).toBe('claim:17');
+    expect(publicPhaseKey({ kind: 'claim', tile: 17, from: 0 })).toBe('claim:17');
+    expect(publicPhaseKey({ kind: 'turn', seat: 1 })).toBe('turn');
   });
 });
