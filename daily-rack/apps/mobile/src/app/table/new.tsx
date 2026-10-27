@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api, type FriendsOverview, type SeatChoice } from '../../lib/api.ts';
 import { track } from '../../lib/analytics.ts';
+import { useSafety } from '../../lib/safety.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, Row, Screen, Segmented, TopBar } from '../../components/ui.tsx';
 import { LEVEL_LABEL, SeatSheet } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
@@ -22,6 +23,7 @@ export default function NewTableScreen() {
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { ensureName } = useSafety();
 
   useEffect(() => {
     api
@@ -37,6 +39,8 @@ export default function NewTableScreen() {
     seat.type === 'bot' ? `Computer · ${LEVEL_LABEL[seat.level]}` : seat.type === 'friend' ? `Held for ${friends.find((f) => f.id === seat.friendId)?.name ?? 'a friend'}` : 'Open: anyone with the code';
 
   const create = async () => {
+    // Other people will see this name at the table.
+    if (seats.some((s) => s.type !== 'bot') && !(await ensureName())) return;
     setBusy(true);
     setError(null);
     try {

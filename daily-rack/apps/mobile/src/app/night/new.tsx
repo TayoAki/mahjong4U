@@ -8,8 +8,10 @@ import { useSafety } from '../../lib/safety.tsx';
 import { Body, Button, Chip, ErrorPanel, Heading, IconButton, Notice, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
 
-const TIMES = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 15 * 60, 16 * 60, 17 * 60, 18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60];
-const DAYS = 28;
+// Any quarter hour from 8 in the morning to 11 at night, up to eight weeks out.
+const HOURS = Array.from({ length: 16 }, (_, i) => 8 + i);
+const MINUTES = [0, 15, 30, 45];
+const DAYS = 56;
 
 interface Slot {
   day: number;
@@ -119,10 +121,28 @@ export default function NewNightScreen() {
             );
           })}
         </ScrollView>
-        <Body bold>Time</Body>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {TIMES.map((m) => (
-            <Chip key={m} style={{ flexGrow: 0, minWidth: 84 }} label={timeLabel(m)} selected={current.minutes === m} onPress={() => update({ minutes: m })} />
+        <Body bold>Time · {timeLabel(current.minutes)}</Body>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {HOURS.map((h) => (
+            <Chip
+              key={h}
+              style={{ flexGrow: 0, minWidth: 72 }}
+              label={timeLabel(h * 60).replace(/:00/, '')}
+              selected={Math.floor(current.minutes / 60) === h}
+              onPress={() => update({ minutes: h * 60 + (current.minutes % 60) })}
+              testID={`hour-${h}`}
+            />
+          ))}
+        </ScrollView>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {MINUTES.map((m) => (
+            <Chip
+              key={m}
+              label={`:${String(m).padStart(2, '0')}`}
+              selected={current.minutes % 60 === m}
+              onPress={() => update({ minutes: Math.floor(current.minutes / 60) * 60 + m })}
+              testID={`minute-${m}`}
+            />
           ))}
         </View>
         {past && <Notice tone="warn">One of these times has already passed. Pick a later day or time.</Notice>}

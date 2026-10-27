@@ -2,9 +2,10 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { spokenLabel } from '@daily-rack/core';
-import { api, type Daily } from '../../lib/api.ts';
+import { api, type Daily, type NightSummary, type TableSummary } from '../../lib/api.ts';
+import { formatWhen } from '../../lib/dates.ts';
 import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storage.ts';
-import { Body, Button, Card, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
+import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
 import { colors, fonts } from '../../theme.ts';
 
@@ -16,9 +17,26 @@ export default function TodayScreen() {
   const [daily, setDaily] = useState<Daily | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState<TableSummary[]>([]);
+  const [night, setNight] = useState<NightSummary | null>(null);
 
   const load = useCallback(() => {
     setError(null);
+    // Games waiting on you and the next game night. Today still works if these fail.
+    api
+      .tables()
+      .then((r) => setWaiting(r.tables.filter((t) => t.yourMove || t.invited).slice(0, 3)))
+      .catch(() => undefined);
+    api
+      .nights()
+      .then((r) => {
+        const now = Date.now();
+        const upcoming = r.nights
+          .filter((n) => n.status === 'confirmed' && n.when && new Date(n.when).getTime() > now && n.myRsvp !== 'no')
+          .sort((a, b) => a.when!.localeCompare(b.when!));
+        setNight(upcoming[0] ?? r.nights.find((n) => n.status === 'polling') ?? null);
+      })
+      .catch(() => undefined);
     api
       .daily()
       .then(async (d) => {
@@ -77,6 +95,42 @@ export default function TodayScreen() {
             It lands {new Date(daily.nextPublicationAt).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}.
           </Body>
         </Card>
+      )}
+
+      {(waiting.length > 0 || night) && (
+        <View style={{ gap: 10 }} testID="today-waiting">
+          <Eyebrow>Waiting on you</Eyebrow>
+          {waiting.map((t) => (
+            <Pressable
+              key={t.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${t.yourMove ? 'Your move' : 'Invitation'}: table with ${t.players.join(', ')}`}
+              onPress={() => router.push(`/table/${t.id}`)}
+              style={({ pressed }) => [styles.linkCard, pressed && { backgroundColor: colors.sage }]}
+            >
+              <View style={styles.linkIcon}>
+                <Icon name="play" color={colors.ink} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.linkTitle} numberOfLines={1}>
+                  {t.players.filter((p) => p !== 'Open seat').map((p) => p.replace(' (computer)', '')).join(' · ')}
+                </Text>
+                <Body small muted>
+                  {t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
+                </Body>
+              </View>
+              <Badge label={t.yourMove ? 'Your move' : 'Invited'} tone={t.yourMove ? 'pink' : 'ink'} />
+            </Pressable>
+          ))}
+          {night && (
+            <LinkCard
+              icon="calendar"
+              title={night.title}
+              body={night.status === 'confirmed' && night.when ? `${formatWhen(night.when, night.timeZone, 'short')} · ${night.going} going` : 'Still picking a time. Vote on the dates that work.'}
+              onPress={() => router.push(`/night/${night.id}`)}
+            />
+          )}
+        </View>
       )}
 
       {daily.progress && (

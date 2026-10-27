@@ -208,6 +208,8 @@ export interface TableSummary {
   handNumber: number;
   invited: boolean;
   yourMove: boolean;
+  /** People seated (not computer players or open seats). */
+  humans: number;
   players: string[];
   updatedAt: string;
 }

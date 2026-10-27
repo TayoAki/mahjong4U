@@ -596,8 +596,22 @@ describe('table fixes from the walkthrough', () => {
   it('closes a table when the last person leaves', async () => {
     const ann = await device('Ann');
     const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }] });
+    expect((await ann.call('GET', '/v1/tables')).body.tables[0]).toMatchObject({ humans: 1, invited: false });
     await ann.call('POST', `/v1/tables/${created.body.table.id}/leave`);
     expect((await ann.call('GET', '/v1/tables')).body.tables).toEqual([]);
+  });
+
+  it('lets an invited friend turn the seat down, opening it for anyone', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }] });
+    const tableId = created.body.table.id;
+    expect((await bea.call('GET', '/v1/tables')).body.tables[0]).toMatchObject({ id: tableId, invited: true });
+    await bea.call('POST', `/v1/tables/${tableId}/leave`);
+    expect((await bea.call('GET', '/v1/tables')).body.tables).toEqual([]);
+    const seat = (await ann.call('GET', `/v1/tables/${tableId}`)).body.table.seats[1];
+    expect(seat).toMatchObject({ kind: 'open', reservedFor: null });
   });
 
   it('says whose friend code an invite is, and takes Contact us messages', async () => {

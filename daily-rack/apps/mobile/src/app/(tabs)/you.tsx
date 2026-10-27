@@ -17,7 +17,10 @@ export default function YouScreen() {
   const [name, setName] = useState(profile?.name ?? '');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'card' | 'delete' | null>(null);
+  const [sheet, setSheet] = useState<'card' | 'delete' | 'contact' | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [blocked, setBlocked] = useState<Profile[]>([]);
   const [supportEmail, setSupportEmail] = useState<string | null>(null);
@@ -183,7 +186,17 @@ export default function YouScreen() {
           ))
         )}
         <Button title="Community rules" variant="text" icon="help" onPress={openRules} />
-        {supportEmail && <Button title={`Contact us: ${supportEmail}`} variant="text" icon="send" onPress={() => void Linking.openURL(`mailto:${supportEmail}?subject=Daily%20Rack`)} />}
+        <Button
+          title="Contact us"
+          variant="text"
+          icon="send"
+          onPress={() => {
+            setFeedbackState('idle');
+            setFeedbackError(null);
+            setSheet('contact');
+          }}
+          testID="contact-us"
+        />
       </Card>
 
       <Card style={{ gap: 10 }}>
@@ -202,6 +215,49 @@ export default function YouScreen() {
 
       <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
         <CardView />
+      </Sheet>
+      <Sheet visible={sheet === 'contact'} title="Contact us" onClose={() => setSheet(null)}>
+        {feedbackState === 'sent' ? (
+          <>
+            <Body testID="feedback-sent">Thanks! A person reads every message. If you need a reply, include a way to reach you.</Body>
+            <Button title="Done" onPress={() => setSheet(null)} />
+          </>
+        ) : (
+          <>
+            <Body>Found a bug, have an idea, or need help with a player? Tell us here.</Body>
+            <TextInput
+              value={feedback}
+              onChangeText={(t) => setFeedback(t.slice(0, 2000))}
+              placeholder="Your message"
+              placeholderTextColor={colors.muted}
+              multiline
+              style={[styles.input, { minHeight: 120, paddingTop: 10, textAlignVertical: 'top' }]}
+              accessibilityLabel="Your message"
+              testID="feedback-input"
+            />
+            {feedbackError && <ErrorPanel message={feedbackError} />}
+            <Button
+              title="Send"
+              icon="send"
+              disabled={!feedback.trim()}
+              loading={feedbackState === 'sending'}
+              onPress={async () => {
+                setFeedbackState('sending');
+                setFeedbackError(null);
+                try {
+                  await api.feedback(feedback.trim());
+                  setFeedback('');
+                  setFeedbackState('sent');
+                } catch (e) {
+                  setFeedbackError((e as Error).message);
+                  setFeedbackState('idle');
+                }
+              }}
+              testID="send-feedback"
+            />
+            {supportEmail && <Button title={`Or email ${supportEmail}`} variant="text" onPress={() => void Linking.openURL(`mailto:${supportEmail}?subject=Daily%20Rack`)} />}
+          </>
+        )}
       </Sheet>
       <Sheet visible={sheet === 'delete'} title="Delete your data?" onClose={() => setSheet(null)}>
         <Body>This removes your streak, answers, share links, friends, chats and game nights for good. Computer players take your seats at any open tables. It can’t be undone.</Body>

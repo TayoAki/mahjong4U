@@ -36,7 +36,14 @@ export default function RackScreen() {
     <Screen>
       <TopBar
         title="Today's rack"
-        onBack={firstOpen ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
+        onBack={
+          firstOpen
+            ? // Leaving the first rack is fine: it just means Today won't send them back here.
+              () => {
+                void writeJson(FIRST_OPEN_KEY, true).then(() => router.replace('/'));
+              }
+            : () => (router.canGoBack() ? router.back() : router.replace('/'))
+        }
         right={<IconButton icon="help" label="How to play" onPress={() => setHelp(true)} />}
       />
       {error && <ErrorPanel message={error} onRetry={load} />}
@@ -51,7 +58,14 @@ export default function RackScreen() {
         <RackPlay puzzle={daily.puzzle} source={firstOpen ? 'first-open' : 'today'} onSubmitted={(id) => router.replace(`/result/${id}`)} />
       )}
       <HelpSheet visible={help} onClose={() => setHelp(false)} />
-      <PreferencesSheet visible={askPrefs} onDone={() => setAskPrefs(false)} />
+      <PreferencesSheet
+        visible={askPrefs}
+        onDone={() => setAskPrefs(false)}
+        onFullGame={() => {
+          setAskPrefs(false);
+          void writeJson(FIRST_OPEN_KEY, true).then(() => router.replace('/play'));
+        }}
+      />
     </Screen>
   );
 }
@@ -72,7 +86,7 @@ function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void
 }
 
 /** Two optional taps on first open. Skipping is always fine. */
-function PreferencesSheet({ visible, onDone }: { visible: boolean; onDone: () => void }) {
+function PreferencesSheet({ visible, onDone, onFullGame }: { visible: boolean; onDone: () => void; onFullGame: () => void }) {
   const [prefs, setPrefs] = useState<Preferences | null>(null);
   useEffect(() => {
     readPrefs().then(setPrefs);
@@ -98,6 +112,18 @@ function PreferencesSheet({ visible, onDone }: { visible: boolean; onDone: () =>
       </View>
       <Button title="Deal my rack" onPress={() => finish(true)} />
       <Button title="Skip" variant="text" onPress={() => finish(false)} />
+      <Body small muted center>
+        Today’s rack is a one-minute Charleston puzzle. Came to play a whole game?
+      </Body>
+      <Button
+        title="Play a full game instead"
+        variant="secondary"
+        onPress={async () => {
+          await finish(Boolean(prefs));
+          onFullGame();
+        }}
+        testID="full-game-instead"
+      />
     </Sheet>
   );
 }

@@ -5,7 +5,8 @@ import type { BotLevel } from '@daily-rack/core/mahjong';
 import { api, type TableSummary } from '../../lib/api.ts';
 import { useRealtimeMessages } from '../../lib/realtime.tsx';
 import { track } from '../../lib/analytics.ts';
-import { Badge, Body, Button, Card, Chip, Display, ErrorPanel, Eyebrow, Heading, Icon, Row, Screen, Segmented } from '../../components/ui.tsx';
+import { Badge, Body, Button, Card, Chip, Display, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
+import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { LEVEL_LABEL } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
 
@@ -17,6 +18,8 @@ export default function PlayScreen() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState<'quick' | 'join' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<TableSummary | null>(null);
+  const [help, setHelp] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -47,6 +50,17 @@ export default function PlayScreen() {
     }
   };
 
+  const remove = async (t: TableSummary) => {
+    setRemoving(null);
+    setTables((list) => list?.filter((x) => x.id !== t.id) ?? null);
+    try {
+      await api.leaveTable(t.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+    load();
+  };
+
   const join = async () => {
     setBusy('join');
     setError(null);
@@ -68,6 +82,7 @@ export default function PlayScreen() {
         <Eyebrow>Sit down to a game</Eyebrow>
         <Display size={38}>Play mahjong</Display>
         <Body muted>Full American mahjong: Charleston, calling tiles, jokers and Mahjong. Live or turn-based.</Body>
+        <Button title="New to mahjong? How to play" variant="text" compact icon="help" onPress={() => setHelp(true)} style={{ alignSelf: 'flex-start' }} testID="how-to-play" />
       </View>
       {error && <ErrorPanel message={error} />}
 
@@ -129,10 +144,25 @@ export default function PlayScreen() {
               </Body>
             </View>
             {t.yourMove ? <Badge label="Your move" /> : t.invited ? <Badge label="Invited" tone="ink" /> : null}
-            <Icon name="chevron" color={colors.muted} size={20} />
+            <IconButton icon="close" label={t.invited ? `Decline table ${t.code}` : `Leave table ${t.code}`} color={colors.muted} onPress={() => setRemoving(t)} />
           </Pressable>
         ))}
       </View>
+
+      <Sheet visible={removing !== null} title={removing?.invited ? 'Turn down this invitation?' : removing?.humans === 1 ? 'Remove this game?' : 'Leave this table?'} onClose={() => setRemoving(null)}>
+        <Body>
+          {removing?.invited
+            ? 'Your held seat opens up for anyone with the code.'
+            : removing?.humans === 1
+              ? 'It’s just you and the computer, so the game ends and comes off your list.'
+              : removing?.status === 'lobby'
+                ? 'Your seat opens up for someone else.'
+                : 'A computer player takes your seat so the others can finish.'}
+        </Body>
+        <Button title={removing?.invited ? 'Turn it down' : removing?.humans === 1 ? 'Remove game' : 'Leave'} variant="danger" onPress={() => removing && remove(removing)} testID="confirm-remove" />
+        <Button title="Keep it" variant="text" onPress={() => setRemoving(null)} />
+      </Sheet>
+      <HowToPlay visible={help} onClose={() => setHelp(false)} />
     </Screen>
   );
 }

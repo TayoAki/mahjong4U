@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api, type InvitePreview } from '../../lib/api.ts';
 import { formatWhen } from '../../lib/dates.ts';
 import { useSafety } from '../../lib/safety.tsx';
+import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Loading, Row, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
 
@@ -17,6 +18,8 @@ export default function NightInviteScreen() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // An invitee came for the game night, not for the daily rack.
+    void writeJson(FIRST_OPEN_KEY, true);
     api
       .invite(token)
       .then(setInvite)

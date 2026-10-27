@@ -5,6 +5,7 @@ import { publicPhaseKey, type Action } from '@daily-rack/core/mahjong';
 import { ApiError, api, type SeatChoice, type TablePayload } from '../../lib/api.ts';
 import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
 import { useSession } from '../../lib/session.tsx';
+import { useSafety } from '../../lib/safety.tsx';
 import { track } from '../../lib/analytics.ts';
 import { ChatPanel } from '../../components/ChatPanel.tsx';
 import { Body, Button, Card, Display, ErrorPanel, IconButton, Loading, Row, Screen, Sheet, TopBar } from '../../components/ui.tsx';
@@ -18,6 +19,7 @@ export default function TableScreen() {
   const router = useRouter();
   const { principalId } = useSession();
   const { connected } = useRealtime();
+  const { ensureName } = useSafety();
   const [data, setData] = useState<TablePayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,13 +170,14 @@ export default function TableScreen() {
             icon="play"
             disabled={!held && !open}
             loading={busy}
-            onPress={() =>
-              run(async () => {
+            onPress={async () => {
+              if (!(await ensureName())) return;
+              await run(async () => {
                 const joined = await api.joinTable(id);
                 track('table_joined', { tableId: id, mode: table.mode });
                 return joined;
-              })
-            }
+              });
+            }}
             testID="join-table"
           />
           {!held && !open && <Body muted center>Every seat is taken.</Body>}

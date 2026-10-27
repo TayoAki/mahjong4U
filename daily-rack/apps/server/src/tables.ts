@@ -200,7 +200,15 @@ export class TableService {
     const row = this.row(tableId);
     const seats = this.seatsOf(row);
     const position = seats.findIndex((s) => s.principalId === principalId);
-    if (position === -1) return;
+    if (position === -1) {
+      // Turning down an invitation: the held seat opens up for anyone with the code.
+      const held = seats.findIndex((s) => s.reservedFor === principalId);
+      if (held === -1) return;
+      seats[held] = { ...seats[held]!, reservedFor: null };
+      this.saveSeats(tableId, seats);
+      this.broadcast(tableId);
+      return;
+    }
     if (row.status === 'lobby') {
       if (row.host_id === principalId) return this.close(tableId, principalId);
       seats[position] = { principalId: null, bot: null, reservedFor: null };
@@ -556,6 +564,7 @@ export class TableService {
           handNumber: row.hand_number,
           invited: position === -1,
           yourMove,
+          humans: seats.filter((s) => s.principalId).length,
           players: seats.map((_, p) => this.nameAt(row, p)),
           updatedAt: row.updated_at,
         };

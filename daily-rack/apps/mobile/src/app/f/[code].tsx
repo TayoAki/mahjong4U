@@ -5,7 +5,8 @@ import { api } from '../../lib/api.ts';
 import { useSafety } from '../../lib/safety.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { track } from '../../lib/analytics.ts';
-import { Body, Button, Card, Display, ErrorPanel, Screen, TopBar } from '../../components/ui.tsx';
+import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
+import { Avatar, Body, Button, Card, Display, ErrorPanel, Row, Screen, TopBar } from '../../components/ui.tsx';
 
 /** Friend invite link: /f/CODE sends (or accepts) a friend request after one tap. */
 export default function FriendInviteScreen() {
@@ -16,9 +17,18 @@ export default function FriendInviteScreen() {
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [inviter, setInviter] = useState<{ name: string; color: string } | null>(null);
   const own = profile?.code === code.toUpperCase();
 
   useEffect(() => setError(own ? 'This is your own invite link. Share it with friends so they can add you.' : null), [own]);
+  useEffect(() => {
+    // Someone arriving from an invite came to play with a friend, not for the daily rack.
+    void writeJson(FIRST_OPEN_KEY, true);
+    api
+      .friendCode(code.toUpperCase())
+      .then((p) => setInviter(p.isYou ? null : p))
+      .catch((e: Error) => setError(e.message));
+  }, [code]);
 
   const add = async () => {
     setBusy(true);
@@ -39,12 +49,18 @@ export default function FriendInviteScreen() {
     <Screen>
       <TopBar title="Friend invite" onBack={() => router.replace('/friends')} />
       <Card tone="sage" style={{ gap: 8 }}>
-        <Display size={30}>{done ?? 'Someone wants to play mahjong with you'}</Display>
+        {inviter && !done && (
+          <Row gap={10}>
+            <Avatar name={inviter.name} color={inviter.color} size={40} />
+            <Body bold>{inviter.name} sent you this link</Body>
+          </Row>
+        )}
+        <Display size={30}>{done ?? (inviter ? `${inviter.name} wants to play mahjong with you` : 'Someone wants to play mahjong with you')}</Display>
         <Body muted>Friends can chat, see when each other are online, plan game nights and sit down at the same table.</Body>
       </Card>
       {error && <ErrorPanel message={error} />}
       <View style={{ gap: 10 }}>
-        {!done && !own && <Button title="Add friend" icon="plus" onPress={add} loading={busy} testID="accept-invite" />}
+        {!done && !own && <Button title={inviter ? `Add ${inviter.name}` : 'Add friend'} icon="plus" onPress={add} loading={busy} testID="accept-invite" />}
         <Button title="Go to Friends" variant={done ? 'primary' : 'text'} onPress={() => router.replace('/friends')} />
       </View>
     </Screen>

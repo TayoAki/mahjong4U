@@ -37,11 +37,21 @@ type Target =
 
 type Step = 'menu' | 'report' | 'block' | 'done';
 
+/** Guests start as "Player 1A2B"; we ask for a real name before they meet anyone. */
+export const isDefaultName = (name: string | null | undefined) => !name || /^Player [0-9A-F]{4}$/i.test(name.trim());
+
 interface Safety {
   /** Resolves true once the player has agreed to the community rules (asking if needed). */
   requireRules: () => Promise<boolean>;
   /** Runs a social action after the rules check, asking again if the server insists. */
   guard: <T>(fn: () => Promise<T>) => Promise<T | null>;
+  /** Asks for a name if the player still has the default one. False if they back out. */
+  ensureName: () => Promise<boolean>;
+  /** For screens that ask in place (such as chat inside a sheet) instead of opening a sheet. */
+  rulesAccepted: boolean;
+  askName: boolean;
+  /** Saves the name (if one is typed) and agrees to the rules. Returns a problem to show, or null. */
+  agreeInline: (name: string) => Promise<string | null>;
   openPlayer: (player: { id: string; name: string }, extra?: ExtraAction[]) => void;
   openMessage: (message: { id: string; senderId: string; name: string; body: string }) => void;
   openRules: () => void;
@@ -54,6 +64,10 @@ interface Safety {
 const SafetyContext = createContext<Safety>({
   requireRules: async () => true,
   guard: async (fn) => fn(),
+  ensureName: async () => true,
+  rulesAccepted: true,
+  askName: false,
+  agreeInline: async () => null,
   openPlayer: () => undefined,
   openMessage: () => undefined,
   openRules: () => undefined,
@@ -70,6 +84,18 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [rulesOpen, setRulesOpen] = useState<'ask' | 'read' | null>(null);
   const [agreeing, setAgreeing] = useState(false);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameResolver = useRef<((ok: boolean) => void) | null>(null);
+  // Asked once per launch: someone who chose to keep the guest name isn't asked again.
+  const nameAsked = useRef(false);
+  const [, rerender] = useState(0);
+  const markNameAsked = () => {
+    nameAsked.current = true;
+    rerender((n) => n + 1);
+  };
+  const needsName = isDefaultName(profile?.name);
   const [target, setTarget] = useState<Target | null>(null);
   const [step, setStep] = useState<Step>('menu');
   const [reason, setReason] = useState<ReportReason | null>(null);
@@ -98,11 +124,46 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     resolver.current = null;
   };
 
+  /** Saves the typed name, if any. False (with the reason shown) if the server refuses it. */
+  const saveName = async () => {
+    const name = nameDraft.trim();
+    markNameAsked();
+    if (!needsName || !name) return true;
+    try {
+      await api.rename(name);
+      await refreshProfile().catch(() => undefined);
+      return true;
+    } catch (e) {
+      setNameError((e as Error).message);
+      return false;
+    }
+  };
+
+  const ensureName = useCallback(() => {
+    if (!needsName || nameAsked.current) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      nameResolver.current = resolve;
+      setNameDraft('');
+      setNameError(null);
+      setNameOpen(true);
+    });
+  }, [needsName]);
+
+  const closeName = (ok: boolean) => {
+    if (ok) markNameAsked();
+    setNameOpen(false);
+    nameResolver.current?.(ok);
+    nameResolver.current = null;
+  };
+
   const agree = async () => {
     setAgreeing(true);
+    setNameError(null);
     try {
+      if (!(await saveName())) return;
       await api.acceptRules();
       accepted.current = true;
+      rerender((n) => n + 1);
       void refreshProfile().catch(() => undefined);
       closeRules(true);
     } catch {
@@ -112,9 +173,30 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const agreeInline = async (name: string): Promise<string | null> => {
+    try {
+      const trimmed = name.trim();
+      if (needsName && trimmed) {
+        await api.rename(trimmed);
+        await refreshProfile().catch(() => undefined);
+      }
+      markNameAsked();
+      if (!accepted.current) {
+        await api.acceptRules();
+        accepted.current = true;
+        rerender((n) => n + 1);
+        void refreshProfile().catch(() => undefined);
+      }
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | null> => {
       if (!(await requireRules())) return null;
+      if (!(await ensureName())) return null;
       try {
         return await fn();
       } catch (e) {
@@ -126,7 +208,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    [requireRules],
+    [requireRules, ensureName],
   );
 
   const open = (t: Target) => {
@@ -205,6 +287,10 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       value={{
         requireRules,
         guard,
+        ensureName,
+        rulesAccepted: accepted.current,
+        askName: needsName && !nameAsked.current,
+        agreeInline,
         openPlayer: (player, extra = []) => open({ kind: 'player', ...player, extra }),
         openMessage: (message) => open({ kind: 'message', ...message }),
         openRules: () => setRulesOpen('read'),
@@ -228,12 +314,31 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         </Notice>
         {rulesOpen === 'ask' ? (
           <>
+            {needsName && <NameField value={nameDraft} onChange={setNameDraft} error={nameError} />}
             <Button title="I agree" icon="check" onPress={agree} loading={agreeing} testID="agree-rules" />
             <Button title="Not now" variant="text" onPress={() => closeRules(false)} />
           </>
         ) : (
           <Button title="Close" variant="secondary" onPress={() => closeRules(false)} />
         )}
+      </Sheet>
+
+      <Sheet visible={nameOpen} title="What should we call you?" onClose={() => closeName(false)}>
+        <Body>Other players see this name at the table. You can change it any time on the You tab.</Body>
+        <NameField value={nameDraft} onChange={setNameDraft} error={nameError} />
+        <Button
+          title="Save"
+          disabled={!nameDraft.trim()}
+          loading={agreeing}
+          onPress={async () => {
+            setAgreeing(true);
+            const ok = await saveName();
+            setAgreeing(false);
+            if (ok) closeName(true);
+          }}
+          testID="save-name"
+        />
+        <Button title={`Keep ${profile?.name ?? 'my guest name'}`} variant="text" onPress={() => closeName(true)} testID="skip-name" />
       </Sheet>
 
       <Sheet visible={target !== null} title={title} onClose={close}>
@@ -309,7 +414,28 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export function NameField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error: string | null }) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Body bold>Your name at the table</Body>
+      <TextInput
+        value={value}
+        onChangeText={(t) => onChange(t.slice(0, 24))}
+        placeholder="First name or nickname"
+        placeholderTextColor={colors.muted}
+        autoCapitalize="words"
+        autoCorrect={false}
+        style={styles.input}
+        accessibilityLabel="Your name at the table"
+        testID="name-input"
+      />
+      {error && <ErrorPanel message={error} />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  input: { minHeight: 50, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 12, fontSize: 17, color: colors.ink },
   rule: { flexDirection: 'row', gap: 8 },
   bullet: { fontSize: 18, lineHeight: 23, color: colors.primary },
   quote: { borderLeftWidth: 3, borderLeftColor: colors.border, paddingLeft: 12, paddingVertical: 4 },
