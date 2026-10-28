@@ -352,7 +352,7 @@ describe('phase keys', () => {
   it('names the calls on each discard after that tile', () => {
     expect(phaseKey({ kind: 'claim', tile: 17, from: 0, responses: [{ type: 'pass' }, null, null, null] })).toBe('claim:17');
     expect(publicPhaseKey({ kind: 'claim', tile: 17, from: 0 })).toBe('claim:17');
-    expect(publicPhaseKey({ kind: 'turn', seat: 1 })).toBe('turn');
+    expect(publicPhaseKey({ kind: 'turn', seat: 1, drew: false })).toBe('turn');
   });
 });
 

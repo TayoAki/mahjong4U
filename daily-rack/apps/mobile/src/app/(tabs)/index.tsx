@@ -210,6 +210,7 @@ export default function TodayScreen() {
             )}
 
             {daily && <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />}
+            <LinkCard icon="leaf" title="Practice round with Pip" body="An untimed hand where Pip coaches every move. Ready before your group is." onPress={() => router.push('/practice')} testID="today-practice" />
             <LinkCard icon="calendar" title="Plan a game night" body="Find a date that works for your group." onPress={() => router.push('/nights')} />
           </>
         }
