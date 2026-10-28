@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LESSONS } from '../../lessons/content.ts';
+import { LESSONS, MORE_LESSONS } from '../../lessons/content.ts';
 import { LessonPlayer } from '../../lessons/LessonPlayer.tsx';
 import { useLessonProgress } from '../../lessons/progress.ts';
 import { useNotifications } from '../../lib/notification-prompt.tsx';
@@ -14,8 +14,10 @@ export default function LessonScreen() {
   const { markDone, done } = useLessonProgress();
   const { ask, refresh } = useNotifications();
   const index = LESSONS.findIndex((l) => l.id === id);
-  const lesson = LESSONS[index];
-  const next = LESSONS[index + 1];
+  // Lessons off the main path (two-player games) open the same way but aren't counted in it.
+  const extra = MORE_LESSONS.findIndex((l) => l.id === id);
+  const lesson = LESSONS[index] ?? MORE_LESSONS[extra];
+  const next = index === -1 ? undefined : LESSONS[index + 1];
   const back = () => (router.canGoBack() ? router.back() : router.replace('/learn'));
 
   if (!lesson) {
@@ -33,10 +35,10 @@ export default function LessonScreen() {
     <LessonPlayer
       key={lesson.id}
       lesson={lesson}
-      number={index + 1}
+      number={index === -1 ? LESSONS.length + extra + 1 : index + 1}
       onComplete={(lessonId) => {
         const first = done.size === 0;
-        markDone(lessonId);
+        if (index !== -1) markDone(lessonId);
         void notePractice().then(refresh);
         // After a first lesson, Pip offers to keep them going (once the celebration has had a moment).
         if (first) setTimeout(() => ask('first-lesson'), 2500);

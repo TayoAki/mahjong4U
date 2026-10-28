@@ -328,6 +328,10 @@ const MIGRATIONS: string[] = [
     received_at TEXT NOT NULL
   );
   `,
+  `
+  -- What a table plays: four seats, or two-player (two seats, two hands each).
+  ALTER TABLE tables ADD COLUMN variant TEXT NOT NULL DEFAULT 'four' CHECK (variant IN ('four', 'two-player'));
+  `,
 ];
 
 export type Db = DatabaseSync;

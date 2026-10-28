@@ -8,6 +8,7 @@ import { useActiveCard } from '../lib/cards.tsx';
 import { useSafety } from '../lib/safety.tsx';
 import { Avatar, Body, Button, Card, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Notice, Row, Screen, Segmented, Sheet } from '../components/ui.tsx';
 import { colors, fonts } from '../theme.ts';
+import { TWO_PLAYER_SUMMARY } from './TwoPlayerRules.tsx';
 
 interface Props {
   data: TablePayload;
@@ -58,7 +59,7 @@ export function Lobby({ data, header, principalId, busy, error, start, setSeat, 
       footer={
         isHost ? (
           <>
-            <Button title={filled ? 'Deal the first hand' : 'Fill every seat to start'} icon="play" disabled={!filled} loading={busy} onPress={start} testID="start-table" />
+            <Button title={filled ? (table.variant === 'two-player' ? 'Start the game' : 'Deal the first hand') : 'Fill every seat to start'} icon="play" disabled={!filled} loading={busy} onPress={start} testID="start-table" />
             <Button title="Close this table" variant="text" compact onPress={leave} />
           </>
         ) : (
@@ -119,15 +120,24 @@ export function Lobby({ data, header, principalId, busy, error, start, setSeat, 
         })}
       </View>
 
-      <Card>
-        <Body bold>House rules</Body>
-        <Body small muted>
-          {table.settings.skipCharleston
-            ? 'No Charleston: play starts straight away.'
-            : `Charleston: first round always${table.settings.secondCharleston ? ', second round if everyone agrees' : ''}${table.settings.courtesyPass ? ', then an optional courtesy pass' : ''}.`}{' '}
-          Hands come from the {card.id === HOUSE_CARD.id ? 'Daily Rack house card' : card.name}. Whoever throws the winning tile pays double; a self-drawn Mahjong collects double from everyone.
-        </Body>
-      </Card>
+      {table.variant === 'two-player' ? (
+        <Card>
+          <Body bold>Two-player rules</Body>
+          <Body small muted>
+            {TWO_PLAYER_SUMMARY} Hands come from the {card.id === HOUSE_CARD.id ? 'Daily Rack house card' : card.name}. Each Mahjong is paid by the other player, and the one that ends the game pays double. Tap the help button at the top for the full rules.
+          </Body>
+        </Card>
+      ) : (
+        <Card>
+          <Body bold>House rules</Body>
+          <Body small muted>
+            {table.settings.skipCharleston
+              ? 'No Charleston: play starts straight away.'
+              : `Charleston: first round always${table.settings.secondCharleston ? ', second round if everyone agrees' : ''}${table.settings.courtesyPass ? ', then an optional courtesy pass' : ''}.`}{' '}
+            Hands come from the {card.id === HOUSE_CARD.id ? 'Daily Rack house card' : card.name}. Whoever throws the winning tile pays double; a self-drawn Mahjong collects double from everyone.
+          </Body>
+        </Card>
+      )}
       {!isHost && <Notice>The host deals the first hand once every seat is filled.</Notice>}
 
       <SeatSheet

@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
-import { HOUSE_CARD, TILE_FACES, cardToSpec, type PlayerView } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, TILE_FACES, cardToSpec, type PlayerView, type TwoPlayerView } from '@daily-rack/core/mahjong';
 import { PLUS } from '@daily-rack/core';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1067,5 +1067,161 @@ describe('Daily Rack Plus', () => {
     expect(service.status(ann.id)).toMatchObject({ plus: true, until, willRenew: true, source: 'revenuecat' });
     expect(await new PlusService(db, {}).sync(ann.id)).toBe(false);
     expect(new PlusService(db, { forEveryone: true }).status('anyone')).toMatchObject({ plus: true, source: 'everyone' });
+  });
+});
+
+describe('two-player tables', () => {
+  const premium = PLUS.premiumCards[0]!;
+  const computer = [{ type: 'bot', level: 'normal' }];
+
+  /** Two-player moves from the player's view: Mahjong whenever it can, calls when it can, else throws the drawn tile. */
+  function twoPlayerMove(view: TwoPlayerView) {
+    const prompt = view.prompt!;
+    if (prompt.type === 'turn') {
+      if (prompt.mahjong.length > 0) return { type: 'declare-mahjong', hand: prompt.mahjong[0] };
+      const free = view.concealed.filter((t) => TILE_FACES[t] !== 'JOKER');
+      return { type: 'discard', tile: view.drawn ?? free[0] ?? view.concealed[0] };
+    }
+    const win = prompt.options.find((o) => o.canMahjong);
+    if (win) return { type: 'claim', response: { type: 'mahjong', hand: win.hand } };
+    const call = prompt.options.find((o) => o.sizes.length > 0);
+    return { type: 'claim', response: call ? { type: 'expose', hand: call.hand, size: call.sizes[0] } : { type: 'pass' } };
+  }
+
+  async function playOutTwo(tableId: string, players: Device[], maxMoves = 1500) {
+    for (let i = 0; i < maxMoves; i++) {
+      let acted = false;
+      for (const p of players) {
+        const { body } = await p.call('GET', `/v1/tables/${tableId}`);
+        if (body.table.status !== 'playing') return body;
+        const view = body.game.view as TwoPlayerView;
+        if (!view.prompt) continue;
+        const res = await p.call('POST', `/v1/tables/${tableId}/actions`, { action: twoPlayerMove(view), version: body.game.version });
+        expect([200, 409]).toContain(res.status);
+        acted = true;
+      }
+      if (!acted) await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error('game did not finish');
+  }
+
+  it('plays a two-player game against the computer to the end, records it, and deals the next', async () => {
+    const ann = await device('Ann');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: computer });
+    expect(created.status).toBe(201);
+    expect(created.body.table).toMatchObject({ status: 'playing', variant: 'two-player', scores: [0, 0] });
+    expect(created.body.table.seats.map((s: { kind: string; wind: string }) => `${s.kind} ${s.wind}`)).toEqual(['human East', 'bot West']);
+    const view = created.body.game.view as TwoPlayerView;
+    // No Charleston: East has 28 tiles and starts by discarding.
+    expect(view).toMatchObject({ variant: 'two-player', seat: 0, prompt: { type: 'turn' } });
+    expect(view.concealed).toHaveLength(28);
+    expect(view.players.map((p) => p.concealedCount)).toEqual([28, 27]);
+    expect(created.body.game.positions).toEqual([0, 1]);
+
+    const tableId = created.body.table.id;
+    const done = await playOutTwo(tableId, [ann]);
+    expect(done.table.status).toBe('between');
+    const result = done.game.view.result;
+    expect(result.payments.reduce((a: number, b: number) => a + b, 0)).toBe(0);
+    expect(done.table.scores).toEqual(result.payments);
+    expect(done.game.log.some((e: { text: string }) => /Mahjong|Wall game/.test(e.text))).toBe(true);
+
+    // Stats count the game, but ratings never move.
+    const stats = (await ann.call('GET', '/v1/me/stats')).body;
+    expect(stats).toMatchObject({ hands: 1, ranked: { games: 0, rating: 1200 } });
+
+    const next = await ann.call('POST', `/v1/tables/${tableId}/next-hand`);
+    expect(next.body.table).toMatchObject({ handNumber: 2, dealer: 1 });
+    expect(next.body.table.seats.map((s: { wind: string }) => s.wind)).toEqual(['West', 'East']);
+    expect((next.body.game.view as TwoPlayerView).seat).toBe(1);
+    expect(next.body.game.log[0].text).toBe('Game 2: Rosie (computer) is East and starts.');
+    expect((await ann.call('GET', '/v1/tables')).body.tables[0]).toMatchObject({ id: tableId, variant: 'two-player' });
+  });
+
+  it('holds the other seat for a friend, keeps each player’s tiles private, and plays a game together', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    const cal = await device('Cal');
+    await befriend(ann, bea);
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }] })).body.error.code).toBe('bad_seats');
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: computer })).body.error.code).toBe('bad_seats');
+
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: [{ type: 'friend', friendId: bea.id }] });
+    const tableId = created.body.table.id;
+    expect(created.body.table).toMatchObject({ status: 'lobby', variant: 'two-player' });
+    expect((await bea.call('GET', '/v1/tables')).body.tables).toMatchObject([{ id: tableId, invited: true, variant: 'two-player' }]);
+    expect((await cal.call('POST', '/v1/tables/join', { code: created.body.table.code })).body.error.code).toBe('table_full');
+    expect((await bea.call('POST', `/v1/tables/${tableId}/join`)).body.mySeat).toBe(1);
+    const started = await ann.call('POST', `/v1/tables/${tableId}/start`);
+    expect(started.body.table.status).toBe('playing');
+
+    const annView = started.body.game.view as TwoPlayerView;
+    const beaView = (await bea.call('GET', `/v1/tables/${tableId}`)).body.game.view as TwoPlayerView;
+    expect(annView.concealed).toHaveLength(28);
+    expect(beaView.concealed).toHaveLength(27);
+    expect(annView.concealed.some((t) => beaView.concealed.includes(t))).toBe(false);
+    expect(beaView.prompt).toBeNull();
+    // Moves out of turn, or a Mahjong that isn't there, are turned away.
+    expect((await bea.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'discard', tile: beaView.concealed[0] } })).body.error.code).toBe('not_now');
+    expect((await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'declare-mahjong', hand: 1, tiles: annView.concealed.slice(0, 14) } })).status).toBe(422);
+
+    const done = await playOutTwo(tableId, [ann, bea]);
+    expect(done.table.status).toBe('between');
+    expect(done.game.view.result.concealed).toHaveLength(2);
+    expect(done.table.scores.reduce((a: number, b: number) => a + b, 0)).toBe(0);
+  });
+
+  it('runs live two-player games, with the computer moving for a player whose time runs out', async () => {
+    services.tables.stopAll();
+    setup({ botDelayMs: 0, liveTimeouts: { pass: 0.02, turn: 0.02, claim: 0.02 } });
+    const ann = await device('Ann');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'live', variant: 'two-player', seats: computer });
+    expect(created.body.game.deadline).not.toBeNull();
+    const tableId = created.body.table.id;
+    const deadline = Date.now() + 25_000;
+    let body = created.body;
+    while (body.table.status === 'playing' && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+      body = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    }
+    expect(body.table.status).toBe('between');
+    expect(body.game.log.some((e: { event: { type: string } }) => e.event.type === 'timeout')).toBe(true);
+  });
+
+  it('nudges a friend when a turn-based two-player game waits on them', async () => {
+    services.tables.stopAll();
+    const pushes: ExpoMessage[] = [];
+    setup({ pushSender: async (messages) => (pushes.push(...messages), messages.map(() => ({ status: 'ok' as const, id: 'ticket' }))) });
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    await bea.call('PUT', '/v1/me/push-token', { token: 'ExponentPushToken[bea-device-0001]', platform: 'ios' });
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: [{ type: 'friend', friendId: bea.id }] });
+    const tableId = created.body.table.id;
+    expect(pushes.find((p) => p.title === 'Table invite')?.body).toBe('Ann saved you a seat at a turn-based two-player game.');
+    await bea.call('POST', `/v1/tables/${tableId}/join`);
+    const started = (await ann.call('POST', `/v1/tables/${tableId}/start`)).body;
+    const view = started.game.view as TwoPlayerView;
+    await ann.call('POST', `/v1/tables/${tableId}/actions`, { action: { type: 'discard', tile: view.drawn }, version: started.game.version });
+    expect(pushes.filter((p) => p.title === 'Your move')).toMatchObject([{ data: { url: `/table/${tableId}`, category: 'turns' } }]);
+  });
+
+  it('applies the Plus rules: free hands on a premium card against the computer, Plus to host a friend', async () => {
+    expect(loadCards(join(import.meta.dirname, '../../../content/cards')).loaded).toContain(premium);
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    for (let i = 0; i < PLUS.freeCardHandsPerDay; i++) {
+      expect((await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: computer, cardId: premium })).status).toBe(201);
+    }
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: computer, cardId: premium })).body.error).toMatchObject({ code: 'plus_required', feature: 'premium-card' });
+    const friend = [{ type: 'friend', friendId: bea.id }];
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: friend, cardId: premium })).body.error).toMatchObject({ code: 'plus_required', feature: 'host-premium-card' });
+    await givePlus(ann);
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', variant: 'two-player', seats: friend, cardId: premium });
+    expect(created.status).toBe(201);
+    await bea.call('POST', `/v1/tables/${created.body.table.id}/join`);
+    const started = await ann.call('POST', `/v1/tables/${created.body.table.id}/start`);
+    expect(started.body.table).toMatchObject({ status: 'playing', cardId: premium, variant: 'two-player' });
   });
 });

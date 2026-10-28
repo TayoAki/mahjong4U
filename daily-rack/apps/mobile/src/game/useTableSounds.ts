@@ -13,7 +13,15 @@ interface Snapshot {
   passStep: string | null;
 }
 
-function snapshot(gameId: string, view: PlayerView): Snapshot {
+/** What the sounds follow: a player's view, or (at a two-player table) one shaped like it. */
+export type SoundView = Pick<PlayerView, 'seat' | 'discards' | 'wallCount' | 'drawn'> & {
+  phase: { kind: string; round?: number; direction?: string };
+  players: { exposures: readonly unknown[] }[];
+  prompt: { type: string; tile?: number } | null;
+  result: { kind: string } | null;
+};
+
+function snapshot(gameId: string, view: SoundView): Snapshot {
   const phase = view.phase;
   return {
     gameId,
@@ -22,7 +30,7 @@ function snapshot(gameId: string, view: PlayerView): Snapshot {
     wall: view.wallCount,
     drawn: view.drawn,
     ended: view.result !== null,
-    claim: view.prompt?.type === 'claim' ? view.prompt.tile : null,
+    claim: view.prompt?.type === 'claim' ? (view.prompt.tile ?? null) : null,
     passStep: phase.kind === 'charleston' ? `${phase.round}${phase.direction}` : phase.kind === 'courtesy-select' ? 'courtesy' : null,
   };
 }
@@ -36,7 +44,7 @@ function snapshot(gameId: string, view: PlayerView): Snapshot {
  * `ownDiscard` holds the tile you just threw: its clack already played when you tapped, so
  * it isn't played again when the server confirms it.
  */
-export function useTableSounds(gameId: string, view: PlayerView, ownDiscard: { current: number | null }) {
+export function useTableSounds(gameId: string, view: SoundView, ownDiscard: { current: number | null }) {
   const previous = useRef<Snapshot | null>(null);
   useEffect(() => {
     const now = snapshot(gameId, view);

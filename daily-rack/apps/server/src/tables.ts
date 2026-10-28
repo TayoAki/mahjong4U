@@ -1,33 +1,17 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { shortLabel } from '@daily-rack/core';
-import {
-  GameError,
-  cardById,
-  type Card,
-  applyAction,
-  botAction,
-  faceOf,
-  newGame,
-  SIMULTANEOUS_ACTIONS,
-  pendingSeats,
-  phaseKey,
-  playerView,
-  rng,
-  type Action,
-  type BotLevel,
-  type GameEvent,
-  type GameState,
-  type Seat,
-} from '@daily-rack/core/mahjong';
+import { GameError, cardById, faceOf, rng, type BotLevel, type Card, type GameResult, type Seat } from '@daily-rack/core/mahjong';
 import { isBlockedEitherWay } from './blocks.ts';
 import { transaction, type Db } from './db.ts';
 import type { Notifier } from './push.ts';
 import type { Hub } from './realtime.ts';
 import { conversationFor, ensureProfile } from './social.ts';
 import { BOT_RATING, ratingOf, recordAbandon, recordHand } from './stats.ts';
+import { ENGINES, type AnyAction, type AnyEvent, type AnyState, type TableEngine, type TableVariant } from './variants.ts';
 
-// Online tables: four fixed seats filled by friends or computer players. Each hand is a
-// fresh engine game; the dealer moves one seat to the right every hand.
+// Online tables: fixed seats filled by friends or computer players, four of them, or two
+// for a two-player game (see variants.ts). Each hand is a fresh engine game; the dealer
+// moves one seat to the right every hand.
 
 export type TableMode = 'live' | 'turn';
 export type TableStatus = 'lobby' | 'playing' | 'between' | 'closed';
@@ -61,6 +45,7 @@ interface TableRow {
   kind: TableKind;
   ranked: number;
   card_id: string;
+  variant: TableVariant;
   created_at: string;
   updated_at: string;
 }
@@ -81,7 +66,7 @@ export interface LogEntry {
   at: string;
   position: number | null;
   text: string;
-  event: (Omit<GameEvent, 'seat'> | { type: 'timeout' }) & { position?: number };
+  event: (Omit<AnyEvent, 'seat'> | { type: 'timeout' }) & { position?: number };
 }
 
 export class TableError extends Error {
@@ -112,7 +97,6 @@ export interface SeatInput {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LOG_LIMIT = 80;
-const WINDS = ['East', 'South', 'West', 'North'];
 const GROUP_NAMES: Record<number, string> = { 3: 'pung', 4: 'kong', 5: 'quint', 6: 'sextet' };
 
 export class TableService {
@@ -130,10 +114,16 @@ export class TableService {
   // -------------------------------------------------------------------------
   // Lobby
 
-  create(hostId: string, input: { mode: TableMode; seats: SeatInput[]; settings?: Partial<TableSettings>; nightId?: string | null; cardId?: string }): string {
+  create(
+    hostId: string,
+    input: { mode: TableMode; seats: SeatInput[]; settings?: Partial<TableSettings>; nightId?: string | null; cardId?: string; variant?: TableVariant },
+  ): string {
     const active = this.db.prepare(`SELECT COUNT(*) AS n FROM tables WHERE host_id = ? AND status != 'closed' AND kind = 'private'`).get(hostId) as { n: number };
     if (Number(active.n) >= 20) throw new TableError(409, 'too_many_tables', 'Finish or close a table before starting another.');
-    if (input.seats.length !== 3) throw new TableError(400, 'bad_seats', 'Choose who sits in the other three seats.');
+    const variant = input.variant ?? 'four';
+    if (input.seats.length !== ENGINES[variant].seats - 1) {
+      throw new TableError(400, 'bad_seats', variant === 'two-player' ? 'Choose who sits across from you.' : 'Choose who sits in the other three seats.');
+    }
     const seats: SeatSpec[] = [{ principalId: hostId, bot: null, reservedFor: null }];
     for (const s of input.seats) {
       if (s.type === 'bot') seats.push({ principalId: null, bot: s.level ?? 'normal', reservedFor: null });
@@ -151,10 +141,23 @@ export class TableService {
     const now = this.options.now().toISOString();
     this.db
       .prepare(
-        `INSERT INTO tables (id, code, host_id, mode, status, seats, settings, scores, hand_number, night_id, card_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'lobby', ?, ?, '[0,0,0,0]', 0, ?, ?, ?, ?)`,
+        `INSERT INTO tables (id, code, host_id, mode, status, seats, settings, scores, hand_number, night_id, card_id, variant, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'lobby', ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
       )
-      .run(id, this.uniqueCode(), hostId, input.mode, JSON.stringify(seats), JSON.stringify(settings), input.nightId ?? null, cardById(input.cardId).id, now, now);
+      .run(
+        id,
+        this.uniqueCode(),
+        hostId,
+        input.mode,
+        JSON.stringify(seats),
+        JSON.stringify(settings),
+        JSON.stringify(seats.map(() => 0)),
+        input.nightId ?? null,
+        cardById(input.cardId).id,
+        variant,
+        now,
+        now,
+      );
     conversationFor(this.db, 'table', id, this.options.now());
     // Reserved friends hear about the invite straight away.
     for (const s of seats) if (s.reservedFor) this.hub.send(s.reservedFor, { type: 'table', tableId: id, payload: { invited: true } });
@@ -204,6 +207,11 @@ export class TableService {
   /** The card this table plays with. */
   private cardOf(row: TableRow): Card {
     return cardById(row.card_id);
+  }
+
+  /** The rules this table plays by. */
+  private engineOf(row: TableRow): TableEngine {
+    return ENGINES[row.variant] ?? ENGINES.four;
   }
 
   private uniqueCode(): string {
@@ -296,8 +304,8 @@ export class TableService {
     const row = this.row(tableId);
     if (row.host_id !== hostId) throw new TableError(403, 'not_host', 'Only the host can change seats.');
     if (row.status !== 'lobby') throw new TableError(409, 'already_started', 'Seats are set once the game starts.');
-    if (position < 1 || position > 3) throw new TableError(400, 'bad_seat', 'Choose seat 1, 2 or 3.');
     const seats = this.seatsOf(row);
+    if (!Number.isInteger(position) || position < 1 || position >= seats.length) throw new TableError(400, 'bad_seat', seats.length === 2 ? 'Choose seat 1.' : 'Choose seat 1, 2 or 3.');
     if (seats[position]!.principalId) throw new TableError(409, 'seat_taken', 'Someone is already sitting there.');
     const before = seats[position]!.reservedFor;
     seats[position] =
@@ -318,7 +326,7 @@ export class TableService {
     this.options.notifier?.notify(friendIds, {
       category: 'invites',
       title: 'Table invite',
-      body: `${host} saved you a seat at a ${row.mode === 'live' ? 'live' : 'turn-based'} table.`,
+      body: `${host} saved you a seat at a ${row.mode === 'live' ? 'live' : 'turn-based'} ${row.variant === 'two-player' ? 'two-player game' : 'table'}.`,
       url: `/table/${tableId}`,
     });
   }
@@ -356,8 +364,10 @@ export class TableService {
   private dealHand(row: TableRow, handNumber: number) {
     if (row.kind === 'private') this.dealGate?.(row.host_id, row.card_id, this.seatsOf(row).slice(1).every((s) => s.bot));
     const settings = JSON.parse(row.settings) as TableSettings;
-    const dealer = (handNumber - 1) % 4;
-    const state = newGame(this.cardOf(row), { seed: Math.floor(this.random() * 2 ** 31), ...settings });
+    const engine = this.engineOf(row);
+    const dealer = (handNumber - 1) % engine.seats;
+    const state = engine.deal(this.cardOf(row), Math.floor(this.random() * 2 ** 31), settings);
+    const opening = engine.unit === 'game' ? `Game ${handNumber}: ${this.nameAt(row, dealer)} is East and starts.` : `Hand ${handNumber}: ${this.nameAt(row, dealer)} is East.`;
     const now = this.options.now().toISOString();
     transaction(this.db, () => {
       this.db
@@ -365,7 +375,7 @@ export class TableService {
           `INSERT INTO games (id, table_id, hand_number, dealer, state, version, status, deadline, log, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, 1, 'playing', NULL, ?, ?, ?)`,
         )
-        .run(randomUUID(), row.id, handNumber, dealer, JSON.stringify(state), JSON.stringify([this.entry(null, `Hand ${handNumber}: ${this.nameAt(row, dealer)} is East.`, { type: 'play-started' })]), now, now);
+        .run(randomUUID(), row.id, handNumber, dealer, JSON.stringify(state), JSON.stringify([this.entry(null, opening, { type: 'play-started' })]), now, now);
       this.db.prepare(`UPDATE tables SET status = 'playing', hand_number = ?, updated_at = ? WHERE id = ?`).run(handNumber, now, row.id);
     });
     this.broadcast(row.id);
@@ -377,8 +387,9 @@ export class TableService {
   }
 
   /** A human move. Throws TableError or GameError when the move is not allowed. */
-  act(tableId: string, principalId: string, action: Action, expectedVersion?: number, expectedPhase?: string): void {
+  act(tableId: string, principalId: string, action: AnyAction, expectedVersion?: number, expectedPhase?: string): void {
     const row = this.row(tableId);
+    const engine = this.engineOf(row);
     const position = this.seatsOf(row).findIndex((s) => s.principalId === principalId);
     if (position === -1) throw new TableError(403, 'not_seated', 'You are not playing at this table.');
     const game = this.currentGame(tableId);
@@ -386,18 +397,19 @@ export class TableService {
     if (expectedVersion !== undefined && expectedVersion !== game.version) {
       // In a step everyone takes at once, other players' moves don't make yours stale,
       // as long as it is still the same step (the same pass of the same Charleston).
-      const samePhase = SIMULTANEOUS_ACTIONS.has(action.type) && expectedPhase === phaseKey((JSON.parse(game.state) as GameState).phase);
+      const samePhase = engine.simultaneous(action) && expectedPhase === engine.phaseKey(JSON.parse(game.state) as AnyState);
       if (!samePhase) throw new TableError(409, 'stale', 'The table moved on. Here is the latest.');
     }
-    const seat = this.engineSeat(position, game.dealer);
+    const seat = this.engineSeat(position, game.dealer, engine.seats);
     // They're back, so the next time the table waits on them deserves a nudge again.
     this.options.notifier?.forget(principalId, `turn:${tableId}`);
     this.apply(row, game, seat, action);
   }
 
-  private apply(row: TableRow, game: GameRow, seat: Seat, action: Action, notes: LogEntry[] = []) {
-    const state = JSON.parse(game.state) as GameState;
-    const { state: next, events } = applyAction(this.cardOf(row), state, seat, action);
+  private apply(row: TableRow, game: GameRow, seat: Seat, action: AnyAction, notes: LogEntry[] = []) {
+    const engine = this.engineOf(row);
+    const state = JSON.parse(game.state) as AnyState;
+    const { state: next, events } = engine.apply(this.cardOf(row), state, seat, action);
     const now = this.options.now().toISOString();
     const log = [...(JSON.parse(game.log) as LogEntry[]), ...notes, ...events.map((e) => this.describe(row, game.dealer, e, now))].slice(-LOG_LIMIT);
     const ended = next.phase.kind === 'ended';
@@ -409,7 +421,7 @@ export class TableService {
       if (ended && next.result) {
         const scores = JSON.parse(row.scores) as number[];
         next.result.payments.forEach((p, s) => {
-          const position = this.position(s as Seat, game.dealer);
+          const position = this.position(s as Seat, game.dealer, engine.seats);
           scores[position] = (scores[position] ?? 0) + p;
         });
         this.db.prepare(`UPDATE tables SET status = 'between', scores = ?, updated_at = ? WHERE id = ?`).run(JSON.stringify(scores), now, row.id);
@@ -420,8 +432,9 @@ export class TableService {
           game.id,
           row.card_id,
           Boolean(row.ranked),
-          seats.map((s, p) => ({ principalId: s.principalId, bot: s.bot, seat: this.engineSeat(p, game.dealer) })),
-          next.result,
+          seats.map((s, p) => ({ principalId: s.principalId, bot: s.bot, seat: this.engineSeat(p, game.dealer, engine.seats) })),
+          // A two-player result describes its game-ending Mahjong in the same fields.
+          next.result as GameResult,
           this.options.now(),
         );
       } else {
@@ -434,16 +447,17 @@ export class TableService {
   }
 
   /** At a turn-based table, players who aren't looking hear how the hand ended. */
-  private announceEnd(row: TableRow, game: GameRow, state: GameState) {
+  private announceEnd(row: TableRow, game: GameRow, state: AnyState) {
     const result = state.result;
     if (!result || !this.options.notifier) return;
     const people = this.seatsOf(row).flatMap((s) => (s.principalId ? [s.principalId] : []));
     if (people.length < 2) return;
+    const { unit, seats } = this.engineOf(row);
     const body =
       result.kind === 'wall' || result.winner === null
-        ? `Hand ${game.hand_number} at Table ${row.code} was a wall game.`
-        : `${this.nameAt(row, this.position(result.winner, game.dealer))} won hand ${game.hand_number} at Table ${row.code}.`;
-    this.options.notifier.notify(people, { category: 'turns', title: 'Hand over', body, url: `/table/${row.id}` });
+        ? `${unit === 'game' ? 'Game' : 'Hand'} ${game.hand_number} at Table ${row.code} was a wall game.`
+        : `${this.nameAt(row, this.position(result.winner, game.dealer, seats))} won ${unit} ${game.hand_number} at Table ${row.code}.`;
+    this.options.notifier.notify(people, { category: 'turns', title: unit === 'game' ? 'Game over' : 'Hand over', body, url: `/table/${row.id}` });
   }
 
   // -------------------------------------------------------------------------
@@ -455,12 +469,13 @@ export class TableService {
     const row = this.row(tableId);
     const game = this.currentGame(tableId);
     if (!game || game.status !== 'playing' || row.status === 'closed') return;
-    const state = JSON.parse(game.state) as GameState;
+    const engine = this.engineOf(row);
+    const state = JSON.parse(game.state) as AnyState;
     const seats = this.seatsOf(row);
-    const pending = pendingSeats(state);
-    const botSeat = pending.find((s) => seats[this.position(s, game.dealer)]!.bot);
+    const pending = engine.pending(state);
+    const botSeat = pending.find((s) => seats[this.position(s, game.dealer, engine.seats)]!.bot);
     if (botSeat !== undefined) {
-      const level = seats[this.position(botSeat, game.dealer)]!.bot!;
+      const level = seats[this.position(botSeat, game.dealer, engine.seats)]!.bot!;
       const step = () => this.moveFor(tableId, game.version, botSeat, level);
       // Computer players take a moment in every mode, so people can follow the play.
       if (this.options.botDelayMs === 0) step();
@@ -482,18 +497,19 @@ export class TableService {
   }
 
   /** "Your move" pushes at a turn-based table, at most one per player until they play. */
-  private nudge(row: TableRow, dealer: number, state: GameState, pending: Seat[]) {
+  private nudge(row: TableRow, dealer: number, state: AnyState, pending: Seat[]) {
     const notifier = this.options.notifier;
     if (!notifier) return;
     const seats = this.seatsOf(row);
+    const n = seats.length;
     const where = row.kind === 'public' ? 'your game' : `Table ${row.code}`;
     const phase = state.phase;
     for (const seat of pending) {
-      const principalId = seats[this.position(seat, dealer)]!.principalId;
+      const principalId = seats[this.position(seat, dealer, n)]!.principalId;
       if (!principalId) continue;
       const body =
         phase.kind === 'claim'
-          ? `${this.nameAt(row, this.position(phase.from, dealer))} threw ${shortLabel(faceOf(phase.tile))}. Call it or pass at ${where}.`
+          ? `${this.nameAt(row, this.position(phase.from, dealer, n))} threw ${shortLabel(faceOf(phase.tile))}. Call it or pass at ${where}.`
           : phase.kind === 'turn'
             ? `It's your turn at ${where}.`
             : phase.kind === 'charleston' || phase.kind === 'courtesy-select'
@@ -508,13 +524,14 @@ export class TableService {
     const row = this.row(tableId);
     const game = this.currentGame(tableId);
     if (!game || game.version !== version || game.status !== 'playing') return;
-    const state = JSON.parse(game.state) as GameState;
-    if (!pendingSeats(state).includes(seat)) return;
-    const position = this.position(seat, game.dealer);
+    const engine = this.engineOf(row);
+    const state = JSON.parse(game.state) as AnyState;
+    if (!engine.pending(state).includes(seat)) return;
+    const position = this.position(seat, game.dealer, engine.seats);
     const notes = timedOut
       ? [this.entry(position, `${this.nameAt(row, position)} ran out of time, so the computer moved for them.`, { type: 'timeout', position })]
       : [];
-    this.apply(row, game, seat, botAction(this.cardOf(row), state, seat, level, this.random), notes);
+    this.apply(row, game, seat, engine.bot(this.cardOf(row), state, seat, level, this.random), notes);
   }
 
   /** A live-table player ran out of time: a computer player makes this one move for them. */
@@ -522,17 +539,18 @@ export class TableService {
   timeout(tableId: string, version: number): void {
     let game = this.currentGame(tableId);
     if (!game || game.version !== version || game.status !== 'playing') return;
-    const phase = (JSON.parse(game.state) as GameState).phase.kind;
+    const engine = this.engineOf(this.row(tableId));
+    const phase = (JSON.parse(game.state) as AnyState).phase.kind;
     const simultaneous = phase !== 'turn' && phase !== 'claim';
     for (;;) {
-      const state = JSON.parse(game.state) as GameState;
-      const seat = pendingSeats(state)[0];
+      const state = JSON.parse(game.state) as AnyState;
+      const seat = engine.pending(state)[0];
       if (seat === undefined) return;
       this.moveFor(tableId, game.version, seat, 'normal', true);
       const next = this.currentGame(tableId);
       // Turns and calls move one seat at a time; everyone in a simultaneous step is covered now.
       if (!simultaneous || !next || next.status !== 'playing' || next.version === game.version) return;
-      if ((JSON.parse(next.state) as GameState).phase.kind !== phase) return;
+      if ((JSON.parse(next.state) as AnyState).phase.kind !== phase) return;
       game = next;
     }
   }
@@ -557,12 +575,13 @@ export class TableService {
   // -------------------------------------------------------------------------
   // Views
 
-  private engineSeat(position: number, dealer: number): Seat {
-    return ((position - dealer + 4) % 4) as Seat;
+  /** Engine seat (0 is East) of a table position, with `n` seats at the table. */
+  private engineSeat(position: number, dealer: number, n: number): Seat {
+    return ((position - dealer + n) % n) as Seat;
   }
 
-  private position(seat: Seat, dealer: number): number {
-    return (seat + dealer) % 4;
+  private position(seat: Seat, dealer: number, n: number): number {
+    return (seat + dealer) % n;
   }
 
   private nameAt(row: TableRow, position: number): string {
@@ -577,10 +596,13 @@ export class TableService {
   }
 
   /** Public description of an engine event. Draws never reveal the tile. */
-  private describe(row: TableRow, dealer: number, event: GameEvent, at: string): LogEntry {
-    const pos = 'seat' in event ? this.position(event.seat, dealer) : null;
+  private describe(row: TableRow, dealer: number, event: AnyEvent, at: string): LogEntry {
+    const n = this.engineOf(row).seats;
+    const pos = 'seat' in event ? this.position(event.seat, dealer, n) : null;
     const who = pos === null ? '' : this.nameAt(row, pos);
-    const { seat: _seat, ...rest } = event as GameEvent & { seat?: Seat };
+    // At a two-player table every exposure, Mahjong and dead hand belongs to hand 1 or 2.
+    const onHand = 'hand' in event ? ` on hand ${event.hand + 1}` : '';
+    const { seat: _seat, ...rest } = event as AnyEvent & { seat?: Seat };
     const publicEvent = { ...rest, ...(pos === null ? {} : { position: pos }) } as LogEntry['event'];
     const text = (() => {
       switch (event.type) {
@@ -597,15 +619,18 @@ export class TableService {
         case 'discard':
           return `${who} discarded ${shortLabel(faceOf(event.tile))}.`;
         case 'call':
-          return `${who} called ${shortLabel(faceOf(event.tile))} for a ${GROUP_NAMES[event.size] ?? `group of ${event.size}`}.`;
+          return `${who} called ${shortLabel(faceOf(event.tile))} for a ${GROUP_NAMES[event.size] ?? `group of ${event.size}`}${onHand}.`;
         case 'exchange':
           return `${who} swapped ${shortLabel(faceOf(event.tile))} for a joker.`;
         case 'mahjong':
+          if ('final' in event) {
+            return event.final ? `${who} declared a second Mahjong${onHand} and wins the game!` : `${who} declared Mahjong${onHand}! ${event.value} points.`;
+          }
           return `${who} declared Mahjong!`;
         case 'dead-hand':
-          return `${who}'s hand is dead: ${event.reason.text}.`;
+          return 'hand' in event ? `${who}'s hand ${event.hand + 1} is dead: ${event.reason.text}.` : `${who}'s hand is dead: ${event.reason.text}.`;
         case 'wall-game':
-          return 'Wall game: nobody won this hand.';
+          return this.engineOf(row).unit === 'game' ? 'Wall game: the wall ran out. Mahjongs already made keep their points.' : 'Wall game: nobody won this hand.';
       }
     })();
     return { at, position: pos, text, event: publicEvent };
@@ -620,6 +645,8 @@ export class TableService {
     const game = this.currentGame(tableId);
     const now = this.options.now();
     const dealer = game?.dealer ?? 0;
+    const engine = this.engineOf(row);
+    const n = engine.seats;
     const conversation = conversationFor(this.db, 'table', tableId, now);
     return {
       table: {
@@ -636,6 +663,7 @@ export class TableService {
         kind: row.kind,
         ranked: Boolean(row.ranked),
         cardId: row.card_id,
+        variant: row.variant,
         seats: seats.map((s, position) => ({
           position,
           kind: s.principalId ? ('human' as const) : s.bot ? ('bot' as const) : ('open' as const),
@@ -645,7 +673,7 @@ export class TableService {
           color: s.principalId ? ensureProfile(this.db, s.principalId, now).color : '#667069',
           botLevel: s.bot,
           online: s.principalId ? this.hub.isOnline(s.principalId) : false,
-          wind: WINDS[(position - dealer + 4) % 4]!,
+          wind: engine.winds[(position - dealer + n) % n]!,
         })),
       },
       mySeat: myPosition === -1 ? null : myPosition,
@@ -658,8 +686,8 @@ export class TableService {
               handNumber: game.hand_number,
               deadline: game.deadline,
               /** Engine seat -> table position for this hand. */
-              positions: [0, 1, 2, 3].map((s) => this.position(s as Seat, game.dealer)),
-              view: playerView(this.cardOf(row), JSON.parse(game.state) as GameState, this.engineSeat(myPosition, game.dealer)),
+              positions: seats.map((_, s) => this.position(s as Seat, game.dealer, n)),
+              view: engine.view(this.cardOf(row), JSON.parse(game.state) as AnyState, this.engineSeat(myPosition, game.dealer, n)),
               log: JSON.parse(game.log) as LogEntry[],
             }
           : null,
@@ -692,7 +720,8 @@ export class TableService {
         const game = this.currentGame(row.id);
         let yourMove = false;
         if (game && game.status === 'playing' && position !== -1) {
-          yourMove = pendingSeats(JSON.parse(game.state) as GameState).includes(this.engineSeat(position, game.dealer));
+          const engine = this.engineOf(row);
+          yourMove = engine.pending(JSON.parse(game.state) as AnyState).includes(this.engineSeat(position, game.dealer, engine.seats));
         }
         return {
           id: row.id,
@@ -705,6 +734,7 @@ export class TableService {
           humans: seats.filter((s) => s.principalId).length,
           kind: row.kind,
           ranked: Boolean(row.ranked),
+          variant: row.variant,
           players: seats.map((_, p) => this.nameAt(row, p)),
           updatedAt: row.updated_at,
         };

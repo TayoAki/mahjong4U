@@ -784,3 +784,83 @@ export const LESSONS: Lesson[] = [
     ],
   },
 ];
+
+// ------------------------------------------------------------------ more to learn
+
+/** Two-player games (our house rules; the table plays them through the two-player engine). */
+export const TWO_PLAYER_LESSON: Lesson = {
+  id: 'two-player',
+  title: 'Two-player games',
+  summary: 'Just the two of you: two hands each, no Charleston, and how scoring works.',
+  minutes: 3,
+  practice: 'table',
+  steps: [
+    {
+      kind: 'read',
+      title: 'Just the two of you',
+      body: 'Two-player mahjong is for couples, pairs of friends, or you and the computer. You use the whole set, but there’s no Charleston.\n\nYou each get 27 tiles. East draws one more and starts by discarding.',
+    },
+    {
+      kind: 'read',
+      title: 'Two hands at once',
+      body: 'With two players, you each build two hands from the same card at the same time.\n\nYour hidden tiles are one pool for both hands. The app shows them as two racks so you can sort them; drag a tile from one rack to the other whenever you change your mind. Anything you expose belongs to hand 1 or hand 2, and stays with that hand.',
+      groups: [['FLOWER_1', 'FLOWER_2'], rep('DOT_5', 4), rep('BAMBOO_5', 4), rep('CHARACTER_5', 4)],
+      caption: 'One of your two hands',
+    },
+    {
+      kind: 'choose',
+      prompt: 'You hold 27 tiles. How many tiles does each finished hand need?',
+      options: [
+        { label: '14', correct: true, why: 'Every hand on the card is 14 tiles, counting its exposures. Two hands make 28: your 27 plus the tile you draw or take.' },
+        { label: '13', correct: false, why: 'You hold 13 between turns at four players, but a finished hand is always 14 tiles, counting its exposures.' },
+        { label: '27', correct: false, why: 'That’s both hands together, less one. Each hand on its own needs 14.' },
+      ],
+    },
+    {
+      kind: 'read',
+      title: 'Your turn',
+      body: 'Draw a tile, or take your opponent’s discard, then discard one.\n\nYou can take a discard to expose a pung, kong or quint on either hand, or to finish a hand for Mahjong. Concealed hands (C on the card) can’t have exposures, so they only take a discard for Mahjong.',
+    },
+    {
+      kind: 'choose',
+      prompt: 'You hold three 5 dots. Hand 2 needs a kong of 5 dots, and hand 1 is a concealed hand. Your opponent throws a 5 dot. What can you do?',
+      tiles: ['DOT_5'],
+      options: [
+        { label: 'Take it for hand 2 and expose the kong', correct: true, why: 'Exposures go on whichever hand they belong to. Then you discard a tile.' },
+        { label: 'Take it for hand 1', correct: false, why: 'Hand 1 is concealed, so it can only take a discard to finish for Mahjong.' },
+        { label: 'Nothing: discards are only for Mahjong', correct: false, why: 'Like at four players, you can take a discard to expose a group of three or more on an exposed hand.' },
+      ],
+    },
+    {
+      kind: 'read',
+      title: 'Mahjong, then keep going',
+      body: 'When 14 tiles make a line on the card, declare Mahjong on that hand. It’s locked and shown, your opponent pays its value, and you play on with your other tiles toward your second hand.\n\nYour second Mahjong ends the game.',
+    },
+    {
+      kind: 'choose',
+      prompt: 'You declare your first Mahjong with a 25-point hand that has a joker in it. What does your opponent pay?',
+      options: [
+        { label: '25', correct: true, why: 'Each Mahjong is paid by your opponent at its value on the card, straight away. With no jokers it would be 50.' },
+        { label: '50', correct: false, why: 'Only a jokerless hand doubles. This one has a joker, so it’s 25.' },
+        { label: 'Nothing until the game ends', correct: false, why: 'Each Mahjong is paid as soon as you declare it, even if the game ends in a wall game.' },
+      ],
+    },
+    {
+      kind: 'choose',
+      prompt: 'Later you finish your second hand, also 25 points with a joker. What does that one pay?',
+      options: [
+        { label: '50', correct: true, why: 'The Mahjong that ends the game pays double.' },
+        { label: '25', correct: false, why: 'Your second Mahjong ends the game, and that one pays double: 50.' },
+        { label: '100', correct: false, why: 'It doubles once, for ending the game: 50. It would double again if it were jokerless.' },
+      ],
+    },
+    {
+      kind: 'read',
+      title: 'Jokers and the wall',
+      body: 'Jokers work as usual: never in pairs or singles, and a discarded joker can’t be taken. On your turn you can swap a matching tile for a joker in any exposure, yours or your opponent’s, unless that hand is already Mahjong.\n\nIf the wall runs out before anyone finishes both hands, nothing more is paid. Mahjongs already made keep their points.',
+    },
+  ],
+};
+
+/** Lessons outside the main path, opened from where they're useful (two-player games). */
+export const MORE_LESSONS: Lesson[] = [TWO_PLAYER_LESSON];

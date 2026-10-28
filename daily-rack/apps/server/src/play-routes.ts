@@ -5,6 +5,7 @@ import type { Db } from './db.ts';
 import type { AppConfig, Env, Fail, RateLimiter } from './app.ts';
 import type { Hub } from './realtime.ts';
 import { TableError, type SeatInput, type TableService } from './tables.ts';
+import type { AnyAction } from './variants.ts';
 import { isBlockedEitherWay } from './blocks.ts';
 import { ModerationError, isObjectionable, requireSocial, safetyStatus } from './moderation.ts';
 import { registerSafetyRoutes } from './safety-routes.ts';
@@ -66,11 +67,16 @@ const BotLevel = z.enum(['easy', 'normal', 'hard']);
 const SeatBody = z.object({ type: z.enum(['bot', 'open', 'friend']), level: BotLevel.optional(), friendId: z.string().uuid().optional() });
 const TableBody = z.object({
   mode: z.enum(['live', 'turn']),
-  seats: z.array(SeatBody).length(3),
+  // Three other seats at a four-seat table, one across from you in a two-player game.
+  seats: z.array(SeatBody).min(1).max(3),
   settings: z.object({ secondCharleston: z.boolean(), courtesyPass: z.boolean(), skipCharleston: z.boolean() }).partial().optional(),
   cardId: z.string().max(80).optional(),
+  variant: z.enum(['four', 'two-player']).optional(),
 });
 const Tiles = z.array(z.number().int().min(0).max(151)).max(3);
+const Tile = z.number().int().min(0).max(151);
+/** Which of a player's two hands, in a two-player game. */
+const HandSlot = z.union([z.literal(0), z.literal(1)]);
 const ActionBody = z.object({
   version: z.number().int().optional(),
   phase: z.string().max(40).optional(),
@@ -85,14 +91,15 @@ const ActionBody = z.object({
       tile: z.number().int().min(0).max(151),
       target: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
       exposure: z.number().int().min(0).max(5),
+      hand: HandSlot.optional(),
     }),
-    z.object({ type: z.literal('declare-mahjong') }),
+    z.object({ type: z.literal('declare-mahjong'), hand: HandSlot.optional(), tiles: z.array(Tile).max(14).optional() }),
     z.object({
       type: z.literal('claim'),
       response: z.discriminatedUnion('type', [
         z.object({ type: z.literal('pass') }),
-        z.object({ type: z.literal('expose'), size: z.number().int().min(3).max(6) }),
-        z.object({ type: z.literal('mahjong') }),
+        z.object({ type: z.literal('expose'), size: z.number().int().min(3).max(6), hand: HandSlot.optional() }),
+        z.object({ type: z.literal('mahjong'), hand: HandSlot.optional() }),
       ]),
     }),
   ]),
@@ -369,7 +376,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     }
     if (input.cardId && !hasCard(input.cardId)) return fail(c, 400, 'unknown_card', 'That card isn’t available.');
     try {
-      const id = tables.create(me(c)!.id, { mode: input.mode, seats: input.seats as SeatInput[], settings: input.settings, cardId: input.cardId });
+      const id = tables.create(me(c)!.id, { mode: input.mode, seats: input.seats as SeatInput[], settings: input.settings, cardId: input.cardId, variant: input.variant });
       return c.json(tables.viewFor(id, me(c)!.id), 201);
     } catch (error) {
       return handle(c, error);
@@ -434,7 +441,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
       if (!limiter.allow(`move:${pid}`, 240, 60_000)) throw new TableError(409, 'rate_limited', 'Too many moves at once.');
       const input = await body(c, ActionBody);
       if (!input) throw new TableError(400, 'invalid_input', 'That move was not readable.');
-      tables.act(id, pid, input.action, input.version, input.phase);
+      tables.act(id, pid, input.action as AnyAction, input.version, input.phase);
     }),
   );
 

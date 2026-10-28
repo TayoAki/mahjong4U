@@ -7,3 +7,5 @@ export * from './dead.ts';
 export * from './explain.ts';
 export * from './coach.ts';
 export * from './daily.ts';
+export * from './twoPlayer.ts';
+export * from './twoPlayerBot.ts';
