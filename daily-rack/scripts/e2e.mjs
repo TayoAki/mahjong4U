@@ -570,6 +570,72 @@ try {
     await fetch(`${BASE}/v1/admin/players/${me.id}/plus`, { method: 'POST', headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ days: 0 }) });
   }
 
+  // ------------------------------------------------------------------ 7c. Two-player against the computer
+  {
+    const errorsBefore = pageErrors.length;
+    await page.goto(`${BASE}/table/new`);
+    await page.getByTestId('players-2').click({ timeout: 10_000 });
+    const note = (await page.getByTestId('players-note').textContent()) ?? '';
+    await page.getByTestId('new-seat-1').click();
+    await page.getByTestId('seat-bot').click();
+    await page.getByTestId('create-table').click();
+    const opened = await page.waitForURL((u) => /^\/table\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 15_000 }).then(() => true, () => false);
+    await page.getByTestId('my-hands').waitFor({ timeout: 15_000 });
+    const rack = (slot) => page.locator(`[data-testid^="rack-${slot}-tile-"]`);
+    const counts = async () => [await rack(0).count(), await rack(1).count()];
+    const [first, second] = await counts();
+    await shot(page, '32d-two-player');
+    check(
+      'a two-player game against the computer starts from the new-table form, with both racks',
+      opened && note.includes('two hands') && first > 0 && second > 0 && first + second === 28 && (await visible(page, 'two-player-board')),
+      `${first} + ${second} tiles`,
+    );
+
+    // Tap a tile and move it to the other rack, then drag one back up.
+    await rack(0).first().click();
+    await page.getByTestId('move-tile').click();
+    await page.waitForTimeout(300);
+    const afterMove = await counts();
+    await rack(1).last().scrollIntoViewIfNeeded();
+    const tile = await rack(1).last().boundingBox();
+    await page.mouse.move(tile.x + tile.width / 2, tile.y + tile.height / 2);
+    await page.mouse.down();
+    for (let step = 1; step <= 12; step++) await page.mouse.move(tile.x + tile.width / 2, tile.y + tile.height / 2 - (step * tile.height * 3) / 12);
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const afterDrag = await counts();
+    await shot(page, '32e-two-player-moved');
+    check(
+      'tiles move between your two racks by tapping and by dragging',
+      afterMove[0] === first - 1 && afterMove[1] === second + 1 && afterDrag[0] === first && afterDrag[1] === second,
+      `${first}/${second} -> ${afterMove.join('/')} -> ${afterDrag.join('/')}`,
+    );
+
+    // A few discards, passing on anything the computer throws that could be called.
+    let discards = 0;
+    const until = Date.now() + 60_000;
+    while (discards < 3 && Date.now() < until) {
+      if (await visible(page, 'result-panel')) break;
+      if (await visible(page, 'action-claim-pass')) await tap(page, 'action-claim-pass');
+      else if (await visible(page, 'action-discard')) {
+        const all = page.locator('[data-testid^="rack-"][data-testid*="-tile-"]');
+        const labels = await all.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? ''));
+        let target = labels.findIndex((l) => l.includes('just drawn') && !l.startsWith('Joker'));
+        if (target === -1) target = labels.findIndex((l) => !l.startsWith('Joker'));
+        await all.nth(target).click({ timeout: 2000 }).catch(() => undefined);
+        if (await enabled(page, 'action-discard')) {
+          await tap(page, 'action-discard');
+          discards += 1;
+          await page.waitForTimeout(400);
+        }
+      } else await page.waitForTimeout(150);
+    }
+    await shot(page, '32f-two-player-play');
+    const status = (await page.getByTestId('table-status').textContent().catch(() => '')) ?? '';
+    check('a few moves in a two-player game, with no page errors', discards === 3 && pageErrors.length === errorsBefore, `${discards} discards; ${status}`);
+    await api(page, 'POST', `/v1/tables/${new URL(page.url()).pathname.split('/').pop()}/leave`);
+  }
+
   // ------------------------------------------------------------------ 8. Report a problem
   await page.goto(`${BASE}/you`);
   await page.getByTestId('report-problem').scrollIntoViewIfNeeded();

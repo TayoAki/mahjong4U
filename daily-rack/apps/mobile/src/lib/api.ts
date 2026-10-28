@@ -1,5 +1,5 @@
 import type { Alignment, AlternatePass, PublicPuzzle, ReviewState, Section, Suggestion } from '@daily-rack/core';
-import type { Action, BotLevel, CardSpec, DeadReason, PlayerView } from '@daily-rack/core/mahjong';
+import type { Action, BotLevel, CardSpec, DeadReason, PlayerView, TwoPlayerAction, TwoPlayerView } from '@daily-rack/core/mahjong';
 import { API_BASE } from './config.ts';
 import { noteProblem } from './diagnostics.ts';
 
@@ -223,6 +223,8 @@ export interface TablePayload {
     ranked: boolean;
     /** The card this table plays with. */
     cardId: string;
+    /** Four seats (also when missing, as at an offline table), or a two-player game. */
+    variant?: TableVariant;
     seats: TableSeat[];
   };
   mySeat: number | null;
@@ -238,6 +240,13 @@ export interface TablePayload {
   } | null;
 }
 
+export type TableVariant = 'four' | 'two-player';
+
+/** A two-player table: the same payload, carrying the two-player game's view. */
+export type TwoPlayerTablePayload = Omit<TablePayload, 'game'> & {
+  game: (Omit<NonNullable<TablePayload['game']>, 'view'> & { view: TwoPlayerView }) | null;
+};
+
 export interface TableSummary {
   id: string;
   code: string;
@@ -250,6 +259,7 @@ export interface TableSummary {
   humans: number;
   kind: 'private' | 'public';
   ranked: boolean;
+  variant: TableVariant;
   players: string[];
   updatedAt: string;
 }
@@ -403,7 +413,7 @@ export const api = {
   markRead: (conversationId: string) => request<{ read: boolean }>('POST', `/v1/conversations/${conversationId}/read`),
 
   tables: () => request<{ tables: TableSummary[] }>('GET', '/v1/tables'),
-  createTable: (body: { mode: 'live' | 'turn'; seats: SeatChoice[]; settings?: Partial<TablePayload['table']['settings']>; cardId?: string }) =>
+  createTable: (body: { mode: 'live' | 'turn'; seats: SeatChoice[]; settings?: Partial<TablePayload['table']['settings']>; cardId?: string; variant?: TableVariant }) =>
     request<TablePayload>('POST', '/v1/tables', body),
   table: (id: string) => request<TablePayload>('GET', `/v1/tables/${id}`),
   joinByCode: (code: string) => request<TablePayload>('POST', '/v1/tables/join', { code }),
@@ -414,7 +424,7 @@ export const api = {
   closeTable: (id: string) => request<TablePayload>('POST', `/v1/tables/${id}/close`),
   setSeat: (id: string, position: number, seat: SeatChoice) => request<TablePayload>('PUT', `/v1/tables/${id}/seats/${position}`, seat),
   /** `phase` names the step acted on, so a pass made alongside other players isn't refused as stale. */
-  act: (id: string, action: Action, version?: number, phase?: string) => request<TablePayload>('POST', `/v1/tables/${id}/actions`, { action, version, phase }),
+  act: (id: string, action: Action | TwoPlayerAction, version?: number, phase?: string) => request<TablePayload>('POST', `/v1/tables/${id}/actions`, { action, version, phase }),
 
   matchmaking: () => request<{ queue: QueueStatus | null; phrases: string[] }>('GET', '/v1/matchmaking'),
   findMatch: (mode: QueueMode) => request<{ queue: QueueStatus }>('POST', '/v1/matchmaking', { mode }),

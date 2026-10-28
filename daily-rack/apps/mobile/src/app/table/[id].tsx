@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { publicPhaseKey, type Action } from '@daily-rack/core/mahjong';
-import { ApiError, api, type SeatChoice, type TablePayload } from '../../lib/api.ts';
+import { publicPhaseKey, type Action, type TwoPlayerAction } from '@daily-rack/core/mahjong';
+import { ApiError, api, type SeatChoice, type TablePayload, type TwoPlayerTablePayload } from '../../lib/api.ts';
 import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { useSafety } from '../../lib/safety.tsx';
@@ -15,6 +15,8 @@ import { CardView } from '../../game/CardView.tsx';
 import { GameScreen } from '../../game/GameScreen.tsx';
 import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { Lobby } from '../../game/Lobby.tsx';
+import { TwoPlayerRules } from '../../game/TwoPlayerRules.tsx';
+import { TwoPlayerScreen } from '../../game/TwoPlayerScreen.tsx';
 import { useVoice } from '../../voice/useVoice.ts';
 import { VoiceBar } from '../../voice/VoiceBar.tsx';
 import { usePlus } from '../../lib/plus.tsx';
@@ -30,7 +32,7 @@ export default function TableScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | 'help' | null>(null);
+  const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | 'help' | 'rules' | null>(null);
   const [unread, setUnread] = useState(0);
   const { find } = useMatchmaking();
   const [phrases, setPhrases] = useState<string[]>([]);
@@ -101,7 +103,7 @@ export default function TableScreen() {
   };
 
   // Send the step we acted on too, so a pass made at the same moment as someone else's still counts.
-  const act = (action: Action) => run(() => api.act(id, action, data?.game?.version, data?.game ? publicPhaseKey(data.game.view.phase) : undefined));
+  const act = (action: Action | TwoPlayerAction) => run(() => api.act(id, action, data?.game?.version, data?.game ? publicPhaseKey(data.game.view.phase) : undefined));
   const back = () => (router.canGoBack() ? router.back() : router.replace('/play'));
 
   if (loadError && !data) {
@@ -118,14 +120,16 @@ export default function TableScreen() {
   // A game against computer players only has no one to share the code with.
   const solo = table.seats.filter((s) => s.kind === 'human').length === 1 && !table.seats.some((s) => s.kind === 'open') && data.mySeat !== null;
   const humans = table.seats.filter((s) => s.kind === 'human').length;
+  const twoPlayer = table.variant === 'two-player';
   const header = (
     <View style={{ gap: 8 }}>
       <TopBar
-        title={isPublic ? (ranked ? 'Ranked game' : 'Quick match') : solo ? 'Vs computer' : `Table ${table.code}`}
+        title={isPublic ? (ranked ? 'Ranked game' : 'Quick match') : twoPlayer && solo ? 'Two-player' : solo ? 'Vs computer' : `Table ${table.code}`}
         onBack={back}
         right={
           <Row gap={0}>
-            <IconButton icon="help" label="How to play" onPress={() => setSheet('help')} />
+            {/* At a two-player table, help opens the two-player rules (with the basics a tap away). */}
+            <IconButton icon="help" label={twoPlayer ? 'Two-player rules' : 'How to play'} onPress={() => setSheet(twoPlayer ? 'rules' : 'help')} />
             <IconButton icon="card" label={card.name} onPress={() => setSheet('card')} />
             <IconButton
               icon="chat"
@@ -152,6 +156,7 @@ export default function TableScreen() {
         <CardView />
       </Sheet>
       <HowToPlay visible={sheet === 'help'} onClose={() => setSheet(null)} />
+      <TwoPlayerRules visible={sheet === 'rules'} onClose={() => setSheet(null)} onBasics={() => setSheet('help')} />
       <Sheet visible={sheet === 'leave'} title={table.status === 'lobby' && table.hostId === principalId ? 'Close this table?' : 'Leave the table?'} onClose={() => setSheet(null)}>
         <Body>
           {table.status === 'lobby'
@@ -203,7 +208,7 @@ export default function TableScreen() {
           </Display>
           <Body style={{ color: '#F4EFE3' }}>
             {table.seats.filter((s) => s.kind === 'human').map((s) => s.name).join(', ') || 'Someone'} {table.status === 'lobby' ? 'is setting up' : 'is playing'} a{' '}
-            {table.mode === 'live' ? 'live' : 'turn-based'} game.
+            {table.mode === 'live' ? 'live' : 'turn-based'} {table.variant === 'two-player' ? 'two-player game' : 'game'}.
             {table.status !== 'lobby' && !held ? ' You would take over from a computer player.' : ''}
           </Body>
         </Card>
@@ -243,6 +248,15 @@ export default function TableScreen() {
           setSeat={(position: number, seat: SeatChoice) => run(() => api.setSeat(id, position, seat))}
           leave={() => setSheet('leave')}
         />
+        {sheets}
+      </CardContext.Provider>
+    );
+  }
+
+  if (twoPlayer) {
+    return (
+      <CardContext.Provider value={card}>
+        <TwoPlayerScreen data={data as TwoPlayerTablePayload} header={header} busy={busy} error={error} act={act} nextHand={() => run(() => api.nextHand(id))} leave={() => setSheet('leave')} />
         {sheets}
       </CardContext.Provider>
     );

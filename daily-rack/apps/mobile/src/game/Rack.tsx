@@ -38,6 +38,14 @@ interface Props {
   onArrange: (order: number[]) => void;
   /** A tile has been picked up. */
   onLift?: () => void;
+  /**
+   * A tile was dragged past the top or bottom edge of the rack and let go there. Given, the
+   * tile leaves this rack (a two-player game moves it to the other rack) instead of
+   * settling back into a spot.
+   */
+  onDropAway?: (tile: number, direction: 'up' | 'down') => void;
+  /** Test ids are `${testID}-${index}`; "rack-tile" unless a screen shows more than one rack. */
+  testID?: string;
 }
 
 interface Rect {
@@ -112,15 +120,16 @@ const centre = (r: Rect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
  * it to a new spot (the others slide aside to make room), or use the Move left and Move
  * right actions with a screen reader. A plain tap still chooses the tile.
  */
-export function Rack({ items, tileWidth, tapsDisabled, animate, onTap, onArrange, onLift }: Props) {
+export function Rack({ items, tileWidth, tapsDisabled, animate, onTap, onArrange, onLift, onDropAway, testID = 'rack-tile' }: Props) {
   const tiles = useMemo(() => items.map((i) => i.tile), [items]);
   const key = tiles.join(',');
   const [drag, setDrag] = useState<Drag | null>(null);
   const [spot, setSpot] = useState<Rect | null>(null);
   const container = useRef<ViewInstance>(null);
+  const height = useRef(0);
   // The latest props, for gesture handlers made once.
-  const latest = useRef({ tiles, key, onTap, onArrange, onLift });
-  latest.current = { tiles, key, onTap, onArrange, onLift };
+  const latest = useRef({ tiles, key, onTap, onArrange, onLift, onDropAway });
+  latest.current = { tiles, key, onTap, onArrange, onLift, onDropAway };
 
   const { responder, events, gesture } = useMemo(() => {
     const views = new Map<number, ViewInstance>();
@@ -226,11 +235,29 @@ export function Rack({ items, tileWidth, tapsDisabled, animate, onTap, onArrange
       retarget();
     };
 
+    // Where a tile let go of now lands, if that's past the rack's top or bottom edge.
+    const away = (home: Rect): 'up' | 'down' | null => {
+      if (!latest.current.onDropAway) return null;
+      const y = home.y + home.height / 2 + gesture.moved.y;
+      if (y < -home.height * 0.25) return 'up';
+      if (y > height.current + home.height * 0.25) return 'down';
+      return null;
+    };
+
     // Glide the tile into its spot (or back home), then commit the new order.
     const settle = (keep: boolean) => {
       const d = gesture.drag;
       if (!d || gesture.settling) return;
       const slots = gesture.slots;
+      const out = keep && slots ? away(slots[d.from]!) : null;
+      if (out) {
+        // Let go beyond the edge: the tile leaves this rack, and the others slide back.
+        Object.assign(gesture, { drag: null, slots: null, settling: false, droppedAt: Date.now() });
+        setDrag(null);
+        setSpot(null);
+        latest.current.onDropAway?.(d.tile, out);
+        return;
+      }
       if (slots && !keep) openGap(d, slots, d.from);
       gesture.settling = true;
       gesture.droppedAt = Date.now();
@@ -313,7 +340,7 @@ export function Rack({ items, tileWidth, tapsDisabled, animate, onTap, onArrange
   }, [key]);
 
   return (
-    <View ref={container} style={[styles.rack, WEB_DRAG]} {...responder.panHandlers}>
+    <View ref={container} style={[styles.rack, WEB_DRAG]} onLayout={(e) => (height.current = e.nativeEvent.layout.height)} {...responder.panHandlers}>
       {live && spot ? (
         <Animated.View style={[styles.spot, { width: spot.width, height: spot.height, borderRadius: spot.width * 0.14, transform: live.spot.getTranslateTransform() }]} />
       ) : null}
@@ -329,6 +356,7 @@ export function Rack({ items, tileWidth, tapsDisabled, animate, onTap, onArrange
           lifted={live?.tile === item.tile ? live : null}
           shift={live && live.tile !== item.tile ? live.shifts.get(item.tile) : undefined}
           events={events}
+          testID={`${testID}-${i}`}
         />
       ))}
     </View>
@@ -346,9 +374,10 @@ interface SlotProps extends RackItem {
   /** While another tile is dragged, how far this one has slid to make room. */
   shift: Animated.ValueXY | undefined;
   events: SlotEvents;
+  testID: string;
 }
 
-const RackSlot = memo(function RackSlot({ tile, label, selected, highlight, badge, index, count, width, disabled, animate, lifted, shift, events }: SlotProps) {
+const RackSlot = memo(function RackSlot({ tile, label, selected, highlight, badge, index, count, width, disabled, animate, lifted, shift, events, testID }: SlotProps) {
   const register = useCallback((view: ViewInstance | null) => events.register(tile, view), [events, tile]);
   const press = useCallback((event: GestureResponderEvent) => events.press(tile, event), [events, tile]);
   const tap = useCallback(() => events.tap(tile), [events, tile]);
@@ -377,7 +406,7 @@ const RackSlot = memo(function RackSlot({ tile, label, selected, highlight, badg
           badge={badge}
           disabled={disabled}
           onPress={tap}
-          testID={`rack-tile-${index}`}
+          testID={testID}
           accessibilityActions={count < 2 ? MOVES.none : index === 0 ? MOVES.first : index === count - 1 ? MOVES.last : MOVES.both}
           onAccessibilityAction={act}
         />

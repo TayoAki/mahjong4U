@@ -284,6 +284,7 @@ export default function LearnScreen() {
         <Eyebrow>Keep handy</Eyebrow>
         <LinkCard icon="card" title="The house card" body="Every winning hand, with what each one is worth." onPress={() => setSheet('card')} testID="learn-card" />
         <LinkCard icon="help" title="Words you’ll hear" body="Charleston, pung, joker swap and friends, in plain English." onPress={() => setSheet('words')} />
+        <LinkCard icon="users" title="Just the two of you?" body="Two-player mahjong: two hands each, no Charleston. A short lesson." onPress={() => router.push('/lessons/two-player')} testID="learn-two-player" />
       </View>
       <Body small muted center>
         Lessons work offline, and your progress stays on this phone.

@@ -9,6 +9,7 @@ import { track } from '../../lib/analytics.ts';
 import { Badge, Body, Button, Card, Chip, Columns, Display, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { OnlineCard } from '../../game/OnlineCard.tsx';
+import { TwoPlayerCard } from '../../game/TwoPlayerCard.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
 import { PlusCard } from '../../components/PlusCard.tsx';
 import { LEVEL_LABEL } from '../../game/Lobby.tsx';
@@ -118,6 +119,7 @@ export default function PlayScreen() {
               <Button title="No connection? Play offline" variant="light" compact onPress={() => router.push('/offline')} testID="play-offline" />
             </Card>
 
+            <TwoPlayerCard />
             <OnlineCard rating={rating} />
             <PlusCard />
 
@@ -171,6 +173,7 @@ export default function PlayScreen() {
                       {t.players.filter((p) => p !== 'Open seat').join(' · ')}
                     </Text>
                     <Body small muted>
+                      {t.variant === 'two-player' ? 'Two-player · ' : ''}
                       {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : t.status === 'between' ? `After hand ${t.handNumber}` : `Hand ${t.handNumber}`} · {t.code}
                     </Body>
                   </View>
