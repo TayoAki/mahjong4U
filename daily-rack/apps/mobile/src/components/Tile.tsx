@@ -1,5 +1,5 @@
 import { createContext, memo, useContext } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type StyleProp, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { tileSvg } from '../tiles/tileArt.ts';
 import { colors, table } from '../theme.ts';
@@ -127,6 +127,8 @@ export function TileButton({
   badge,
   depth,
   testID,
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   face: string;
   label: string;
@@ -138,6 +140,9 @@ export function TileButton({
   badge?: string;
   depth?: TileDepth;
   testID?: string;
+  /** Extra screen reader actions, such as moving a rack tile. */
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
   return (
     <Pressable
@@ -145,6 +150,8 @@ export function TileButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: Boolean(selected), disabled }}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
       disabled={disabled}
       hitSlop={2}

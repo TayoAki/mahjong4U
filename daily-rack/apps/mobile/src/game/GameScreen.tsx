@@ -17,16 +17,18 @@ import type { TablePayload } from '../lib/api.ts';
 import { updatePrefs, usePrefs } from '../lib/prefs.ts';
 import { useSafety } from '../lib/safety.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
-import { Tile, TileButton, TileStyle } from '../components/Tile.tsx';
-import { Arrive, useAfterFirstRender } from '../components/Arrive.tsx';
+import { Tile, TileStyle } from '../components/Tile.tsx';
+import { useAfterFirstRender } from '../components/Arrive.tsx';
 import { playSound, preloadSounds, setSoundsEnabled } from '../lib/sounds.ts';
 import { useActiveCard } from '../lib/cards.tsx';
 import { useTableSounds } from './useTableSounds.ts';
 import { HandHints, Pattern } from './CardView.tsx';
 import { Exposures, TableBoard } from './TableBoard.tsx';
-import { faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
+import { Rack, type RackItem } from './Rack.tsx';
+import { useArrangeHint, useRackOrder } from './rackOrder.ts';
+import { arrangeTiles, faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
 import { formatSeconds, useCountdown } from './useCountdown.ts';
-import { colors, fonts, table } from '../theme.ts';
+import { colors, fonts } from '../theme.ts';
 
 interface Props {
   data: TablePayload;
@@ -77,6 +79,8 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   const { openPlayer } = useSafety();
   const { width } = useWindowDimensions();
   const [sort, setSort] = useState<SortMode>('suit');
+  const [arranged, setArranged] = useRackOrder(game.id);
+  const [arrangeHint, dismissArrangeHint] = useArrangeHint(game.id);
   const [selected, setSelected] = useState<number[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [jokerWarned, setJokerWarned] = useState(false);
@@ -131,15 +135,23 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
     return [...recent].reverse().find((e) => e.event.type === 'timeout' && e.event.position === data.mySeat) ?? null;
   }, [game.log, data.mySeat]);
 
+  // Once you drag a tile the rack is in your own order, until you pick a sort again.
+  const own = arranged?.active ? arranged.order : null;
   const hand = useMemo(() => {
-    // Like a real rack: sorted, with the tile you just drew at the end.
     const drawn = view.drawn !== null && view.hand.includes(view.drawn) ? view.drawn : null;
+    if (own) return arrangeTiles(own, view.hand, sort, drawn);
+    // Like a real rack: sorted, with the tile you just drew at the end.
     const sorted = sortTiles(
       view.hand.filter((t) => t !== drawn),
       sort,
     );
     return drawn === null ? sorted : [...sorted, drawn];
-  }, [view.hand, view.drawn, sort]);
+  }, [view.hand, view.drawn, sort, own]);
+  // Remember where new tiles landed, so they stay put when the next ones arrive.
+  const handKey = hand.join(',');
+  useEffect(() => {
+    if (own && own.join(',') !== handKey) setArranged({ order: hand, active: true });
+  }, [handKey]);
   const myExposures = view.players[me]?.exposures ?? [];
   const rackWidth = Math.min(width, 560) - 40 - 16;
   // Large-tile mode stands five tiles to a row instead of seven.
@@ -157,6 +169,22 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
       playSound('pass');
     }
     act(action);
+  };
+
+  const arrange = (order: number[]) => {
+    setArranged({ order, active: true });
+    dismissArrangeHint();
+    feel('nudge');
+  };
+
+  // By suit, by number, then back to your own order if you've made one.
+  const nextOrder = () => {
+    if (own) {
+      setArranged({ order: own, active: false });
+      setSort('suit');
+    } else if (sort === 'suit') setSort('number');
+    else if (arranged) setArranged({ ...arranged, active: true });
+    else setSort('suit');
   };
 
   const toggle = (tile: number) => {
@@ -338,6 +366,13 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
 
   const receivedSet = new Set(received?.tiles ?? []);
   const ended = phase.kind === 'ended';
+  const rackItems: RackItem[] = hand.map((t) => ({
+    tile: t,
+    label: `${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}`,
+    selected: selected.includes(t),
+    highlight: (view.drawn === t || receivedSet.has(t)) && !selected.includes(t),
+    badge: receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined,
+  }));
 
   const footer = (
     <View style={{ gap: 8 }}>
@@ -393,7 +428,15 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
                 onPress={() => updatePrefs({ sounds: !prefs.sounds })}
               />
               {need > 0 && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
-              <Button variant="text" compact icon="sort" title={sort === 'suit' ? 'By suit' : 'By number'} onPress={() => setSort(sort === 'suit' ? 'number' : 'suit')} />
+              <Button
+                variant="text"
+                compact
+                icon="sort"
+                title={own ? 'Your order' : sort === 'suit' ? 'By suit' : 'By number'}
+                hint="Changes the order of your tiles"
+                onPress={nextOrder}
+                testID="rack-order"
+              />
             </Row>
           </Row>
           {myExposures.length > 0 && (
@@ -402,25 +445,12 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
               <Exposures exposures={myExposures} width={22} depth="lying" />
             </View>
           )}
-          <View style={styles.rack}>
-            {hand.map((t, i) => (
-              // Tiles you draw or are passed drop into the rack.
-              <Arrive key={t} from={{ y: -26 }} animate={ready}>
-                <TileButton
-                  face={faceOf(t)}
-                  depth="standing"
-                  label={`${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}`}
-                  width={tileWidth}
-                  selected={selected.includes(t)}
-                  highlight={(view.drawn === t || receivedSet.has(t)) && !selected.includes(t)}
-                  badge={receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined}
-                  disabled={need === 0}
-                  onPress={() => toggle(t)}
-                  testID={`rack-tile-${i}`}
-                />
-              </Arrive>
-            ))}
-          </View>
+          {arrangeHint && (
+            <Text style={styles.arrangeHint} testID="arrange-hint">
+              Drag tiles to arrange them.
+            </Text>
+          )}
+          <Rack items={rackItems} tileWidth={tileWidth} tapsDisabled={need === 0} animate={ready} onTap={toggle} onArrange={arrange} onLift={() => feel('pick')} />
         </>
       )}
     </View>
@@ -570,21 +600,7 @@ const styles = StyleSheet.create({
   mine: { fontSize: 13, fontWeight: '700', color: colors.ink, flexShrink: 1 },
   small: { fontSize: 12, color: colors.muted },
   myExposures: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rack: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    rowGap: 10,
-    // The near edge of the table: your tiles stand on the felt in front of the rim.
-    backgroundColor: table.felt,
-    borderRadius: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 7,
-    borderBottomColor: table.rim,
-  },
+  arrangeHint: { fontSize: 12, color: colors.muted, textAlign: 'center' },
   log: { fontSize: 13, color: colors.muted },
   logTimeout: { color: colors.ink, fontWeight: '700' },
   note: { fontSize: 16, fontWeight: '700', color: colors.primary },

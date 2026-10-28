@@ -1,6 +1,7 @@
 // End-to-end check of the Expo web build on phone-sized viewports:
 //   1. Daily Rack: first open -> rack -> result -> clip -> real MP4 export -> shared link.
-//   2. A full hand against three computer players, Charleston to Mahjong.
+//   2. Arranging the rack by dragging a tile, then a full hand against three computer
+//      players, Charleston to Mahjong.
 //   3. Two guests become friends by code and chat.
 //   4. The friends sit at the same live table and play a hand together, with table chat.
 //   5. Game Night: plan, invite link, vote, RSVP, lock in, calendar file, play online instead.
@@ -188,6 +189,50 @@ try {
   await page.getByTestId('quick-play').click();
   await page.waitForURL('**/table/**');
   await page.getByTestId('table-status').waitFor();
+
+  // Arrange the rack: drag one tile to a new spot with the mouse, then check a tap still chooses.
+  await page.getByTestId('action-pass').waitFor({ timeout: 15_000 }).catch(() => undefined);
+  {
+    const rackLabels = async () =>
+      (await page.locator('[data-testid^="rack-tile-"]').evaluateAll((els) => els.map((el) => [Number(el.getAttribute('data-testid').slice('rack-tile-'.length)), el.getAttribute('aria-label')])))
+        .sort((a, b) => a[0] - b[0])
+        .map(([, label]) => label);
+    const passLabel = () => page.getByTestId('action-pass').textContent().catch(() => '');
+    check('the drag hint shows the first time', await visible(page, 'arrange-hint'));
+    const before = await rackLabels();
+    // Move a tile three places right, choosing one where that changes how the rack reads.
+    let from = 0;
+    while (before[from] === before[from + 3] && from + 4 < before.length) from += 1;
+    const to = from + 3;
+    const expected = [...before];
+    expected.splice(to, 0, ...expected.splice(from, 1));
+    const a = await page.getByTestId(`rack-tile-${from}`).boundingBox();
+    const b = await page.getByTestId(`rack-tile-${to}`).boundingBox();
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+    await page.mouse.down();
+    for (let step = 1; step <= 12; step++) {
+      await page.mouse.move(a.x + a.width / 2 + ((b.x - a.x) * step) / 12, a.y + a.height / 2 + ((b.y - a.y) * step) / 12);
+    }
+    await page.waitForTimeout(250);
+    await shot(page, '06a-rack-mid-drag');
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const after = await rackLabels();
+    check('dragging a rack tile moves it to the new spot', JSON.stringify(after) === JSON.stringify(expected), `${before[from]}: place ${from + 1} -> ${to + 1}`);
+    check('the sort control switches to Your order', ((await page.getByTestId('rack-order').textContent()) ?? '').includes('Your order'));
+    check('letting go of a drag does not choose the tile', (await passLabel()).includes('Choose 3 more'));
+    check('the drag hint goes once you have arranged', !(await visible(page, 'arrange-hint')));
+    await shot(page, '06b-rack-arranged');
+    await tap(page, `rack-tile-${to}`);
+    const chosen = await passLabel();
+    await tap(page, `rack-tile-${to}`);
+    check('a tap still chooses and unchooses a tile', chosen.includes('Choose 2 more') && (await passLabel()).includes('Choose 3 more'), chosen);
+    await page.reload();
+    await page.getByTestId('rack-tile-0').waitFor();
+    await page.waitForTimeout(500);
+    check('your rack order survives a reload', JSON.stringify(await rackLabels()) === JSON.stringify(expected));
+  }
+
   const solo = await autoplay(page, { shots: { charleston: '06-vs-computer-charleston', midgame: '07-vs-computer-midgame' } });
   check('a full hand against the computer reaches a result', solo.done, `${solo.discards} discards by the human seat`);
   await page.getByTestId('result-panel').scrollIntoViewIfNeeded();
