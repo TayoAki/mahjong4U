@@ -8,6 +8,7 @@
     "@expo-google-fonts/anton": "^0.4.2",
     "@expo-google-fonts/dm-serif-display": "^0.4.2",
     "@expo/metro-runtime": "~58.0.15",
+    "@livekit/react-native-webrtc": "^150.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~58.0.20",
     "expo-audio": "~58.0.10",
@@ -31,7 +32,6 @@
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",
     "react-native-web": "^0.21.4",
-    "react-native-webrtc": "^155.0.1",
     "react-native-webview": "14.0.1"
   },
   "devDependencies": {
