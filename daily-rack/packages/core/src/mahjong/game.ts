@@ -491,7 +491,8 @@ export type PublicPhase =
   | { kind: 'charleston-vote'; waitingFor: Seat[] }
   | { kind: 'courtesy-count'; waitingFor: Seat[] }
   | { kind: 'courtesy-select'; waitingFor: Seat[] }
-  | { kind: 'turn'; seat: Seat }
+  /** `drew`: the seat drew from the wall this turn (rather than calling a discard), as everyone sees. */
+  | { kind: 'turn'; seat: Seat; drew: boolean }
   | { kind: 'claim'; tile: number; from: Seat }
   | { kind: 'ended' };
 
@@ -524,7 +525,7 @@ export function playerView(card: Card, state: GameState, seat: Seat): PlayerView
           : p.kind === 'courtesy-select'
             ? { kind: 'courtesy-select', waitingFor: waiting }
             : p.kind === 'turn'
-              ? { kind: 'turn', seat: p.seat }
+              ? { kind: 'turn', seat: p.seat, drew: p.drawn !== null }
               : p.kind === 'claim'
                 ? { kind: 'claim', tile: p.tile, from: p.from }
                 : { kind: 'ended' };

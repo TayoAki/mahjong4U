@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLayout } from '../../lib/layout.ts';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { spokenLabel } from '@daily-rack/core';
 import { api, type Daily, type NightSummary, type TableSummary } from '../../lib/api.ts';
 import { formatWhen } from '../../lib/dates.ts';
 import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storage.ts';
-import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
+import { Badge, Body, Button, Card, Columns, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
 import { PipSays } from '../../components/Pip.tsx';
@@ -17,7 +18,7 @@ const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function TodayScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const layout = useLayout();
   const [daily, setDaily] = useState<Daily | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,109 +71,121 @@ export default function TodayScreen() {
 
   const streak = daily.progress?.streak ?? 0;
   const puzzle = daily.puzzle;
-  const tileWidth = Math.floor((Math.min(width, 560) - 40 - 28 - 12 * 2) / 13);
+  // On a wide screen the rack sits in the left of two columns.
+  const rackSpace = layout.wide ? (layout.wideColumn - 56 - 22) / 2 : layout.contentWidth;
+  const tileWidth = Math.min(44, Math.floor((rackSpace - 28 - 12 * 2) / 13));
   const action = daily.attemptId ? 'See your result' : hasDraft ? 'Resume your rack' : "Play today's rack";
   const go = () => (daily.attemptId ? router.push(`/result/${daily.attemptId}`) : router.push('/rack'));
 
   return (
-    <Screen>
+    <Screen wide>
       <Wordmark streak={streak} onStreak={() => router.push('/you')} />
-      {puzzle ? (
-        <>
-          <View>
-            <Eyebrow>Today's drop</Eyebrow>
-            <Display size={40}>{puzzle.title}</Display>
-            <Body>One rack. Three tiles. Your call.</Body>
-          </View>
-          <View style={styles.hero}>
-            <View style={styles.rack} accessible accessibilityLabel={`Today's deal: ${puzzle.tiles.map((t) => spokenLabel(t.faceCode)).join(', ')}`}>
-              {puzzle.tiles.map((t) => (
-                <Tile key={t.instanceId} face={t.faceCode} width={tileWidth} flat />
-              ))}
-            </View>
-            <Button title={action} icon="arrow" onPress={go} testID="today-primary" />
-          </View>
-        </>
-      ) : (
-        <Card>
-          <Display size={28}>The next rack is on its way</Display>
-          <Body muted>
-            It lands {new Date(daily.nextPublicationAt).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}.
-          </Body>
-        </Card>
-      )}
-
-      {(waiting.length > 0 || night) && (
-        <View style={{ gap: 10 }} testID="today-waiting">
-          <Eyebrow>Waiting on you</Eyebrow>
-          {waiting.map((t) => (
-            <Pressable
-              key={t.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${t.yourMove ? 'Your move' : 'Invitation'}: table with ${t.players.join(', ')}`}
-              onPress={() => router.push(`/table/${t.id}`)}
-              style={({ pressed }) => [styles.linkCard, pressed && { backgroundColor: colors.sage }]}
-            >
-              <View style={styles.linkIcon}>
-                <Icon name="play" color={colors.ink} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.linkTitle} numberOfLines={1}>
-                  {t.players.filter((p) => p !== 'Open seat').map((p) => p.replace(' (computer)', '')).join(' · ')}
-                </Text>
-                <Body small muted>
-                  {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
-                </Body>
-              </View>
-              <Badge label={t.yourMove ? 'Your move' : 'Invited'} tone={t.yourMove ? 'pink' : 'ink'} />
-            </Pressable>
-          ))}
-          {night && (
-            <LinkCard
-              icon="calendar"
-              title={night.title}
-              body={night.status === 'confirmed' && night.when ? `${formatWhen(night.when, night.timeZone, 'short')} · ${night.going} going` : 'Still picking a time. Vote on the dates that work.'}
-              onPress={() => router.push(`/night/${night.id}`)}
-            />
-          )}
-        </View>
-      )}
-
-      {daily.progress && (
-        <Card>
-          <Text style={styles.cardTitle}>This week's rhythm</Text>
-          <View style={styles.week}>
-            {daily.progress.week.map((d, i) => {
-              const today = d.day === daily.contentDay;
-              return (
-                <View
-                  key={d.day}
-                  style={[styles.day, d.done && styles.dayDone, today && styles.dayToday]}
-                  accessible
-                  accessibilityLabel={`${new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long' })}: ${d.done ? 'played' : 'not played'}`}
-                >
-                  <Text style={[styles.dayText, today && { color: '#fff' }]}>{LETTERS[i]}</Text>
-                  <View style={[styles.dot, d.done && { backgroundColor: today ? '#fff' : colors.ink }]} />
+      <Columns
+        left={
+          <>
+            {puzzle ? (
+              <>
+                <View>
+                  <Eyebrow>Today's drop</Eyebrow>
+                  <Display size={40}>{puzzle.title}</Display>
+                  <Body>One rack. Three tiles. Your call.</Body>
                 </View>
-              );
-            })}
-          </View>
-        </Card>
-      )}
+                <View style={styles.hero}>
+                  <View style={styles.rack} accessible accessibilityLabel={`Today's deal: ${puzzle.tiles.map((t) => spokenLabel(t.faceCode)).join(', ')}`}>
+                    {puzzle.tiles.map((t) => (
+                      <Tile key={t.instanceId} face={t.faceCode} width={tileWidth} flat />
+                    ))}
+                  </View>
+                  <Button title={action} icon="arrow" onPress={go} testID="today-primary" />
+                </View>
+              </>
+            ) : (
+              <Card>
+                <Display size={28}>The next rack is on its way</Display>
+                <Body muted>
+                  It lands {new Date(daily.nextPublicationAt).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}.
+                </Body>
+              </Card>
+            )}
 
-      {lessons.loaded && lessons.done.size < LESSONS.length && (
-        <Pressable onPress={() => router.push('/learn')} accessibilityRole="button" accessibilityLabel="Learn to play with Pip" testID="today-learn">
-          <Card tone="sage">
-            <PipSays mood={lessons.done.size === 0 ? 'wave' : 'happy'}>
-              {lessons.done.size === 0
-                ? 'New to mahjong? I’ll teach you, one small step at a time. Tap to start!'
-                : `You’re ${lessons.done.size} of ${LESSONS.length} lessons in. Tap to keep going!`}
-            </PipSays>
-          </Card>
-        </Pressable>
-      )}
-      <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />
-      <LinkCard icon="calendar" title="Plan a game night" body="Find a date that works for your group." onPress={() => router.push('/nights')} />
+            {lessons.loaded && lessons.done.size < LESSONS.length && (
+              <Pressable onPress={() => router.push('/learn')} accessibilityRole="button" accessibilityLabel="Learn to play with Pip" testID="today-learn">
+                <Card tone="sage">
+                  <PipSays mood={lessons.done.size === 0 ? 'wave' : 'happy'}>
+                    {lessons.done.size === 0
+                      ? 'New to mahjong? I’ll teach you, one small step at a time. Tap to start!'
+                      : `You’re ${lessons.done.size} of ${LESSONS.length} lessons in. Tap to keep going!`}
+                  </PipSays>
+                </Card>
+              </Pressable>
+            )}
+          </>
+        }
+        right={
+          <>
+            {(waiting.length > 0 || night) && (
+              <View style={{ gap: 10 }} testID="today-waiting">
+                <Eyebrow>Waiting on you</Eyebrow>
+                {waiting.map((t) => (
+                  <Pressable
+                    key={t.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t.yourMove ? 'Your move' : 'Invitation'}: table with ${t.players.join(', ')}`}
+                    onPress={() => router.push(`/table/${t.id}`)}
+                    style={({ pressed }) => [styles.linkCard, pressed && { backgroundColor: colors.sage }]}
+                  >
+                    <View style={styles.linkIcon}>
+                      <Icon name="play" color={colors.ink} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.linkTitle} numberOfLines={1}>
+                        {t.players.filter((p) => p !== 'Open seat').map((p) => p.replace(' (computer)', '')).join(' · ')}
+                      </Text>
+                      <Body small muted>
+                        {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
+                      </Body>
+                    </View>
+                    <Badge label={t.yourMove ? 'Your move' : 'Invited'} tone={t.yourMove ? 'pink' : 'ink'} />
+                  </Pressable>
+                ))}
+                {night && (
+                  <LinkCard
+                    icon="calendar"
+                    title={night.title}
+                    body={night.status === 'confirmed' && night.when ? `${formatWhen(night.when, night.timeZone, 'short')} · ${night.going} going` : 'Still picking a time. Vote on the dates that work.'}
+                    onPress={() => router.push(`/night/${night.id}`)}
+                  />
+                )}
+              </View>
+            )}
+
+            {daily.progress && (
+              <Card>
+                <Text style={styles.cardTitle}>This week's rhythm</Text>
+                <View style={styles.week}>
+                  {daily.progress.week.map((d, i) => {
+                    const today = d.day === daily.contentDay;
+                    return (
+                      <View
+                        key={d.day}
+                        style={[styles.day, d.done && styles.dayDone, today && styles.dayToday]}
+                        accessible
+                        accessibilityLabel={`${new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long' })}: ${d.done ? 'played' : 'not played'}`}
+                      >
+                        <Text style={[styles.dayText, today && { color: '#fff' }]}>{LETTERS[i]}</Text>
+                        <View style={[styles.dot, d.done && { backgroundColor: today ? '#fff' : colors.ink }]} />
+                      </View>
+                    );
+                  })}
+                </View>
+              </Card>
+            )}
+
+            <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />
+            <LinkCard icon="calendar" title="Plan a game night" body="Find a date that works for your group." onPress={() => router.push('/nights')} />
+          </>
+        }
+      />
     </Screen>
   );
 }

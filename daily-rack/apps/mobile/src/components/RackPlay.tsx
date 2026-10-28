@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLayout } from '../lib/layout.ts';
 import { PASS_SIZE, isPassable, sortBySuit, spokenLabel, type PublicPuzzle } from '@daily-rack/core';
 import { ApiError, api } from '../lib/api.ts';
 import { draftKey, newKey, readJson, remove, writeJson, type Draft } from '../lib/storage.ts';
@@ -26,8 +27,9 @@ export function RackPlay({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trayError, setTrayError] = useState<string | null>(null);
-  const { width: screenWidth } = useWindowDimensions();
-  const tileWidth = Math.floor((Math.min(screenWidth, 560) - 40 - 28 - 4 * 8) / 5);
+  const { contentWidth } = useLayout();
+  // Five to a row; on a tablet the tiles grow, but not past a comfortable size.
+  const tileWidth = Math.min(84, Math.floor((contentWidth - 28 - 4 * 8) / 5));
   const loaded = useRef(false);
 
   useEffect(() => {

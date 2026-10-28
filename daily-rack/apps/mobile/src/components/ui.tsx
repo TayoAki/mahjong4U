@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { colors, fonts, radius } from '../theme.ts';
+import { useLayout } from '../lib/layout.ts';
 
 // ------------------------------------------------------------------ layout
 
@@ -22,18 +23,22 @@ export function Screen({
   scroll = true,
   footer,
   padded = true,
+  wide = false,
   testID,
 }: {
   children: ReactNode;
   scroll?: boolean;
   footer?: ReactNode;
   padded?: boolean;
+  /** Lets the screen use two columns on big screens (see Columns). */
+  wide?: boolean;
   testID?: string;
 }) {
-  const content = <View style={[styles.content, padded && styles.padded]}>{children}</View>;
+  const layout = useLayout();
+  const content = <View style={[styles.content, padded && styles.padded, layout.tablet && padded && styles.paddedTablet]}>{children}</View>;
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']} testID={testID}>
-      <View style={styles.column}>
+      <View style={[styles.column, { maxWidth: wide ? layout.wideColumn : layout.column }]}>
         {scroll ? (
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
             {content}
@@ -59,6 +64,25 @@ export function TopBar({ title, onBack, right }: { title: string; onBack?: () =>
         {title}
       </Text>
       {right ?? <View style={styles.iconSpace} />}
+    </View>
+  );
+}
+
+/** Two columns side by side on big screens; stacked (left first) on phones. */
+export function Columns({ left, right, ratio = 1 }: { left: ReactNode; right: ReactNode; ratio?: number }) {
+  const { wide } = useLayout();
+  if (!wide) {
+    return (
+      <>
+        {left}
+        {right}
+      </>
+    );
+  }
+  return (
+    <View style={styles.columns}>
+      <View style={[styles.columnHalf, { flex: ratio }]}>{left}</View>
+      <View style={styles.columnHalf}>{right}</View>
     </View>
   );
 }
@@ -143,7 +167,7 @@ export function Button({
         styles.button,
         compact && styles.buttonCompact,
         { backgroundColor: v.bg, borderColor: v.border, borderWidth: v.border === 'transparent' ? 0 : 1.5 },
-        pressed && !inactive && { backgroundColor: v.pressed },
+        pressed && !inactive && { backgroundColor: v.pressed, transform: [{ scale: 0.98 }] },
         inactive && variant === 'primary' && { backgroundColor: '#C9B9C6' },
         inactive && variant !== 'primary' && { opacity: 0.5 },
         style,
@@ -248,14 +272,16 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
 }
 
 export function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: ReactNode }) {
+  // Phones get a sheet from the bottom; tablets a card in the middle of the screen.
+  const { tablet, height } = useLayout();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()} accessibilityViewIsModal>
+    <Modal visible={visible} transparent animationType={tablet ? 'fade' : 'slide'} onRequestClose={onClose} supportedOrientations={['portrait', 'landscape']}>
+      <Pressable style={[styles.backdrop, tablet && styles.backdropCentered]} onPress={onClose} accessibilityLabel="Close">
+        <Pressable style={[styles.sheet, tablet && styles.sheetCentered]} onPress={(e) => e.stopPropagation()} accessibilityViewIsModal>
           <Text accessibilityRole="header" style={styles.sheetTitle}>
             {title}
           </Text>
-          <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ maxHeight: Math.min(tablet ? 720 : 560, height * 0.72) }} contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled">
             {children}
           </ScrollView>
         </Pressable>
@@ -379,6 +405,9 @@ const styles = StyleSheet.create({
   column: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' },
   content: { flexGrow: 1, gap: 18, paddingBottom: 24 },
   padded: { paddingHorizontal: 20 },
+  paddedTablet: { paddingHorizontal: 28, paddingTop: 8 },
+  columns: { flexDirection: 'row', gap: 22, alignItems: 'flex-start' },
+  columnHalf: { flex: 1, gap: 18 },
   footer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 16, gap: 10, backgroundColor: colors.canvas, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   topbar: { flexDirection: 'row', alignItems: 'center', minHeight: 52 },
   topbarTitle: { flex: 1, textAlign: 'center', fontFamily: fonts.serif, fontSize: 22, color: colors.ink },
@@ -412,6 +441,8 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 40 },
   backdrop: { flex: 1, backgroundColor: 'rgba(23,63,54,0.4)', justifyContent: 'flex-end', alignItems: 'center' },
   sheet: { width: '100%', maxWidth: 560, backgroundColor: colors.canvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, gap: 14 },
+  backdropCentered: { justifyContent: 'center', padding: 24 },
+  sheetCentered: { maxWidth: 600, borderRadius: 24, paddingBottom: 24 },
   sheetTitle: { fontFamily: fonts.serif, fontSize: 26, color: colors.ink },
   avatar: { alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontWeight: '700' },

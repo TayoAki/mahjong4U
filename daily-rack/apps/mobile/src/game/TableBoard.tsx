@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SEATS, SEAT_WINDS, isJoker, type Exposure, type PlayerView, type Seat } from '@daily-rack/core/mahjong';
 import type { TableSeat } from '../lib/api.ts';
 import { Arrive, useAfterFirstRender } from '../components/Arrive.tsx';
 import { Avatar } from '../components/ui.tsx';
 import { Tile, TileFromBehind, TileFromSide, type TileDepth } from '../components/Tile.tsx';
 import { colors, table } from '../theme.ts';
+import { useLayout } from '../lib/layout.ts';
 import { faceOf, groupName, tileName } from './tiles.ts';
 
 // The table seen from your chair, laid out like a real one: the player across holds their
@@ -23,6 +24,8 @@ interface Props {
   active: (seat: Seat) => boolean;
   /** Large-tile mode: the table lies flat and the discards are drawn bigger. */
   large?: boolean;
+  /** Width of the board; the screen's content width unless given (wider on tablets). */
+  width?: number;
 }
 
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
@@ -48,8 +51,9 @@ function Turned({ deg, w, h, children }: { deg: number; w: number; h: number; ch
   );
 }
 
-export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer, active, large = false }: Props) {
-  const { width } = useWindowDimensions();
+export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer, active, large = false, width: boardWidth }: Props) {
+  const { contentWidth } = useLayout();
+  const width = boardWidth ?? contentWidth;
   const ready = useAfterFirstRender();
   const me = view.seat;
   const at = (offset: number) => ((me + offset) % 4) as Seat;
@@ -58,13 +62,15 @@ export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer,
   const left = at(3);
   const result = view.result;
   const display = (seat: number) => (seat === me ? 'You' : nameOf(seat));
+  const dead = (seat: Seat) => Boolean(view.players[seat]?.dead);
 
   // Size the discards so the cross of four rivers and the console fills the felt.
-  const inner = Math.min(width, 560) - 40 - RIM * 2 - PAD * 2;
+  const inner = width - RIM * 2 - PAD * 2;
   const room = inner - 2 * (SIDE + GAP);
   const discardsOf = (seat: Seat) => view.discards.map((d, i) => ({ ...d, i })).filter((d) => d.seat === seat);
   const rows = Math.max(large ? 2 : 3, ...SEATS.map((s) => Math.ceil(discardsOf(s).length / PER_ROW)));
-  let t = 26;
+  // Bigger tables (tablets) get bigger discards.
+  let t = inner > 600 ? 40 : inner > 480 ? 32 : 26;
   while (t > 11 && 2 * rows * (lyingHeight(t) + 2) + PER_ROW * t + 5 + 2 * GAP > room) t -= 1;
   const riverW = PER_ROW * t + (PER_ROW - 1);
   const depth = rows * (lyingHeight(t) + 2);
@@ -82,13 +88,13 @@ export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer,
           <Text style={styles.chipName} numberOfLines={1}>
             {nameOf(seat)}
           </Text>
-          <Text style={styles.chipMeta} numberOfLines={1}>
-            {SEAT_WINDS[seat]} · {formatScore(scoreOf(seat))}
+          <Text style={[styles.chipMeta, dead(seat) && styles.chipDead]} numberOfLines={1}>
+            {dead(seat) ? 'Dead hand' : `${SEAT_WINDS[seat]} · ${formatScore(scoreOf(seat))}`}
           </Text>
         </View>
       </View>
     );
-    const label = `${info.name}, ${['', 'on your right', 'across from you', 'on your left'][(seat - me + 4) % 4]}, ${SEAT_WINDS[seat]} wind, ${view.players[seat]!.handCount} tiles, score ${scoreOf(seat)}${isActive ? ', to play' : ''}`;
+    const label = `${info.name}, ${['', 'on your right', 'across from you', 'on your left'][(seat - me + 4) % 4]}, ${SEAT_WINDS[seat]} wind, ${view.players[seat]!.handCount} tiles, score ${scoreOf(seat)}${isActive ? ', to play' : ''}${dead(seat) ? ', hand is dead' : ''}`;
     return info.kind === 'human' && info.principalId ? (
       <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Options to report or block`} onPress={() => onPlayer(info)} style={{ maxWidth: '34%' }}>
         {content}
@@ -260,6 +266,7 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: table.light, backgroundColor: 'rgba(242,193,78,0.22)' },
   chipName: { color: table.text, fontWeight: '700', fontSize: 12 },
   chipMeta: { color: 'rgba(243,247,242,0.75)', fontSize: 10 },
+  chipDead: { color: '#FFD3C9', fontWeight: '700' },
   acrossRack: { flexDirection: 'row', justifyContent: 'center', gap: 1 },
   middle: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: GAP },
   sideRack: { width: SIDE, alignItems: 'center', justifyContent: 'center', gap: 1 },

@@ -7,7 +7,7 @@ import { useReportProblem } from '../../lib/report-problem.tsx';
 import { useSafety } from '../../lib/safety.tsx';
 import { forgetSession, useSession } from '../../lib/session.tsx';
 import { clearAll } from '../../lib/storage.ts';
-import { Avatar, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
+import { Avatar, Body, Button, Card, Columns, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { CardView } from '../../game/CardView.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
 import { NotificationSettings } from '../../components/NotificationSettings.tsx';
@@ -84,180 +84,190 @@ export default function YouScreen() {
   const maxSection = Math.max(1, ...(progress?.sections.map((s) => s.count) ?? [1]));
 
   return (
-    <Screen>
+    <Screen wide>
       <View style={{ paddingTop: 12 }}>
         <Eyebrow>Profile and settings</Eyebrow>
         <Display size={38}>You</Display>
       </View>
       {error && <ErrorPanel message={error} onRetry={load} />}
 
-      <Card style={{ gap: 10 }}>
-        <Row gap={12}>
-          {profile && <Avatar name={profile.name} color={profile.color} size={48} />}
-          <View style={{ flex: 1 }}>
-            <Body small muted>
-              Name friends see at the table
-            </Body>
-            <TextInput
-              value={name}
-              onChangeText={(t) => {
-                setName(t.slice(0, 24));
-                setSaved(false);
-              }}
-              style={styles.input}
-              accessibilityLabel="Your name"
-              testID="profile-name"
-            />
-          </View>
-        </Row>
-        <Button title={saved ? 'Saved' : 'Save name'} compact variant="secondary" disabled={!name.trim() || name === profile?.name} onPress={save} testID="save-name" />
-        {profile && (
-          <Body small muted>
-            Friend code: <Text style={{ fontFamily: fonts.caption, letterSpacing: 2, color: colors.ink }}>{profile.code}</Text>
-          </Body>
-        )}
-      </Card>
+      <Columns
+        left={
+          <>
+            <Card style={{ gap: 10 }}>
+              <Row gap={12}>
+                {profile && <Avatar name={profile.name} color={profile.color} size={48} />}
+                <View style={{ flex: 1 }}>
+                  <Body small muted>
+                    Name friends see at the table
+                  </Body>
+                  <TextInput
+                    value={name}
+                    onChangeText={(t) => {
+                      setName(t.slice(0, 24));
+                      setSaved(false);
+                    }}
+                    style={styles.input}
+                    accessibilityLabel="Your name"
+                    testID="profile-name"
+                  />
+                </View>
+              </Row>
+              <Button title={saved ? 'Saved' : 'Save name'} compact variant="secondary" disabled={!name.trim() || name === profile?.name} onPress={save} testID="save-name" />
+              {profile && (
+                <Body small muted>
+                  Friend code: <Text style={{ fontFamily: fonts.caption, letterSpacing: 2, color: colors.ink }}>{profile.code}</Text>
+                </Body>
+              )}
+            </Card>
 
-      {progress && (
-        <View style={styles.stats}>
-          <Stat value={progress.streak} label="day streak" />
-          <Stat value={progress.bestStreak} label="best streak" />
-          <Stat value={progress.racksSolved} label="racks solved" />
-          <Stat value={progress.strongPasses} label="strong passes" />
-        </View>
-      )}
-      {progress && progress.sections.length > 0 && (
-        <Card>
-          <Heading>Sections you practise</Heading>
-          {progress.sections.map((s) => (
-            <Row key={s.label} gap={10}>
-              <Text style={{ width: 110, color: colors.ink }}>{s.label}</Text>
-              <View style={styles.bar}>
-                <View style={[styles.barFill, { width: `${(s.count / maxSection) * 100}%` }]} />
+            {progress && (
+              <View style={styles.stats}>
+                <Stat value={progress.streak} label="day streak" />
+                <Stat value={progress.bestStreak} label="best streak" />
+                <Stat value={progress.racksSolved} label="racks solved" />
+                <Stat value={progress.strongPasses} label="strong passes" />
               </View>
-              <Text style={{ width: 28, textAlign: 'right', fontWeight: '700', color: colors.ink }}>{s.count}</Text>
-            </Row>
-          ))}
-        </Card>
-      )}
+            )}
+            {progress && progress.sections.length > 0 && (
+              <Card>
+                <Heading>Sections you practise</Heading>
+                {progress.sections.map((s) => (
+                  <Row key={s.label} gap={10}>
+                    <Text style={{ width: 110, color: colors.ink }}>{s.label}</Text>
+                    <View style={styles.bar}>
+                      <View style={[styles.barFill, { width: `${(s.count / maxSection) * 100}%` }]} />
+                    </View>
+                    <Text style={{ width: 28, textAlign: 'right', fontWeight: '700', color: colors.ink }}>{s.count}</Text>
+                  </Row>
+                ))}
+              </Card>
+            )}
 
-      <LinkCard
-        icon="card"
-        title="Lessons"
-        body={lessons.loaded ? `${LESSONS.filter((l) => lessons.done.has(l.id)).length} of ${LESSONS.length} done. Learn the game step by step.` : 'Learn the game step by step.'}
-        onPress={() => router.push('/learn')}
-        testID="you-lessons"
-      />
-      <LinkCard icon="flame" title="Your stats" body="Hands, wins, streaks, rating and card progress." onPress={() => router.push('/stats')} testID="you-stats" />
+            <LinkCard
+              icon="card"
+              title="Lessons"
+              body={lessons.loaded ? `${LESSONS.filter((l) => lessons.done.has(l.id)).length} of ${LESSONS.length} done. Learn the game step by step.` : 'Learn the game step by step.'}
+              onPress={() => router.push('/learn')}
+              testID="you-lessons"
+            />
+            <LinkCard icon="flame" title="Your stats" body="Hands, wins, streaks, rating and card progress." onPress={() => router.push('/stats')} testID="you-stats" />
 
-      <NotificationSettings />
+          </>
+        }
+        right={
+          <>
+            <NotificationSettings />
 
-      <Card style={{ gap: 10 }}>
-        <Heading>At the table</Heading>
-        <Body small muted>
-          Show the closest hands on the card while you play.
-        </Body>
-        <Segmented
-          label="Hints"
-          value={prefs.showHints ? 'on' : 'off'}
-          onChange={(v) => updatePrefs({ showHints: v === 'on' })}
-          options={[
-            { value: 'on', label: 'Hints on' },
-            { value: 'off', label: 'Hints off' },
-          ]}
-        />
-        <Segmented
-          label="Tile size"
-          value={prefs.largeTiles ? 'large' : 'standard'}
-          onChange={(v) => updatePrefs({ largeTiles: v === 'large' })}
-          options={[
-            { value: 'standard', label: 'Standard tiles' },
-            { value: 'large', label: 'Large tiles' },
-          ]}
-        />
-        <Segmented
-          label="Table sounds"
-          value={prefs.sounds ? 'on' : 'off'}
-          onChange={(v) => updatePrefs({ sounds: v === 'on' })}
-          options={[
-            { value: 'on', label: 'Sounds on' },
-            { value: 'off', label: 'Sounds off' },
-          ]}
-        />
-        <Body small muted>
-          Tile sounds follow your phone’s silent switch.
-        </Body>
-        <Button title="Read the house card" variant="text" icon="card" onPress={() => setSheet('card')} />
-      </Card>
-
-      <Card style={{ gap: 10 }}>
-        <Heading>Clip captions</Heading>
-        <Segmented
-          label="Caption color"
-          value={prefs.captionStyle}
-          onChange={(captionStyle) => updatePrefs({ captionStyle })}
-          options={[
-            { value: 'blue', label: 'Blue' },
-            { value: 'magenta', label: 'Magenta' },
-          ]}
-        />
-      </Card>
-
-      <Card style={{ gap: 10 }}>
-        <Heading>Safety</Heading>
-        <Body small muted>
-          Report or block anyone from their name, a chat message, a table seat or a game night. Blocked players can’t see your messages, send you requests or join your tables.
-        </Body>
-        {blocked.length === 0 ? (
-          <Body small>You haven’t blocked anyone.</Body>
-        ) : (
-          blocked.map((p) => (
-            <Row key={p.id} gap={10}>
-              <Avatar name={p.name} color={p.color} size={32} />
-              <Text style={{ flex: 1, fontSize: 16, color: colors.ink }} numberOfLines={1}>
-                {p.name}
-              </Text>
-              <Button
-                title="Unblock"
-                compact
-                variant="secondary"
-                onPress={async () => {
-                  await api.unblock(p.id).catch((e: Error) => setError(e.message));
-                  load();
-                }}
-                testID={`unblock-${p.code}`}
+            <Card style={{ gap: 10 }}>
+              <Heading>At the table</Heading>
+              <Body small muted>
+                Show the closest hands on the card while you play.
+              </Body>
+              <Segmented
+                label="Hints"
+                value={prefs.showHints ? 'on' : 'off'}
+                onChange={(v) => updatePrefs({ showHints: v === 'on' })}
+                options={[
+                  { value: 'on', label: 'Hints on' },
+                  { value: 'off', label: 'Hints off' },
+                ]}
               />
-            </Row>
-          ))
-        )}
-        <Button title="Community rules" variant="text" icon="help" onPress={openRules} />
-        <Button title="Report a problem" variant="text" icon="flag" onPress={() => reportProblem()} testID="report-problem" />
-        <Button
-          title="Contact us"
-          variant="text"
-          icon="send"
-          onPress={() => {
-            setFeedbackState('idle');
-            setFeedbackError(null);
-            setSheet('contact');
-          }}
-          testID="contact-us"
-        />
-      </Card>
+              <Segmented
+                label="Tile size"
+                value={prefs.largeTiles ? 'large' : 'standard'}
+                onChange={(v) => updatePrefs({ largeTiles: v === 'large' })}
+                options={[
+                  { value: 'standard', label: 'Standard tiles' },
+                  { value: 'large', label: 'Large tiles' },
+                ]}
+              />
+              <Segmented
+                label="Table sounds"
+                value={prefs.sounds ? 'on' : 'off'}
+                onChange={(v) => updatePrefs({ sounds: v === 'on' })}
+                options={[
+                  { value: 'on', label: 'Sounds on' },
+                  { value: 'off', label: 'Sounds off' },
+                ]}
+              />
+              <Body small muted>
+                Tile sounds follow your phone’s silent switch.
+              </Body>
+              <Button title="Read the house card" variant="text" icon="card" onPress={() => setSheet('card')} />
+            </Card>
 
-      <Card style={{ gap: 10 }}>
-        <Heading>Your data</Heading>
-        <Body small muted>
-          You play as a guest on this device. Voiceovers never leave your phone. Deleting removes your answers, games, friends, messages and game nights, and takes your answers out of
-          the community split.
-        </Body>
-        <Button title="Delete my data" variant="danger" onPress={() => setSheet('delete')} />
-      </Card>
+            <Card style={{ gap: 10 }}>
+              <Heading>Clip captions</Heading>
+              <Segmented
+                label="Caption color"
+                value={prefs.captionStyle}
+                onChange={(captionStyle) => updatePrefs({ captionStyle })}
+                options={[
+                  { value: 'blue', label: 'Blue' },
+                  { value: 'magenta', label: 'Magenta' },
+                ]}
+              />
+            </Card>
 
-      <Notice>
-        Daily Rack is an independent app. It is not affiliated with or endorsed by the National Mah Jongg League and does not reproduce any official card. Games use the original Daily Rack house
-        card.
-      </Notice>
+            <Card style={{ gap: 10 }}>
+              <Heading>Safety</Heading>
+              <Body small muted>
+                Report or block anyone from their name, a chat message, a table seat or a game night. Blocked players can’t see your messages, send you requests or join your tables.
+              </Body>
+              {blocked.length === 0 ? (
+                <Body small>You haven’t blocked anyone.</Body>
+              ) : (
+                blocked.map((p) => (
+                  <Row key={p.id} gap={10}>
+                    <Avatar name={p.name} color={p.color} size={32} />
+                    <Text style={{ flex: 1, fontSize: 16, color: colors.ink }} numberOfLines={1}>
+                      {p.name}
+                    </Text>
+                    <Button
+                      title="Unblock"
+                      compact
+                      variant="secondary"
+                      onPress={async () => {
+                        await api.unblock(p.id).catch((e: Error) => setError(e.message));
+                        load();
+                      }}
+                      testID={`unblock-${p.code}`}
+                    />
+                  </Row>
+                ))
+              )}
+              <Button title="Community rules" variant="text" icon="help" onPress={openRules} />
+              <Button title="Report a problem" variant="text" icon="flag" onPress={() => reportProblem()} testID="report-problem" />
+              <Button
+                title="Contact us"
+                variant="text"
+                icon="send"
+                onPress={() => {
+                  setFeedbackState('idle');
+                  setFeedbackError(null);
+                  setSheet('contact');
+                }}
+                testID="contact-us"
+              />
+            </Card>
+
+            <Card style={{ gap: 10 }}>
+              <Heading>Your data</Heading>
+              <Body small muted>
+                You play as a guest on this device. Voiceovers never leave your phone. Deleting removes your answers, games, friends, messages and game nights, and takes your answers out of
+                the community split.
+              </Body>
+              <Button title="Delete my data" variant="danger" onPress={() => setSheet('delete')} />
+            </Card>
+
+            <Notice>
+              Daily Rack is an independent app. It is not affiliated with or endorsed by the National Mah Jongg League and does not reproduce any official card. Games use the original Daily Rack house
+              card.
+            </Notice>
+          </>
+        }
+      />
 
       <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
         <CardView />

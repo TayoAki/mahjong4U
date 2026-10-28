@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLayout } from '../../lib/layout.ts';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api, type Daily } from '../../lib/api.ts';
 import { useSession } from '../../lib/session.tsx';
@@ -133,7 +134,7 @@ function Node({
 
 export default function LearnScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { contentWidth } = useLayout();
   const { profile, offline } = useSession();
   const { done, loaded } = useLessonProgress();
   const [daily, setDaily] = useState<Daily | null>(null);
@@ -175,7 +176,7 @@ export default function LearnScreen() {
     }
   };
 
-  const half = (Math.min(width, 560) - 40) / 2 - NODE / 2 - 8;
+  const half = Math.min(contentWidth, 520) / 2 - NODE / 2 - 8;
   const first = profile?.name && !/^Player [0-9A-F]{4}$/i.test(profile.name) ? profile.name.split(' ')[0] : null;
   const greeting = !loaded
     ? ' '

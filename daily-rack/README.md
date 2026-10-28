@@ -52,11 +52,28 @@ Tile artwork is drawn in code (`apps/mobile/src/tiles/tileArt.ts`) with the Chin
 
 - **Card.** Hands come from the original *Daily Rack House Card* (`packages/core/src/mahjong/card.ts`): 33 hands in eight sections, written in a small pattern language and expanded to every concrete suit and number combination. It follows standard American conventions but is not the National Mah Jongg League card.
 - **Rules.** 152 tiles with 8 jokers and 8 flowers. East starts with 14. The Charleston passes right, across, left; a second Charleston (left, across, right) happens only if everyone agrees; then an optional courtesy pass across. Jokers can't be passed, are used only in groups of three or more, and can be swapped out of any exposure for the matching natural tile. A discard can be called for Mahjong or to expose a group; Mahjong beats an exposure and ties go to the next player in turn. The discarder of the winning tile pays double, others pay single; a self-drawn Mahjong collects double from everyone; jokerless hands double. An empty wall is a wall game.
-- **Computer players.** Easy, Steady and Sharp. They plan toward the closest hands on the card, decide calls, swap jokers and pass sensibly in the Charleston. In tests, Steady players finish about 94% of four-computer hands with a Mahjong.
+- **Computer players.** Easy, Steady and Sharp. They plan toward the closest hands on the card, decide calls, swap jokers and pass sensibly in the Charleston. In tests, Steady players finish most four-computer hands with a Mahjong (86% over 200 seeded hands).
 - **Live or turn-based.** Live tables give 90 s for a Charleston pass, 60 s for a turn and 12 s to call a discard; when time runs out, the computer makes a safe move for that player. Turn-based tables wait indefinitely. If someone leaves mid-hand, a computer player takes the seat so the game finishes.
 - **The table.** You see it from your chair, like a club's automatic table: the player across holds their tiles up with the blue backs toward you, the players on either side are seen edge-on, and each player's discards lie in rows of six in front of them, turned their way, around a console whose lights show whose move it is. Other hands stay hidden until the hand ends, as at a real table. Your rack sits at the bottom with the current move just above it. It's drawn with ordinary React Native views and a slight perspective tilt, with no 3D engine.
 - **Sounds.** Tiles clack when they hit the table, draws click softly, calls, passes, the deal and Mahjong each have their own sound, and phones tap back with haptics. The sounds are synthesized by `scripts/make-sounds.mjs`, with no recordings, so they're ours to ship. Run it again after changing a parameter. They follow the iPhone silent switch and can be turned off at the table or on the You tab.
 - **Hints.** The table can show the three closest hands on the card for your tiles, with the exact tiles each one needs. Turn them off on the You tab.
+- **Your own order.** Drag tiles in your rack into any order (a tap still picks a tile); the rack remembers it for the game, and "By suit" / "By number" are a tap away.
+- **Dead hands and "why can't I call this?".** The engine calls a hand dead, from what everyone at the table can see, when its exposures fit no hand on the card or every hand left needs a pair or single that's used up. A dead hand sits out the rest of the hand and still pays the winner, and the table says why. Under any other player's discard, "Why can't I call…?" has Pip explain in plain English (a joker, a concealed hand, only a pair, not enough matching tiles, too late, and so on), using the same rules the game does.
+
+## Learn to play, Pip and reminders
+
+Mahjong is having a moment, and a lot of players are brand new, so the app is built to feel warm and friendly to them.
+
+- **Pip**, an original sparrow (mahjong means "sparrow"), greets new players, cheers finished lessons and good racks with confetti, says something kind whatever the result, and explains rules at the table. Pip is drawn in SVG (`apps/mobile/src/components/Pip.tsx`) with seven moods and small animations, and respects reduced motion.
+- **Learn tab.** The ten lessons as a winding path in four units, with practice stops between them: today's rack as a Charleston pass, a gentle game against Easy computer players, and a first full game.
+- **Notifications.** "Your move" at turn-based tables (once until you play), table invites, friend requests, friends' messages (at most one a minute per chat), Game Night news, and "your game is ready" for matchmaking. Nothing is pushed while the app is open in front of you. Pip asks at a moment it makes sense, never on first launch, and each kind can be turned off on the You tab.
+- **Reminders from Pip**, scheduled on the phone itself, Duolingo-style but gentler: one at the time you usually play (or a time you pick), a streak saver in the evening when your streak is on the line, and come-back nudges after 1, 2, 3, 5, 7 and 14 days that then stop. Game Nights you're going to get a reminder two hours before.
+
+Push needs an Expo project: run `npx eas-cli@latest init` in `apps/mobile` (it writes `extra.eas.projectId` to `app.json`), then add an APNs key and an FCM V1 key with `eas credentials`. Until then, reminders on the phone still work and the server simply has no phones to send to.
+
+## iPad and big screens
+
+iPads turn freely (phones stay upright), and Android tablets are unlocked at startup. On big screens the tabs move to a sidebar, Today, Play and You use two columns, sheets open as centered cards, tiles grow, and the game table puts the felt on the left with your rack and moves on the right in landscape.
 
 ## Hosting
 
@@ -154,6 +171,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `NODE_ENV` | unset | `production` marks session cookies Secure |
 | `ADMIN_TOKEN` | unset | Secret for the moderator endpoints and `npm run reports`. Unset means no moderator access. |
 | `REPORT_WEBHOOK_URL` | unset | Slack or Discord incoming webhook that hears about each new report |
+| `PUSH_DISABLED` | unset | `1` stops push notifications. Otherwise they go through Expo's push service to phones that registered. |
+| `EXPO_ACCESS_TOKEN` | unset | Only needed if "enhanced push security" is turned on for the Expo project |
 | `SUPPORT_EMAIL` | unset | Contact address shown with the Contact us form on the You tab (App Store review expects one) |
 | `EXPO_PUBLIC_API_URL` | same origin on web, `http://localhost:8787` on native | Where the app finds the API (set at Expo build time) |
 

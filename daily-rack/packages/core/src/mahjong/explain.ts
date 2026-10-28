@@ -1,5 +1,5 @@
 import type { Card } from './card.ts';
-import { claimOptionsFor, deadReason, type GameState, type Seat } from './game.ts';
+import { SEATS, claimOptionsFor, deadReason, type GameState, type Phase, type PlayerView, type Seat } from './game.ts';
 import { handsFittingExposures } from './match.ts';
 import { isJoker, keyOf } from './set.ts';
 import { groupWithMeaning, listOf, numberWord, tileName, tileNames } from './words.ts';
@@ -145,6 +145,34 @@ export function explainClaim(card: Card, state: GameState, seat: Seat, tile?: nu
       ? `${capitalize(name)} doesn't fit any hand you can still make with the groups you've already exposed.`
       : `${capitalize(name)} isn't used in any hand on the card.`,
   );
+}
+
+/**
+ * explainClaim from one player's own view of the table, which is all an app has. It rebuilds
+ * just the parts of the game the explanation reads, so the answer is the same as from the
+ * full game (a test checks this over whole games).
+ */
+export function explainClaimForView(card: Card, view: PlayerView, tile?: number): ClaimExplanation {
+  const seat = view.seat;
+  const p = view.phase;
+  // Unprompted in a claim window means the engine already has an answer for this seat
+  // (an automatic pass, or the player's own choice). Only whether another player drew is
+  // needed, not what they drew.
+  const phase: Phase =
+    p.kind === 'claim'
+      ? { kind: 'claim', tile: p.tile, from: p.from, responses: SEATS.map((s) => (s === seat && view.prompt?.type === 'claim' ? null : { type: 'pass' })) }
+      : p.kind === 'turn'
+        ? { kind: 'turn', seat: p.seat, drawn: p.seat === seat ? view.drawn : p.drew ? -1 : null }
+        : p.kind === 'ended'
+          ? { kind: 'ended' }
+          : { kind: 'charleston-vote', votes: [null, null, null, null] };
+  const state = {
+    phase,
+    discards: view.discards,
+    players: view.players.map((pl) => ({ hand: pl.seat === seat ? view.hand : [], exposures: pl.exposures })),
+    dead: view.players.map((pl) => pl.dead),
+  } as unknown as GameState;
+  return explainClaim(card, state, seat, tile);
 }
 
 function withoutTile(hand: readonly number[], tile: number): number[] {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLayout } from '../lib/layout.ts';
 import { spokenLabel } from '@daily-rack/core';
 import { HOUSE_CARD } from '@daily-rack/core/mahjong';
 import { Tile, TileButton } from '../components/Tile.tsx';
@@ -42,10 +43,9 @@ function isSolved(step: Step, answer: Answer): boolean {
   return answer.result?.ok === true;
 }
 
-/** Width of the content column inside Screen: 20 px gutters, 560 px at most. */
+/** Width of the content column inside Screen. */
 function useColumnWidth(): number {
-  const { width } = useWindowDimensions();
-  return Math.min(width, 560) - 40;
+  return useLayout().contentWidth;
 }
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));

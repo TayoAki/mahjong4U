@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   SEATS,
   SEAT_WINDS,
   arrangeWin,
+  explainClaimForView,
   isJoker,
   passTarget,
   publicPhaseKey,
@@ -16,7 +17,12 @@ import {
 import type { TablePayload } from '../lib/api.ts';
 import { updatePrefs, usePrefs } from '../lib/prefs.ts';
 import { useSafety } from '../lib/safety.tsx';
-import { Body, Button, Card, Chip, ErrorPanel, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
+import { Body, Button, Card, Chip, Columns, ErrorPanel, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
+import { PipSays } from '../components/Pip.tsx';
+import { Confetti } from '../components/Confetti.tsx';
+import { celebrateHaptic } from '../lib/celebrate.ts';
+import { useLayout } from '../lib/layout.ts';
+import { notePractice } from '../lib/reminders.ts';
 import { Tile, TileStyle } from '../components/Tile.tsx';
 import { useAfterFirstRender } from '../components/Arrive.tsx';
 import { playSound, preloadSounds, setSoundsEnabled } from '../lib/sounds.ts';
@@ -77,7 +83,11 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   const prefs = usePrefs();
   const card = useActiveCard();
   const { openPlayer } = useSafety();
-  const { width } = useWindowDimensions();
+  const layout = useLayout();
+  // Tablets in landscape (and desktops): the table on the left, your rack and moves on the right.
+  const sideBySide = layout.wide;
+  const sideWidth = sideBySide ? Math.floor(((layout.wideColumn - 56 - 22) * 1) / 2.25) : layout.contentWidth;
+  const boardWidth = sideBySide ? Math.min(layout.wideColumn - 56 - 22 - sideWidth, layout.height - 120) : layout.contentWidth;
   const [sort, setSort] = useState<SortMode>('suit');
   const [arranged, setArranged] = useRackOrder(game.id);
   const [arrangeHint, dismissArrangeHint] = useArrangeHint(game.id);
@@ -153,10 +163,30 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
     if (own && own.join(',') !== handKey) setArranged({ order: hand, active: true });
   }, [handKey]);
   const myExposures = view.players[me]?.exposures ?? [];
-  const rackWidth = Math.min(width, 560) - 40 - 16;
-  // Large-tile mode stands five tiles to a row instead of seven.
+  const myDead = view.players[me]?.dead ?? null;
+  const rackWidth = (sideBySide ? sideWidth - 28 : layout.contentWidth) - 16;
+  // Large-tile mode stands five tiles to a row instead of seven; tablets get bigger tiles.
   const perRow = prefs.largeTiles ? 5 : 7;
-  const tileWidth = Math.max(34, Math.min(prefs.largeTiles ? 72 : 52, Math.floor((rackWidth - 6 * (perRow - 1)) / perRow)));
+  const maxTile = (prefs.largeTiles ? 72 : 52) + (layout.tablet ? 14 : 0);
+  const tileWidth = Math.max(34, Math.min(maxTile, Math.floor((rackWidth - 6 * (perRow - 1)) / perRow)));
+
+  // "Why can't I call this?" for the latest discard from someone else.
+  const lastDiscard = view.discards.at(-1);
+  const [why, setWhy] = useState<string | null>(null);
+  useEffect(() => setWhy(null), [lastDiscard?.tile, phase.kind]);
+  const canAskWhy = !prompt && !myDead && lastDiscard !== undefined && lastDiscard.seat !== me && (phase.kind === 'claim' || phase.kind === 'turn');
+
+  // A Mahjong of your own gets confetti; any finished hand counts as practice for Pip's reminders.
+  const [burst, setBurst] = useState(0);
+  const iWon = view.result?.kind === 'mahjong' && view.result.winner === me;
+  useEffect(() => {
+    if (!view.result) return;
+    void notePractice();
+    if (iWon) {
+      setBurst((b) => b + 1);
+      celebrateHaptic();
+    }
+  }, [game.id, Boolean(view.result)]);
 
   const send = (action: Action) => {
     if (action.type === 'charleston-pass' || action.type === 'courtesy-pass' || action.type === 'discard') setReceived(null);
@@ -243,6 +273,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
           ? `Choose ${prompt.count} ${prompt.count === 1 ? 'tile' : 'tiles'} to pass across to ${nameOf(passTarget(me, 'across'))}.`
           : `Waiting for ${names(phase.waitingFor)}.`;
       case 'turn':
+        if (myDead) return `Your hand is dead. ${nameOf(phase.seat)} is playing.`;
         if (phase.seat !== me) return `${nameOf(phase.seat)} is playing.`;
         return view.drawn !== null ? `Your turn. You drew ${tileShort(view.drawn)}. Discard a tile.` : 'Your turn. Discard a tile.';
       case 'claim':
@@ -397,7 +428,33 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
           {received.from !== null ? `${nameOf(received.from)} passed you` : 'You received'} {received.tiles.map(tileShort).join(', ')}. They’re marked New.
         </Text>
       )}
-      {data.table.mode === 'turn' && !ended && !prompt && <Text style={styles.small}>Turn-based: we’ll let you know when it’s your move.</Text>}
+      {myDead && !ended && (
+        <View style={styles.dead} testID="dead-hand-notice">
+          <PipSays mood="oops" size={52}>
+            {`Your hand is dead: ${myDead.text}. You sit out the rest of this hand, and still pay the winner. It happens to everyone, and you’ll get fresh tiles next hand!`}
+          </PipSays>
+        </View>
+      )}
+      {canAskWhy && (
+        <View style={{ gap: 6 }}>
+          <Button
+            variant="text"
+            compact
+            icon="help"
+            title={why ? 'Got it' : `Why can’t I call ${tileShort(lastDiscard.tile)}?`}
+            onPress={() => setWhy(why ? null : explainClaimForView(card, view, lastDiscard.tile).text)}
+            testID="why-call"
+          />
+          {why && (
+            <View style={styles.why} testID="why-call-text">
+              <PipSays mood="think" size={48}>
+                {why}
+              </PipSays>
+            </View>
+          )}
+        </View>
+      )}
+      {data.table.mode === 'turn' && !ended && !prompt && !myDead && <Text style={styles.small}>Turn-based: we’ll let you know when it’s your move.</Text>}
       {jokerWarned && <Notice tone="warn">Jokers fill any group of 3 or more, so throwing one away is rarely right, and nobody can call it. Tap again to discard it anyway.</Notice>}
       {notice && (
         <Text style={[styles.tip, !notice.startsWith('Suggested') && styles.tipWarn]} testID="rack-notice">
@@ -458,47 +515,78 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
 
   const active = (seat: Seat) => (phase.kind === 'turn' && phase.seat === seat) || ('waitingFor' in phase && phase.waitingFor.includes(seat));
 
+  const board = (
+    <TableBoard
+      view={view}
+      caption={`Hand ${game.handNumber} · ${data.table.mode === 'live' ? 'Live' : 'Turn-based'}`}
+      large={prefs.largeTiles}
+      seatInfo={seatInfo}
+      scoreOf={scoreOf}
+      nameOf={nameOf}
+      active={active}
+      width={boardWidth}
+      onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
+    />
+  );
+  const log =
+    game.log.length > 0 ? (
+      <View style={{ gap: 4 }} accessible accessibilityLabel={`Recent play: ${game.log.slice(-3).map((e) => e.text).join(' ')}`}>
+        {game.log.slice(-3).map((entry, i) => (
+          <Text key={`${entry.at}-${i}`} style={[styles.log, (entry.event.type === 'timeout' || entry.event.type === 'dead-hand') && styles.logTimeout]} numberOfLines={3}>
+            {entry.text}
+          </Text>
+        ))}
+      </View>
+    ) : null;
+  const hints = ended ? null : prefs.showHints ? (
+    <Card tone="sage">
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Heading>Closest hands</Heading>
+        <Button variant="text" compact title="Hide" onPress={() => updatePrefs({ showHints: false })} />
+      </Row>
+      <HandHints hand={view.hand} exposures={myExposures} />
+    </Card>
+  ) : (
+    <Button variant="text" compact icon="bulb" title="Show closest hands" onPress={() => updatePrefs({ showHints: true })} />
+  );
+  const resultPanel = view.result ? <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} /> : null;
+
   return (
     <TileStyle.Provider value={{ bigIndex: prefs.largeTiles }}>
-      <Screen footer={footer}>
-        {header}
-        {error && <ErrorPanel message={error} />}
-        {view.result && <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} />}
-
-        <TableBoard
-          view={view}
-          caption={`Hand ${game.handNumber} · ${data.table.mode === 'live' ? 'Live' : 'Turn-based'}`}
-          large={prefs.largeTiles}
-          seatInfo={seatInfo}
-          scoreOf={scoreOf}
-          nameOf={nameOf}
-          active={active}
-          onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
-        />
-
-        {game.log.length > 0 && (
-          <View style={{ gap: 4 }} accessible accessibilityLabel={`Recent play: ${game.log.slice(-3).map((e) => e.text).join(' ')}`}>
-            {game.log.slice(-3).map((entry, i) => (
-              <Text key={`${entry.at}-${i}`} style={[styles.log, entry.event.type === 'timeout' && styles.logTimeout]} numberOfLines={2}>
-                {entry.text}
-              </Text>
-            ))}
-          </View>
+      <View style={{ flex: 1 }}>
+        {sideBySide ? (
+          <Screen wide>
+            {header}
+            {error && <ErrorPanel message={error} />}
+            <Columns
+              ratio={1.25}
+              left={
+                <>
+                  {board}
+                  {log}
+                </>
+              }
+              right={
+                <>
+                  {resultPanel}
+                  <View style={styles.side}>{footer}</View>
+                  {hints}
+                </>
+              }
+            />
+          </Screen>
+        ) : (
+          <Screen footer={footer}>
+            {header}
+            {error && <ErrorPanel message={error} />}
+            {resultPanel}
+            {board}
+            {log}
+            {hints}
+          </Screen>
         )}
-
-        {!ended &&
-          (prefs.showHints ? (
-            <Card tone="sage">
-              <Row style={{ justifyContent: 'space-between' }}>
-                <Heading>Closest hands</Heading>
-                <Button variant="text" compact title="Hide" onPress={() => updatePrefs({ showHints: false })} />
-              </Row>
-              <HandHints hand={view.hand} exposures={myExposures} />
-            </Card>
-          ) : (
-            <Button variant="text" compact icon="bulb" title="Show closest hands" onPress={() => updatePrefs({ showHints: true })} />
-          ))}
-      </Screen>
+        <Confetti run={burst} />
+      </View>
     </TileStyle.Provider>
   );
 }
@@ -509,7 +597,7 @@ function ResultPanel({ data, nameOf, note }: { data: TablePayload; nameOf: (seat
   const result = view.result!;
   const me = view.seat;
   const card = useActiveCard();
-  const { width } = useWindowDimensions();
+  const { contentWidth } = useLayout();
   const winner = result.winner;
   const title = result.kind === 'wall' ? 'Wall game. Nobody wins this one.' : winner === me ? 'Mahjong! You won the hand.' : `${nameOf(winner!)} called Mahjong.`;
   // The winning hand laid out group by group, the way it reads on the card.
@@ -517,12 +605,21 @@ function ResultPanel({ data, nameOf, note }: { data: TablePayload; nameOf: (seat
     result.kind === 'mahjong' && winner !== null && result.handId
       ? arrangeWin(card, result.handId, result.assignment ?? '', result.hands[winner] ?? [], view.players[winner]?.exposures ?? [])
       : null;
-  const groupTile = Math.max(16, Math.min(26, Math.floor((Math.min(width, 560) - 72 - 6 * 6) / 14)));
+  const groupTile = Math.max(16, Math.min(30, Math.floor((Math.min(contentWidth, 560) - 32 - 6 * 6) / 14)));
+  const pip =
+    result.kind === 'wall'
+      ? { mood: 'think' as const, text: 'A wall game: nobody wins, nobody pays. On to the next one!' }
+      : winner === me
+        ? { mood: 'cheer' as const, text: 'Mahjong! Pip is doing a happy little dance for you.' }
+        : { mood: 'happy' as const, text: `${nameOf(winner!)} got there first. Every hand teaches something. Deal again?` };
   return (
     <Card tone={winner === me ? 'pink' : 'default'} testID="result-panel">
       <Text style={styles.resultTitle} accessibilityRole="header">
         {title}
       </Text>
+      <PipSays mood={pip.mood} size={52} testID="result-pip">
+        {pip.text}
+      </PipSays>
       {result.kind === 'mahjong' && result.pattern && (
         <View style={{ gap: 6 }}>
           <Pattern pattern={result.pattern} />
@@ -604,6 +701,9 @@ const styles = StyleSheet.create({
   log: { fontSize: 13, color: colors.muted },
   logTimeout: { color: colors.ink, fontWeight: '700' },
   note: { fontSize: 16, fontWeight: '700', color: colors.primary },
+  dead: { backgroundColor: '#FFF2CC', borderRadius: 14, padding: 10 },
+  why: { backgroundColor: colors.sage, borderRadius: 14, padding: 10 },
+  side: { backgroundColor: colors.surface, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 14 },
   resultTitle: { fontFamily: fonts.serif, fontSize: 26, lineHeight: 31, color: colors.ink },
   groups: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 4 },
   player: { fontSize: 16, fontWeight: '700', color: colors.ink },

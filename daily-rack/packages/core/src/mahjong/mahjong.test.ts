@@ -12,6 +12,7 @@ import {
   concretize,
   deadHandReason,
   explainClaim,
+  explainClaimForView,
   exposureOptions,
   SEATS,
   findWin,
@@ -840,6 +841,27 @@ describe('why can I (not) call this?', () => {
       }
     }
     expect(prompts).toBeGreaterThan(5);
+  });
+
+  it('gives the same answer from a player’s own view of the table as from the whole game', () => {
+    let checked = 0;
+    for (let i = 0; i < 3; i++) {
+      let state = newGame(card, { seed: 600 + i, skipCharleston: i > 0 });
+      const random = rng(40 + i);
+      while (state.phase.kind !== 'ended') {
+        for (const s of SEATS) {
+          const tiles = [undefined, ...state.discards.slice(-2).map((d) => d.tile)];
+          for (const t of tiles) {
+            expect(explainClaimForView(card, playerView(card, state, s), t)).toEqual(explainClaim(card, state, s, t));
+            checked += 1;
+          }
+        }
+        const pending = pendingSeats(state);
+        const seat = pending[0]!;
+        state = applyAction(card, state, seat, botAction(card, state, seat, 'normal', random)).state;
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
   });
 });
 

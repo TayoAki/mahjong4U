@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Stack, type ErrorBoundaryProps } from 'expo-router';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Device from 'expo-device';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
@@ -17,6 +20,13 @@ import { OfflineGameView } from '../offline/OfflineGameView.tsx';
 import { colors } from '../theme.ts';
 
 installProblemCatcher();
+
+// Phones stay upright. iPads can already turn (app.json); Android tablets are let loose here.
+if (Platform.OS === 'android') {
+  void Device.getDeviceTypeAsync()
+    .then((type) => (type === Device.DeviceType.TABLET ? ScreenOrientation.unlockAsync() : undefined))
+    .catch(() => undefined);
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular, Anton_400Regular });

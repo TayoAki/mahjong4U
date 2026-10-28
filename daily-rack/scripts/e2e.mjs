@@ -50,8 +50,9 @@ async function autoplay(page, { timeout = 300_000, shots = {} } = {}) {
     }
   };
   let discards = 0;
+  let why = null;
   while (Date.now() < until) {
-    if (await visible(page, 'result-panel')) return { done: true, discards };
+    if (await visible(page, 'result-panel')) return { done: true, discards, why };
     if (await enabled(page, 'action-claim-mahjong')) await tap(page, 'action-claim-mahjong');
     else if (await enabled(page, 'action-mahjong')) await tap(page, 'action-mahjong');
     else if (await visible(page, 'action-pass')) {
@@ -86,9 +87,17 @@ async function autoplay(page, { timeout = 300_000, shots = {} } = {}) {
         await tap(page, 'action-discard');
         discards += 1;
       }
+    } else if (why === null && (await visible(page, 'why-call'))) {
+      // Ask once why we can't call someone else's discard.
+      await tap(page, 'why-call');
+      const text = (await page.getByTestId('why-call-text').textContent({ timeout: 1500 }).catch(() => '')) ?? '';
+      if (text) {
+        why = text;
+        await snap('why');
+      }
     } else await page.waitForTimeout(150);
   }
-  return { done: false, discards };
+  return { done: false, discards, why };
 }
 
 const browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
@@ -233,8 +242,9 @@ try {
     check('your rack order survives a reload', JSON.stringify(await rackLabels()) === JSON.stringify(expected));
   }
 
-  const solo = await autoplay(page, { shots: { charleston: '06-vs-computer-charleston', midgame: '07-vs-computer-midgame' } });
+  const solo = await autoplay(page, { shots: { charleston: '06-vs-computer-charleston', midgame: '07-vs-computer-midgame', why: '07b-why-cant-i-call' } });
   check('a full hand against the computer reaches a result', solo.done, `${solo.discards} discards by the human seat`);
+  check('"Why can’t I call this?" explains a discard', (solo.why ?? '').length > 30, (solo.why ?? '').slice(0, 90));
   await page.getByTestId('result-panel').scrollIntoViewIfNeeded();
   await shot(page, '08-vs-computer-result');
   check('the next hand can be dealt', await visible(page, 'next-hand'));
