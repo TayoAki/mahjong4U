@@ -113,6 +113,22 @@ export function bestDistance(card: Card, concealed: readonly number[], exposures
   return best;
 }
 
+/**
+ * Faces that would bring this fit a tile closer if drawn: any face its remaining groups
+ * still need, plus 'JOKER' when a joker could fill a gap. `concealed` is the hand the fit
+ * was measured from. Used to count useful draws.
+ */
+export function helpfulFaces(fit: HandFit, concealed: readonly number[]): string[] {
+  const counts = count(concealed);
+  const faces: string[] = [];
+  for (const face of new Set(fit.remaining.map((g) => g.face))) {
+    const more = new Map(counts.naturals).set(face, (counts.naturals.get(face) ?? 0) + 1);
+    if (deficit(fit.remaining, { naturals: more, jokers: counts.jokers }) < fit.distance) faces.push(face);
+  }
+  if (deficit(fit.remaining, { naturals: counts.naturals, jokers: counts.jokers + 1 }) < fit.distance) faces.push('JOKER');
+  return faces;
+}
+
 export interface Win {
   concrete: ConcreteHand;
   jokerless: boolean;

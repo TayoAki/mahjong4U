@@ -5,3 +5,4 @@ export * from './game.ts';
 export * from './bots.ts';
 export * from './dead.ts';
 export * from './explain.ts';
+export * from './coach.ts';

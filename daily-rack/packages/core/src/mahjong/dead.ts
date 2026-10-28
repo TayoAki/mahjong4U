@@ -31,7 +31,7 @@ export interface DeadReason {
 }
 
 /** Copies of a match key in the set: flowers are interchangeable, so there are eight. */
-function copiesOf(key: string): number {
+export function copiesOf(key: string): number {
   return key === 'FLOWER' ? 8 : 4;
 }
 
