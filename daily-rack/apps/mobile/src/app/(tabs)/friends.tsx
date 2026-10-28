@@ -8,6 +8,7 @@ import { useSafety } from '../../lib/safety.tsx';
 import { copyText, shareLink } from '../../lib/share.ts';
 import { track } from '../../lib/analytics.ts';
 import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, IconButton, Loading, Notice, Row, Screen } from '../../components/ui.tsx';
+import { LinkCard } from '../../components/LinkCard.tsx';
 import { colors, fonts } from '../../theme.ts';
 import { useNotifications } from '../../lib/notification-prompt.tsx';
 
@@ -91,6 +92,7 @@ export default function FriendsScreen() {
       </View>
       {error && <ErrorPanel message={error} onRetry={load} />}
       {message && <Notice>{message}</Notice>}
+      <LinkCard icon="calendar" title="Game Night" body="Plan a game around a real table: pick times, send a link, everyone votes." onPress={() => router.push('/nights')} testID="friends-nights" />
 
       {overview && (
         <>

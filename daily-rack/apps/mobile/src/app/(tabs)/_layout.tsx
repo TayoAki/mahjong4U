@@ -35,9 +35,9 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon('home') }} />
+      <Tabs.Screen name="learn" options={{ title: 'Learn', tabBarIcon: icon('bulb') }} />
       <Tabs.Screen name="play" options={{ title: 'Play', tabBarIcon: icon('play'), tabBarBadge: yourMoves || undefined }} />
       <Tabs.Screen name="friends" options={{ title: 'Friends', tabBarIcon: icon('users'), tabBarBadge: friendAlerts || undefined }} />
-      <Tabs.Screen name="nights" options={{ title: 'Game Night', tabBarIcon: icon('calendar') }} />
       <Tabs.Screen name="you" options={{ title: 'You', tabBarIcon: icon('user') }} />
     </Tabs>
   );

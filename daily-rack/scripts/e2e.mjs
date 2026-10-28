@@ -5,8 +5,8 @@
 //   4. The friends sit at the same live table and play a hand together, with table chat.
 //   5. Game Night: plan, invite link, vote, RSVP, lock in, calendar file, play online instead.
 //   6. Safety: community rules, the word filter, reporting a message, blocking and unblocking.
-//   7. Voice chat at a private table, a quick match together, lessons, stats, the
-//      leaderboard and an offline game.
+//   7. Voice chat at a private table, a quick match together, the Learn tab and a lesson,
+//      stats, the leaderboard and an offline game.
 //   8. Report a problem, with a screenshot, from the You tab and from a table's help sheet.
 //      (Start the server with MATCH_FILL_CASUAL_MS=3000 or the quick match waits 20 s.)
 // Usage: BASE_URL=http://localhost:8787 node scripts/e2e.mjs
@@ -432,8 +432,10 @@ try {
   const matchId = page.url().split('/').pop();
   for (const p of [page, beaPage]) await api(p, 'POST', `/v1/tables/${matchId}/leave`);
 
-  await page.goto(`${BASE}/lessons`);
+  await page.goto(`${BASE}/learn`);
   await page.locator('[data-testid^="lesson-row-"]').first().waitFor();
+  check('the Learn tab greets with Pip and a path of units', await page.getByTestId('learn-greeting').isVisible().catch(() => false) && (await page.getByText('Unit 4').count()) > 0);
+  await shot(page, '30a-learn');
   const lessonCount = await page.locator('[data-testid^="lesson-row-"]').count();
   await page.locator('[data-testid^="lesson-row-"]').first().click();
   await page.getByTestId('lesson-next').waitFor();

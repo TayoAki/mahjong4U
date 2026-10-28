@@ -142,7 +142,7 @@ export default function PlayScreen() {
 
       <View style={{ gap: 10 }}>
         <Heading>Learn and improve</Heading>
-        <LinkCard icon="card" title="Lessons" body="Ten short lessons, from the tiles to scoring, with quick checks." onPress={() => router.push('/lessons')} testID="open-lessons" />
+        <LinkCard icon="bulb" title="Learn to play with Pip" body="Ten short lessons, from the tiles to scoring, with practice games along the way." onPress={() => router.push('/learn')} testID="open-lessons" />
         <LinkCard icon="flame" title="Your stats" body="Hands won, streaks, rating and the hands on the card you’ve made." onPress={() => router.push('/stats')} testID="open-stats" />
       </View>
 

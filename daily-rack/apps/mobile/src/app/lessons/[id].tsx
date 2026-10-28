@@ -16,7 +16,7 @@ export default function LessonScreen() {
   const index = LESSONS.findIndex((l) => l.id === id);
   const lesson = LESSONS[index];
   const next = LESSONS[index + 1];
-  const back = () => (router.canGoBack() ? router.back() : router.replace('/lessons'));
+  const back = () => (router.canGoBack() ? router.back() : router.replace('/learn'));
 
   if (!lesson) {
     return (
@@ -24,7 +24,7 @@ export default function LessonScreen() {
         <TopBar title="Lessons" onBack={back} />
         <Display size={28}>We couldn’t find that lesson</Display>
         <Body muted>It may have moved. Every lesson is on the list.</Body>
-        <Button title="See all lessons" onPress={() => router.replace('/lessons')} />
+        <Button title="See all lessons" onPress={() => router.replace('/learn')} />
       </Screen>
     );
   }

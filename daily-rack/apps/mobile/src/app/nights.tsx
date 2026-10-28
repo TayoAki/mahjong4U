@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { api, type NightSummary } from '../../lib/api.ts';
-import { formatWhen } from '../../lib/dates.ts';
-import { useRealtimeMessages } from '../../lib/realtime.tsx';
-import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Icon, Row, Screen } from '../../components/ui.tsx';
-import { colors } from '../../theme.ts';
+import { api, type NightSummary } from '../lib/api.ts';
+import { formatWhen } from '../lib/dates.ts';
+import { useRealtimeMessages } from '../lib/realtime.tsx';
+import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Icon, Row, Screen, TopBar } from '../components/ui.tsx';
+import { colors } from '../theme.ts';
 
 const RSVP_LABEL = { pending: 'Not answered', yes: 'You’re going', maybe: 'Maybe', no: 'Can’t make it' } as const;
 
@@ -33,7 +33,8 @@ export default function NightsScreen() {
 
   return (
     <Screen>
-      <View style={{ paddingTop: 12 }}>
+      <TopBar title="Game Night" onBack={() => (router.canGoBack() ? router.back() : router.replace('/friends'))} />
+      <View>
         <Eyebrow>Around a real table</Eyebrow>
         <Display size={38}>Game Night</Display>
         <Body muted>Pick a few times, send one link, and let everyone vote. When it’s set, it goes straight into your calendar.</Body>

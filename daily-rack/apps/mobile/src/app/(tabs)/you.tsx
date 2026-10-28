@@ -145,7 +145,7 @@ export default function YouScreen() {
         icon="card"
         title="Lessons"
         body={lessons.loaded ? `${LESSONS.filter((l) => lessons.done.has(l.id)).length} of ${LESSONS.length} done. Learn the game step by step.` : 'Learn the game step by step.'}
-        onPress={() => router.push('/lessons')}
+        onPress={() => router.push('/learn')}
         testID="you-lessons"
       />
       <LinkCard icon="flame" title="Your stats" body="Hands, wins, streaks, rating and card progress." onPress={() => router.push('/stats')} testID="you-stats" />

@@ -8,6 +8,9 @@ import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storag
 import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
+import { PipSays } from '../../components/Pip.tsx';
+import { LESSONS } from '../../lessons/content.ts';
+import { useLessonProgress } from '../../lessons/progress.ts';
 import { colors, fonts } from '../../theme.ts';
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -20,6 +23,7 @@ export default function TodayScreen() {
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<TableSummary[]>([]);
   const [night, setNight] = useState<NightSummary | null>(null);
+  const lessons = useLessonProgress();
 
   const load = useCallback(() => {
     setError(null);
@@ -156,6 +160,17 @@ export default function TodayScreen() {
         </Card>
       )}
 
+      {lessons.loaded && lessons.done.size < LESSONS.length && (
+        <Pressable onPress={() => router.push('/learn')} accessibilityRole="button" accessibilityLabel="Learn to play with Pip" testID="today-learn">
+          <Card tone="sage">
+            <PipSays mood={lessons.done.size === 0 ? 'wave' : 'happy'}>
+              {lessons.done.size === 0
+                ? 'New to mahjong? I’ll teach you, one small step at a time. Tap to start!'
+                : `You’re ${lessons.done.size} of ${LESSONS.length} lessons in. Tap to keep going!`}
+            </PipSays>
+          </Card>
+        </Pressable>
+      )}
       <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />
       <LinkCard icon="calendar" title="Plan a game night" body="Find a date that works for your group." onPress={() => router.push('/nights')} />
     </Screen>
