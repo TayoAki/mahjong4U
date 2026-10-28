@@ -6,6 +6,7 @@ import { ApiError, api, type SeatChoice, type TablePayload } from '../../lib/api
 import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { useSafety } from '../../lib/safety.tsx';
+import { useMatchmaking } from '../../lib/matchmaking.tsx';
 import { track } from '../../lib/analytics.ts';
 import { ChatPanel } from '../../components/ChatPanel.tsx';
 import { Body, Button, Card, Display, ErrorPanel, IconButton, Loading, Row, Screen, Sheet, TopBar } from '../../components/ui.tsx';
@@ -13,6 +14,8 @@ import { CardView } from '../../game/CardView.tsx';
 import { GameScreen } from '../../game/GameScreen.tsx';
 import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { Lobby } from '../../game/Lobby.tsx';
+import { useVoice } from '../../voice/useVoice.ts';
+import { VoiceBar } from '../../voice/VoiceBar.tsx';
 
 export default function TableScreen() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
@@ -26,6 +29,10 @@ export default function TableScreen() {
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<'chat' | 'card' | 'leave' | 'help' | null>(null);
   const [unread, setUnread] = useState(0);
+  const { find } = useMatchmaking();
+  const [phrases, setPhrases] = useState<string[]>([]);
+  const [ratingBefore, setRatingBefore] = useState<number | null>(null);
+  const [ratingNote, setRatingNote] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -38,6 +45,30 @@ export default function TableScreen() {
   }, [id]);
   // Reload on (re)connect so nothing pushed while the socket was down is missed.
   useEffect(load, [load, connected]);
+
+  // Voice chat is for friends at private tables.
+  const voiceAllowed = Boolean(data && data.table.kind === 'private' && data.mySeat !== null && data.table.status !== 'closed');
+  const voice = useVoice(id, voiceAllowed);
+
+  // Matched tables: strangers chat in quick phrases, and ranked hands move your rating.
+  const isPublic = data?.table.kind === 'public';
+  const ranked = Boolean(data?.table.ranked);
+  const ended = Boolean(data?.game?.view.result);
+  useEffect(() => {
+    if (!isPublic) return;
+    api
+      .matchmaking()
+      .then((r) => setPhrases(r.phrases))
+      .catch(() => undefined);
+  }, [isPublic]);
+  useEffect(() => {
+    if (!ranked) return;
+    api
+      .stats()
+      .then((s) => (ended ? setRatingNote(`Your rating: ${s.ranked.rating}${ratingBefore !== null ? ` (${s.ranked.rating - ratingBefore >= 0 ? '+' : ''}${s.ranked.rating - ratingBefore})` : ''}`) : setRatingBefore(s.ranked.rating)))
+      .catch(() => undefined);
+    // Once at the start of the hand and once when it ends.
+  }, [ranked, ended]);
 
   useRealtimeMessages((m) => {
     if (m.type === 'table' && m.tableId === id) {
@@ -80,32 +111,36 @@ export default function TableScreen() {
   const { table } = data;
   // A game against computer players only has no one to share the code with.
   const solo = table.seats.filter((s) => s.kind === 'human').length === 1 && !table.seats.some((s) => s.kind === 'open') && data.mySeat !== null;
+  const humans = table.seats.filter((s) => s.kind === 'human').length;
   const header = (
-    <TopBar
-      title={solo ? 'Vs computer' : `Table ${table.code}`}
-      onBack={back}
-      right={
-        <Row gap={0}>
-          <IconButton icon="help" label="How to play" onPress={() => setSheet('help')} />
-          <IconButton icon="card" label="House card" onPress={() => setSheet('card')} />
-          <IconButton
-            icon="chat"
-            label={unread ? `Table chat, ${unread} new` : 'Table chat'}
-            badge={unread}
-            onPress={() => {
-              setUnread(0);
-              setSheet('chat');
-            }}
-          />
-        </Row>
-      }
-    />
+    <View style={{ gap: 8 }}>
+      <TopBar
+        title={isPublic ? (ranked ? 'Ranked game' : 'Quick match') : solo ? 'Vs computer' : `Table ${table.code}`}
+        onBack={back}
+        right={
+          <Row gap={0}>
+            <IconButton icon="help" label="How to play" onPress={() => setSheet('help')} />
+            <IconButton icon="card" label="House card" onPress={() => setSheet('card')} />
+            <IconButton
+              icon="chat"
+              label={unread ? `Table chat, ${unread} new` : 'Table chat'}
+              badge={unread}
+              onPress={() => {
+                setUnread(0);
+                setSheet('chat');
+              }}
+            />
+          </Row>
+        }
+      />
+      {voiceAllowed && humans >= 2 && <VoiceBar voice={voice} seats={table.seats} me={principalId} />}
+    </View>
   );
 
   const sheets = (
     <>
       <Sheet visible={sheet === 'chat'} title="Table chat" onClose={() => setSheet(null)}>
-        <ChatPanel conversationId={data.conversationId} height={420} emptyText="Say hello to the table." />
+        <ChatPanel conversationId={data.conversationId} height={420} emptyText="Say hello to the table." phrases={isPublic ? phrases : undefined} />
       </Sheet>
       <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
         <CardView />
@@ -117,7 +152,9 @@ export default function TableScreen() {
             ? table.hostId === principalId
               ? 'Everyone waiting here will be sent back.'
               : 'Your seat opens up for someone else.'
-            : 'A computer player takes your seat so the others can finish.'}
+            : ranked && !ended
+              ? 'A computer player takes your seat so the others can finish. Leaving a ranked game early counts as a loss for your rating.'
+              : 'A computer player takes your seat so the others can finish.'}
         </Body>
         <Button
           title={table.status === 'lobby' && table.hostId === principalId ? 'Close table' : 'Leave'}
@@ -207,7 +244,24 @@ export default function TableScreen() {
 
   return (
     <>
-      <GameScreen data={data} header={header} busy={busy} error={error} act={act} nextHand={() => run(() => api.nextHand(id))} leave={() => setSheet('leave')} />
+      <GameScreen
+        data={data}
+        header={header}
+        busy={busy}
+        error={error}
+        act={act}
+        nextHand={() => run(() => api.nextHand(id))}
+        leave={() => setSheet('leave')}
+        rematch={
+          isPublic
+            ? () => {
+                void find(ranked ? 'ranked' : 'casual');
+                router.replace('/play');
+              }
+            : undefined
+        }
+        resultNote={ratingNote}
+      />
       {sheets}
     </>
   );

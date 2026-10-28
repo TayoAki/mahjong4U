@@ -10,7 +10,18 @@ import { Body, Button, ErrorPanel, Icon, Loading } from './ui.tsx';
 const MAX = 500;
 
 /** Messages for one conversation (direct, table or game night), live over the socket. */
-export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say hello.', height }: { conversationId: string; emptyText?: string; height?: number }) {
+export function ChatPanel({
+  conversationId,
+  emptyText = 'No messages yet. Say hello.',
+  height,
+  phrases,
+}: {
+  conversationId: string;
+  emptyText?: string;
+  height?: number;
+  /** At matched tables strangers send these set phrases instead of typing. */
+  phrases?: string[];
+}) {
   const { principalId } = useSession();
   const { guard, openMessage, version, rulesAccepted, askName, agreeInline } = useSafety();
   const [name, setName] = useState('');
@@ -52,14 +63,14 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
     if (messages?.length) setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
   }, [messages?.length]);
 
-  const send = async () => {
-    const body = draft.trim();
+  const send = async (text?: string) => {
+    const body = (text ?? draft).trim();
     if (!body || sending) return;
     setSending(true);
     try {
       const message = await guard(() => api.sendMessage(conversationId, body));
       if (!message) return;
-      setDraft('');
+      if (text === undefined) setDraft('');
       setMessages((prev) => (prev && !prev.some((x) => x.id === message.id) ? [...prev, message] : prev));
       setError(null);
     } catch (e) {
@@ -104,7 +115,15 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
           })}
         </ScrollView>
       )}
-      {!rulesAccepted || askName ? (
+      {phrases && rulesAccepted ? (
+        <View style={styles.phrases} testID="chat-phrases">
+          {phrases.map((p) => (
+            <Pressable key={p} onPress={() => void send(p)} disabled={sending} accessibilityRole="button" accessibilityLabel={`Send: ${p}`} style={styles.phrase}>
+              <Text style={styles.phraseText}>{p}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : !rulesAccepted || askName ? (
         // Asked right here rather than in another sheet, which can open behind this one.
         <View style={styles.ask} testID="chat-ask">
           {!rulesAccepted && (
@@ -145,7 +164,7 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
             style={styles.input}
             multiline
             accessibilityLabel="Message"
-            onSubmitEditing={send}
+            onSubmitEditing={() => void send()}
             blurOnSubmit={false}
             returnKeyType="send"
             onKeyPress={(e) => {
@@ -157,7 +176,7 @@ export function ChatPanel({ conversationId, emptyText = 'No messages yet. Say he
               }
             }}
           />
-          <Pressable testID="chat-send" accessibilityRole="button" accessibilityLabel="Send" onPress={send} disabled={!draft.trim() || sending} style={[styles.send, (!draft.trim() || sending) && { opacity: 0.4 }]}>
+          <Pressable testID="chat-send" accessibilityRole="button" accessibilityLabel="Send" onPress={() => void send()} disabled={!draft.trim() || sending} style={[styles.send, (!draft.trim() || sending) && { opacity: 0.4 }]}>
             <Icon name="send" color="#fff" size={20} />
           </Pressable>
         </View>
@@ -175,6 +194,9 @@ const styles = StyleSheet.create({
   text: { fontSize: 16, lineHeight: 22, color: colors.ink },
   time: { fontSize: 11, color: colors.muted, alignSelf: 'flex-end' },
   ask: { gap: 8, backgroundColor: colors.sage, borderRadius: 14, padding: 12 },
+  phrases: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  phrase: { backgroundColor: colors.chip, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
+  phraseText: { fontSize: 15, fontWeight: '600', color: colors.ink },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   input: { flex: 1, minHeight: 46, maxHeight: 120, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10, fontSize: 16, color: colors.ink },
   send: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },

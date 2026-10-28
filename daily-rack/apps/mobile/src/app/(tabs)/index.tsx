@@ -7,6 +7,7 @@ import { formatWhen } from '../../lib/dates.ts';
 import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storage.ts';
 import { Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
+import { LinkCard } from '../../components/LinkCard.tsx';
 import { colors, fonts } from '../../theme.ts';
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -116,7 +117,7 @@ export default function TodayScreen() {
                   {t.players.filter((p) => p !== 'Open seat').map((p) => p.replace(' (computer)', '')).join(' · ')}
                 </Text>
                 <Body small muted>
-                  {t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
+                  {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
                 </Body>
               </View>
               <Badge label={t.yourMove ? 'Your move' : 'Invited'} tone={t.yourMove ? 'pink' : 'ink'} />
@@ -174,23 +175,6 @@ function Wordmark({ streak, onStreak }: { streak: number; onStreak?: () => void 
         </Pressable>
       )}
     </View>
-  );
-}
-
-function LinkCard({ icon, title, body, onPress }: { icon: IconName; title: string; body: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title} style={({ pressed }) => [styles.linkCard, pressed && { backgroundColor: colors.sage }]}>
-      <View style={styles.linkIcon}>
-        <Icon name={icon} color={colors.ink} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.linkTitle}>{title}</Text>
-        <Body small muted>
-          {body}
-        </Body>
-      </View>
-      <Icon name="chevron" color={colors.muted} />
-    </Pressable>
   );
 }
 

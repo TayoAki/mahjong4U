@@ -7,6 +7,8 @@ import { useRealtimeMessages } from '../../lib/realtime.tsx';
 import { track } from '../../lib/analytics.ts';
 import { Badge, Body, Button, Card, Chip, Display, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { HowToPlay } from '../../game/HowToPlay.tsx';
+import { OnlineCard } from '../../game/OnlineCard.tsx';
+import { LinkCard } from '../../components/LinkCard.tsx';
 import { LEVEL_LABEL } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
 
@@ -20,12 +22,17 @@ export default function PlayScreen() {
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<TableSummary | null>(null);
   const [help, setHelp] = useState(false);
+  const [rating, setRating] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api
       .tables()
       .then((r) => setTables(r.tables))
       .catch((e: Error) => setError(e.message));
+    api
+      .stats()
+      .then((s) => setRating(s.ranked.games > 0 ? s.ranked.rating : null))
+      .catch(() => undefined);
   }, []);
   useFocusEffect(load);
   useRealtimeMessages((m) => {
@@ -100,6 +107,8 @@ export default function PlayScreen() {
         <Button title="Deal me in" icon="arrow" onPress={playComputer} loading={busy === 'quick'} testID="quick-play" />
       </Card>
 
+      <OnlineCard rating={rating} />
+
       <Card style={{ gap: 12 }}>
         <Row>
           <Icon name="users" />
@@ -125,6 +134,12 @@ export default function PlayScreen() {
       </Card>
 
       <View style={{ gap: 10 }}>
+        <Heading>Learn and improve</Heading>
+        <LinkCard icon="card" title="Lessons" body="Ten short lessons, from the tiles to scoring, with quick checks." onPress={() => router.push('/lessons')} testID="open-lessons" />
+        <LinkCard icon="flame" title="Your stats" body="Hands won, streaks, rating and the hands on the card you’ve made." onPress={() => router.push('/stats')} testID="open-stats" />
+      </View>
+
+      <View style={{ gap: 10 }}>
         <Heading>Your tables</Heading>
         {tables && tables.length === 0 && <Body muted>No games yet. Deal one above.</Body>}
         {tables?.map((t) => (
@@ -140,7 +155,7 @@ export default function PlayScreen() {
                 {t.players.filter((p) => p !== 'Open seat').join(' · ')}
               </Text>
               <Body small muted>
-                {t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : t.status === 'between' ? `After hand ${t.handNumber}` : `Hand ${t.handNumber}`} · {t.code}
+                {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : t.status === 'between' ? `After hand ${t.handNumber}` : `Hand ${t.handNumber}`} · {t.code}
               </Body>
             </View>
             {t.yourMove ? <Badge label="Your move" /> : t.invited ? <Badge label="Invited" tone="ink" /> : null}

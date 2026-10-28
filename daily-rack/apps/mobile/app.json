@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.dailyrack.mobile",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Record an optional voiceover for your rack clip.",
+        "NSMicrophoneUsageDescription": "Talk with friends at your table in voice chat, and record an optional voiceover for your rack clip.",
         "NSPhotoLibraryAddUsageDescription": "Save your rack clips to Photos."
       }
     },
@@ -25,7 +25,11 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "output": "single",
@@ -55,8 +59,15 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Record an optional voiceover for your rack clip.",
+          "microphonePermission": "Talk with friends at your table in voice chat, and record an optional voiceover for your rack clip.",
           "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Daily Rack does not use your camera. The voice chat library lists this entry, but the app never asks for camera access.",
+          "microphonePermission": "Talk with friends at your table in voice chat, and record an optional voiceover for your rack clip."
         }
       ]
     ],

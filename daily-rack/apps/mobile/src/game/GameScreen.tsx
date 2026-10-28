@@ -36,6 +36,10 @@ interface Props {
   act: (action: Action) => void;
   nextHand: () => void;
   leave: () => void;
+  /** Matched games are one hand: this looks for another game of the same kind. */
+  rematch?: () => void;
+  /** A line for the result, such as a ranked game's rating change. */
+  resultNote?: string | null;
 }
 
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
@@ -62,7 +66,7 @@ interface Received {
  * players around the felt with their tiles face down, and your rack pinned at the bottom
  * with whatever you can do right now just above it.
  */
-export function GameScreen({ data, header, busy, error, act, nextHand, leave }: Props) {
+export function GameScreen({ data, header, busy, error, act, nextHand, leave, rematch, resultNote }: Props) {
   const game = data.game!;
   const view = game.view;
   const me = view.seat;
@@ -364,7 +368,11 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
       )}
       {ended ? (
         <>
-          {data.table.status === 'between' && <Button title="Deal the next hand" icon="arrow" onPress={nextHand} loading={busy} testID="next-hand" />}
+          {rematch ? (
+            <Button title="Find another match" icon="arrow" onPress={rematch} testID="rematch" />
+          ) : (
+            data.table.status === 'between' && <Button title="Deal the next hand" icon="arrow" onPress={nextHand} loading={busy} testID="next-hand" />
+          )}
           <Button title="Leave table" variant="text" onPress={leave} compact />
         </>
       ) : (
@@ -421,7 +429,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
     <Screen footer={footer}>
       {header}
       {error && <ErrorPanel message={error} />}
-      {view.result && <ResultPanel data={data} nameOf={nameOf} />}
+      {view.result && <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} />}
 
       <TableBoard
         view={view}
@@ -459,7 +467,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
   );
 }
 
-function ResultPanel({ data, nameOf }: { data: TablePayload; nameOf: (seat: number) => string }) {
+function ResultPanel({ data, nameOf, note }: { data: TablePayload; nameOf: (seat: number) => string; note: string | null }) {
   const game = data.game!;
   const view = game.view;
   const result = view.result!;
@@ -526,6 +534,11 @@ function ResultPanel({ data, nameOf }: { data: TablePayload; nameOf: (seat: numb
           );
         })}
       </View>
+      {note && (
+        <Text style={styles.note} testID="result-note">
+          {note}
+        </Text>
+      )}
       <Body small muted>
         Table totals: {data.table.seats.map((s, p) => `${s.position === data.mySeat ? 'You' : shortName(s.name)} ${formatScore(data.table.scores[p] ?? 0)}`).join(' · ')}
       </Body>
@@ -567,6 +580,7 @@ const styles = StyleSheet.create({
   },
   log: { fontSize: 13, color: colors.muted },
   logTimeout: { color: colors.ink, fontWeight: '700' },
+  note: { fontSize: 16, fontWeight: '700', color: colors.primary },
   resultTitle: { fontFamily: fonts.serif, fontSize: 26, lineHeight: 31, color: colors.ink },
   groups: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 4 },
   player: { fontSize: 16, fontWeight: '700', color: colors.ink },

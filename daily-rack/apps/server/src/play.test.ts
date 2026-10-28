@@ -3,7 +3,8 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
-import { TILE_FACES, type PlayerView } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, TILE_FACES, type PlayerView } from '@daily-rack/core/mahjong';
+import { ratingChanges } from './stats.ts';
 import { createApp, createServices, type Services } from './app.ts';
 import { loadContent, syncRevisions } from './content.ts';
 import { openDb, type Db } from './db.ts';
@@ -24,7 +25,10 @@ function setup(options: Parameters<typeof createServices>[1] = {}) {
 }
 
 beforeEach(() => setup());
-afterEach(() => services.tables.stopAll());
+afterEach(() => {
+  services.tables.stopAll();
+  services.matchmaker.stop();
+});
 
 async function device(name?: string, { rules = true }: { rules?: boolean } = {}) {
   let cookie = '';
@@ -625,5 +629,156 @@ describe('table fixes from the walkthrough', () => {
     expect((await bea.call('POST', '/v1/feedback', { message: 'Love the Charleston!' })).status).toBe(201);
     const inbox = await (await app.request('/v1/admin/feedback', { headers: { 'x-admin-token': 'test-moderator-token' } })).json() as { feedback: { message: string; from: { name: string } }[] };
     expect(inbox.feedback).toMatchObject([{ message: 'Love the Charleston!', from: { name: 'Bea' } }]);
+  });
+});
+
+describe('stats, ranked play and voice chat', () => {
+  const until = async <T>(fn: () => Promise<T | null | undefined | false>, ms = 3000): Promise<T> => {
+    const end = Date.now() + ms;
+    for (;;) {
+      const value = await fn();
+      if (value) return value;
+      if (Date.now() > end) throw new Error('timed out');
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+  const quickMatches = () => {
+    services.tables.stopAll();
+    services.matchmaker.stop();
+    setup({ matchFillAfterMs: { casual: 30, ranked: 30 }, matchTickMs: 20 });
+  };
+  const publicTableOf = (d: Device) =>
+    until(async () => ((await d.call('GET', '/v1/tables')).body.tables as { id: string; kind: string }[]).find((t) => t.kind === 'public')?.id);
+
+  it('records every hand in each player’s stats', async () => {
+    const ann = await device('Ann');
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], settings: { skipCharleston: true } });
+    await playOut(created.body.table.id, [ann]);
+    const stats = (await ann.call('GET', '/v1/me/stats')).body;
+    expect(stats).toMatchObject({ hands: 1, card: { total: HOUSE_CARD.hands.length }, ranked: { games: 0, rating: 1200 } });
+    expect(stats.recent).toHaveLength(1);
+    expect(stats.card.sections.reduce((n: number, s: { total: number }) => n + s.total, 0)).toBe(HOUSE_CARD.hands.length);
+  });
+
+  it('adds offline hands to stats once each, never to ranking', async () => {
+    const ann = await device('Ann');
+    const won = { id: '6f1d9c2e-1a7b-4c3d-9e8f-0a1b2c3d4e5f', won: true, selfDrawn: true, jokerless: false, wallGame: false, fed: false, handId: HOUSE_CARD.hands[0]!.id, value: 25, payment: 50, playedAt: new Date().toISOString() };
+    const lost = { ...won, id: '7f1d9c2e-1a7b-4c3d-9e8f-0a1b2c3d4e5f', won: false, selfDrawn: false, handId: 'not-a-hand', payment: -25 };
+    expect((await ann.call('POST', '/v1/me/offline-results', { results: [won, lost] })).body.added).toBe(2);
+    expect((await ann.call('POST', '/v1/me/offline-results', { results: [won] })).body.added).toBe(0);
+    const stats = (await ann.call('GET', '/v1/me/stats')).body;
+    expect(stats).toMatchObject({ hands: 2, wins: 1, winRate: 50, selfDrawn: 1, offline: { hands: 2, wins: 1 }, ranked: { games: 0 } });
+    expect(stats.card.completed).toEqual([{ handId: HOUSE_CARD.hands[0]!.id, times: 1 }]);
+  });
+
+  it('moves ratings pairwise: the winner gains, and equal players balance out', () => {
+    const changes = ratingChanges(
+      [1200, 1200, 1200, 1200].map((rating) => ({ rating, human: true })),
+      [75, -25, -25, -25],
+    );
+    expect(changes[0]).toBeGreaterThan(0);
+    expect(changes[1]).toBeLessThan(0);
+    // Each change is rounded to a tenth of a point, so the total lands within a rounding step of zero.
+    expect(Math.abs(changes.reduce((a, b) => a + b, 0))).toBeLessThanOrEqual(0.2);
+    // Computer players' ratings never move.
+    expect(ratingChanges([{ rating: 1200, human: true }, { rating: 1200, human: false }], [10, -10])[1]).toBe(0);
+  });
+
+  it('matches two people for a ranked game, fills with computers and records the result', async () => {
+    quickMatches();
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    expect((await ann.call('POST', '/v1/matchmaking', { mode: 'ranked' })).body.queue).toMatchObject({ mode: 'ranked' });
+    await bea.call('POST', '/v1/matchmaking', { mode: 'ranked' });
+    const tableId = await publicTableOf(ann);
+    expect(await publicTableOf(bea)).toBe(tableId);
+    expect((await ann.call('GET', '/v1/matchmaking')).body.queue).toBeNull();
+    const view = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    expect(view.table).toMatchObject({ kind: 'public', ranked: true, mode: 'live', status: 'playing' });
+    expect(view.table.seats.filter((s: { kind: string }) => s.kind === 'human')).toHaveLength(2);
+    // Already in a match: no second queue.
+    expect((await ann.call('POST', '/v1/matchmaking', { mode: 'casual' })).body.error.code).toBe('in_match');
+
+    await playOut(tableId, [ann, bea]);
+    for (const d of [ann, bea]) expect((await d.call('GET', '/v1/me/stats')).body.ranked.games).toBe(1);
+    const weekly = (await ann.call('GET', '/v1/leaderboards?board=weekly')).body;
+    expect(weekly.entries.map((e: { player: { name: string } }) => e.player.name).sort()).toEqual(['Ann', 'Bea']);
+    expect(weekly.you).toMatchObject({ isYou: true, games: 1 });
+    // The rating board waits for a few games.
+    expect((await ann.call('GET', '/v1/leaderboards?board=rating')).body.you).toBeNull();
+    // One hand per matched game, and it drops off the Play list.
+    expect((await ann.call('POST', `/v1/tables/${tableId}/next-hand`)).body.error.code).toBe('one_hand');
+    expect((await ann.call('GET', '/v1/tables')).body.tables).toEqual([]);
+  });
+
+  it('never seats blocked players together, and keeps matched tables to quick phrases', async () => {
+    quickMatches();
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    const cal = await device('Cal');
+    await ann.call('POST', '/v1/blocks', { playerId: bea.id });
+    await ann.call('POST', '/v1/matchmaking', { mode: 'casual' });
+    await bea.call('POST', '/v1/matchmaking', { mode: 'casual' });
+    const annTable = await publicTableOf(ann);
+    const beaTable = await publicTableOf(bea);
+    expect(annTable).not.toBe(beaTable);
+
+    const { conversationId, table } = (await ann.call('GET', `/v1/tables/${annTable}`)).body;
+    expect((await ann.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'hi, add me on insta' })).body.error.code).toBe('phrases_only');
+    expect((await ann.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'Good luck!' })).status).toBe(201);
+    expect((await cal.call('POST', '/v1/tables/join', { code: table.code })).body.error.code).toBe('public_table');
+    // Strangers' tables need the community rules.
+    const dee = await device('Dee', { rules: false });
+    expect((await dee.call('POST', '/v1/matchmaking', { mode: 'casual' })).body.error.code).toBe('rules_required');
+  });
+
+  it('counts leaving a ranked hand early as a loss', async () => {
+    quickMatches();
+    const ann = await device('Ann');
+    await ann.call('POST', '/v1/matchmaking', { mode: 'ranked' });
+    const tableId = await publicTableOf(ann);
+    await ann.call('POST', `/v1/tables/${tableId}/leave`);
+    const stats = (await ann.call('GET', '/v1/me/stats')).body;
+    expect(stats.ranked.games).toBe(1);
+    expect(stats.ranked.rating).toBeLessThan(1200);
+    expect(stats.hands).toBe(0);
+  });
+
+  it('relays voice chat setup only between people seated at the same private table', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    const cal = await device('Cal');
+    await befriend(ann, bea);
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }] });
+    const tableId = created.body.table.id as string;
+    await bea.call('POST', `/v1/tables/${tableId}/join`);
+    const inbox = new Map<string, { type: string; [k: string]: unknown }[]>();
+    for (const d of [ann, bea, cal]) {
+      inbox.set(d.id, []);
+      services.hub.connect(d.id, { send: (data: string) => inbox.get(d.id)!.push(JSON.parse(data)), close: () => undefined });
+    }
+    const last = (d: Device, type: string) => inbox.get(d.id)!.filter((m) => m.type === type).at(-1);
+    const send = (d: Device, message: Record<string, unknown>) => services.hub.onClientMessage!(d.id, message);
+
+    send(ann, { type: 'voice-join', tableId });
+    send(bea, { type: 'voice-join', tableId });
+    expect(last(ann, 'voice-roster')).toMatchObject({ members: [ann.id, bea.id] });
+    send(cal, { type: 'voice-join', tableId });
+    expect(last(cal, 'voice-denied')).toBeTruthy();
+
+    const offer = { sdp: { type: 'offer', sdp: 'v=0' } };
+    send(ann, { type: 'voice-signal', tableId, to: bea.id, data: offer });
+    expect(last(bea, 'voice-signal')).toMatchObject({ from: ann.id, data: offer });
+    send(ann, { type: 'voice-signal', tableId, to: bea.id, data: { evil: true } });
+    send(cal, { type: 'voice-signal', tableId, to: bea.id, data: offer });
+    expect(inbox.get(bea.id)!.filter((m) => m.type === 'voice-signal')).toHaveLength(1);
+
+    await bea.call('POST', '/v1/blocks', { playerId: ann.id });
+    send(ann, { type: 'voice-signal', tableId, to: bea.id, data: offer });
+    expect(inbox.get(bea.id)!.filter((m) => m.type === 'voice-signal')).toHaveLength(1);
+
+    send(bea, { type: 'voice-leave', tableId });
+    expect(last(ann, 'voice-roster')).toMatchObject({ members: [ann.id] });
+    expect((await ann.call('GET', '/v1/voice/config')).body.iceServers).toEqual([]);
   });
 });

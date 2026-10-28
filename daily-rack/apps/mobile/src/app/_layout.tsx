@@ -8,6 +8,7 @@ import { Anton_400Regular } from '@expo-google-fonts/anton';
 import { SessionProvider, useSession } from '../lib/session.tsx';
 import { RealtimeProvider } from '../lib/realtime.tsx';
 import { SafetyProvider } from '../lib/safety.tsx';
+import { MatchmakingProvider } from '../lib/matchmaking.tsx';
 import { ErrorPanel, Loading, Screen } from '../components/ui.tsx';
 import { colors } from '../theme.ts';
 
@@ -20,7 +21,9 @@ export default function RootLayout() {
         <RealtimeProvider>
           <SessionGate ready={fontsLoaded}>
             <SafetyProvider>
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+              <MatchmakingProvider>
+                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+              </MatchmakingProvider>
             </SafetyProvider>
           </SessionGate>
         </RealtimeProvider>

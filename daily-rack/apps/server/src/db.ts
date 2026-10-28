@@ -232,6 +232,45 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX feedback_by_time ON feedback (created_at);
   `,
+  `
+  -- Public matchmade tables (strangers) and ranked play.
+  ALTER TABLE tables ADD COLUMN kind TEXT NOT NULL DEFAULT 'private' CHECK (kind IN ('private', 'public'));
+  ALTER TABLE tables ADD COLUMN ranked INTEGER NOT NULL DEFAULT 0;
+
+  -- One row per player per finished hand, for stats and progress. Offline hands played
+  -- on the device are synced in with their own ids (game_id) and never count as ranked.
+  CREATE TABLE hand_results (
+    id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    game_id TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('table', 'offline')),
+    card_id TEXT NOT NULL,
+    ranked INTEGER NOT NULL DEFAULT 0,
+    won INTEGER NOT NULL,
+    self_drawn INTEGER NOT NULL DEFAULT 0,
+    jokerless INTEGER NOT NULL DEFAULT 0,
+    wall_game INTEGER NOT NULL DEFAULT 0,
+    fed INTEGER NOT NULL DEFAULT 0,
+    abandoned INTEGER NOT NULL DEFAULT 0,
+    hand_id TEXT,
+    value INTEGER NOT NULL DEFAULT 0,
+    payment INTEGER NOT NULL DEFAULT 0,
+    rating_after REAL,
+    played_at TEXT NOT NULL,
+    UNIQUE (principal_id, game_id)
+  );
+  CREATE INDEX hand_results_by_player ON hand_results (principal_id, played_at);
+  CREATE INDEX hand_results_ranked ON hand_results (ranked, played_at);
+
+  CREATE TABLE ratings (
+    principal_id TEXT PRIMARY KEY REFERENCES principals(id) ON DELETE CASCADE,
+    rating REAL NOT NULL,
+    games INTEGER NOT NULL DEFAULT 0,
+    wins INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX ratings_by_rating ON ratings (rating DESC);
+  `,
 ];
 
 export type Db = DatabaseSync;

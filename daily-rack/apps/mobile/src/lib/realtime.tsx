@@ -14,6 +14,10 @@ export type RealtimeMessage =
   | { type: 'friends' }
   | { type: 'night'; nightId: string }
   | { type: 'presence'; principalId: string; online: boolean }
+  | { type: 'match'; tableId: string; mode: 'casual' | 'ranked' }
+  | { type: 'voice-roster'; tableId: string; members: string[] }
+  | { type: 'voice-signal'; tableId: string; from: string; data: any }
+  | { type: 'voice-denied'; tableId: string }
   | { type: 'pong' };
 
 type Listener = (message: RealtimeMessage) => void;
@@ -21,9 +25,11 @@ type Listener = (message: RealtimeMessage) => void;
 interface Realtime {
   connected: boolean;
   subscribe: (listener: Listener) => () => void;
+  /** Sends a message to the server over the socket (voice chat setup). False when offline. */
+  send: (message: Record<string, unknown>) => boolean;
 }
 
-const RealtimeContext = createContext<Realtime>({ connected: false, subscribe: () => () => undefined });
+const RealtimeContext = createContext<Realtime>({ connected: false, subscribe: () => () => undefined, send: () => false });
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { ready } = useSession();
@@ -102,7 +108,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <RealtimeContext.Provider value={{ connected, subscribe }}>{children}</RealtimeContext.Provider>;
+  const send = useCallback((message: Record<string, unknown>) => {
+    const ws = socket.current;
+    if (!ws || ws.readyState !== 1) return false;
+    ws.send(JSON.stringify(message));
+    return true;
+  }, []);
+
+  return <RealtimeContext.Provider value={{ connected, subscribe, send }}>{children}</RealtimeContext.Provider>;
 }
 
 export function useRealtime(): Realtime {

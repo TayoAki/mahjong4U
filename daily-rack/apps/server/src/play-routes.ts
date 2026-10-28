@@ -8,6 +8,9 @@ import { TableError, type SeatInput, type TableService } from './tables.ts';
 import { isBlockedEitherWay } from './blocks.ts';
 import { ModerationError, isObjectionable, requireSocial, safetyStatus } from './moderation.ts';
 import { registerSafetyRoutes } from './safety-routes.ts';
+import { QUICK_PHRASES, type Matchmaker } from './matchmaking.ts';
+import { importOffline, leaderboard, statsFor } from './stats.ts';
+import type { VoiceRooms } from './voice.ts';
 import {
   MESSAGE_MAX,
   acceptFriend,
@@ -47,6 +50,8 @@ interface Deps {
   config: AppConfig;
   hub: Hub;
   tables: TableService;
+  matchmaker: Matchmaker;
+  voice: VoiceRooms;
   fail: Fail;
   limiter: RateLimiter;
   now: () => Date;
@@ -93,10 +98,28 @@ const NightBody = z.object({
   timeZone: z.string().min(1).max(64),
   slots: z.array(z.string().datetime()).min(1).max(3),
 });
+const OfflineResults = z.object({
+  results: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        won: z.boolean(),
+        selfDrawn: z.boolean(),
+        jokerless: z.boolean(),
+        wallGame: z.boolean(),
+        fed: z.boolean(),
+        handId: z.string().max(40).nullable(),
+        value: z.number().int(),
+        payment: z.number().int(),
+        playedAt: z.string().datetime(),
+      }),
+    )
+    .max(50),
+});
 const RespondBody = z.object({ rsvp: z.enum(['yes', 'maybe', 'no']).optional(), votes: z.array(z.string().uuid()).max(3).optional() });
 
 export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
-  const { db, hub, tables, fail, limiter, now } = deps;
+  const { db, config, hub, tables, matchmaker, voice, fail, limiter, now } = deps;
 
   const me = (c: Context<Env>) => c.get('principal');
   const body = async <T>(c: Context<Env>, schema: z.ZodType<T>) => {
@@ -109,11 +132,14 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     throw error;
   };
 
-  // Friends hear when someone comes online or goes offline.
-  hub.onPresence = (principalId, online) => hub.sendMany(friendIds(db, principalId), { type: 'presence', principalId, online });
+  // Friends hear when someone comes online or goes offline; offline players leave voice calls.
+  hub.onPresence = (principalId, online) => {
+    hub.sendMany(friendIds(db, principalId), { type: 'presence', principalId, online });
+    if (!online) voice.disconnected(principalId);
+  };
 
   api.use('/me/profile', async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
-  for (const path of ['/friends', '/friends/*', '/friend-codes/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*']) {
+  for (const path of ['/friends', '/friends/*', '/friend-codes/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*', '/matchmaking', '/leaderboards', '/me/stats', '/me/offline-results', '/voice/*']) {
     api.use(path, async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
   }
 
@@ -215,6 +241,11 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
       return handle(c, error);
     }
     if (isObjectionable(text)) return fail(c, 400, 'objectionable', 'That message includes words we don’t allow. Please rephrase it.');
+    // Strangers at a matched table talk in set phrases only.
+    if (conversation.kind === 'table') {
+      const table = db.prepare('SELECT kind FROM tables WHERE id = ?').get(conversation.ref) as { kind: string } | undefined;
+      if (table?.kind === 'public' && !QUICK_PHRASES.includes(text)) return fail(c, 400, 'phrases_only', 'At matched games you can send the quick phrases only.');
+    }
     return c.json(postMessage(db, hub, conversation, me(c)!.id, text, now()), 201);
   });
 
@@ -224,6 +255,42 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     markRead(db, conversation.id, me(c)!.id, now());
     return c.json({ read: true });
   });
+
+  // ---------------------------------------------------------------- matchmaking, ranking, stats
+
+  api.get('/matchmaking', (c) => c.json({ queue: matchmaker.status(me(c)!.id), phrases: QUICK_PHRASES }));
+
+  api.post('/matchmaking', async (c) => {
+    const input = await body(c, z.object({ mode: z.enum(['casual', 'ranked']) }));
+    if (!input) return fail(c, 400, 'invalid_input', 'Choose a casual or ranked game.');
+    try {
+      // Matched games put you at a table with strangers, so the community rules apply.
+      requireSocial(db, me(c)!.id, now());
+    } catch (error) {
+      return handle(c, error);
+    }
+    const active = tables.activePublicFor(me(c)!.id);
+    if (active) return fail(c, 409, 'in_match', 'Finish your current matched game first.', { tableId: active });
+    return c.json({ queue: matchmaker.join(me(c)!.id, input.mode) });
+  });
+
+  api.delete('/matchmaking', (c) => {
+    matchmaker.leave(me(c)!.id);
+    return c.json({ queue: null });
+  });
+
+  api.get('/leaderboards', (c) => c.json(leaderboard(db, c.req.query('board') === 'weekly' ? 'weekly' : 'rating', me(c)!.id, now())));
+
+  api.get('/me/stats', (c) => c.json(statsFor(db, me(c)!.id)));
+
+  api.post('/me/offline-results', async (c) => {
+    if (!limiter.allow(`offline:${me(c)!.id}`, 30, 3_600_000)) return fail(c, 429, 'rate_limited', 'Too many uploads. Try again later.');
+    const input = await body(c, OfflineResults);
+    if (!input) return fail(c, 400, 'invalid_input', 'Those results were not readable.');
+    return c.json({ added: importOffline(db, me(c)!.id, input.results, now()) });
+  });
+
+  api.get('/voice/config', (c) => c.json({ iceServers: config.iceServers ?? [] }));
 
   // ---------------------------------------------------------------- tables
 

@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { join, resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { createApp, createServices } from './app.ts';
+import { DEFAULT_ICE_SERVERS, createApp, createServices } from './app.ts';
 import { loadContent, syncRevisions } from './content.ts';
 import { openDb } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
@@ -19,13 +19,23 @@ const config = {
   supportEmail: env.SUPPORT_EMAIL || null,
   adminToken: env.ADMIN_TOKEN || null,
   reportWebhookUrl: env.REPORT_WEBHOOK_URL || null,
+  // Voice chat: a TURN relay (TURN_URLS, comma separated, with TURN_USERNAME and
+  // TURN_CREDENTIAL) helps players behind strict networks connect.
+  iceServers: [
+    ...DEFAULT_ICE_SERVERS,
+    ...(env.TURN_URLS ? [{ urls: env.TURN_URLS.split(',').map((u) => u.trim()), username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL }] : []),
+  ],
 };
 
 const db = openDb(env.DATABASE_PATH ?? join(root, 'data/daily-rack.db'));
 const content = loadContent(env.CONTENT_DIR ?? join(root, 'content'), { devRotate: env.DEV_ROTATE === '1' });
 syncRevisions(db, content, new Date());
 
-const services = createServices(db, { botDelayMs: Number(env.BOT_DELAY_MS ?? 900) });
+const services = createServices(db, {
+  botDelayMs: Number(env.BOT_DELAY_MS ?? 900),
+  // How long the first person waiting for a public match waits before computer players fill in.
+  matchFillAfterMs: { casual: Number(env.MATCH_FILL_CASUAL_MS ?? 20_000), ranked: Number(env.MATCH_FILL_RANKED_MS ?? 45_000) },
+});
 const app = createApp({ db, content, config, services });
 
 // Serve the Expo web build, falling back to index.html for client-side routes.

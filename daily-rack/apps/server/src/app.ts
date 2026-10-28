@@ -16,6 +16,8 @@ import { deletePrincipal, insertAttempt, progressFor, readSplit, type AttemptRow
 import { Hub } from './realtime.ts';
 import { TableService, type TableServiceOptions } from './tables.ts';
 import { registerPlayRoutes } from './play-routes.ts';
+import { Matchmaker, type MatchmakerOptions } from './matchmaking.ts';
+import { VoiceRooms } from './voice.ts';
 
 export interface AppConfig {
   brand: string;
@@ -29,8 +31,19 @@ export interface AppConfig {
   adminToken?: string | null;
   /** Slack- or Discord-style webhook that hears about every new report. */
   reportWebhookUrl?: string | null;
+  /** STUN/TURN servers handed to voice chat clients. */
+  iceServers?: IceServer[];
   now?: () => Date;
 }
+
+export interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+/** Public STUN servers find most players' addresses; a TURN relay covers the rest. */
+export const DEFAULT_ICE_SERVERS: IceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
 
 const SESSION_COOKIE = 'dr_session';
 const CLIENT_EVENTS = new Set([
@@ -52,6 +65,11 @@ const CLIENT_EVENTS = new Set([
   'night_invite_shared',
   'report_filed',
   'player_blocked',
+  'match_search',
+  'match_found',
+  'voice_joined',
+  'offline_game_started',
+  'lesson_completed',
 ]);
 
 const AttemptBody = z.object({
@@ -89,21 +107,26 @@ export type Fail = (
 export interface Services {
   hub: Hub;
   tables: TableService;
+  matchmaker: Matchmaker;
+  voice: VoiceRooms;
 }
 
-export function createServices(db: Db, options: Partial<TableServiceOptions> = {}): Services {
+export function createServices(db: Db, options: Partial<TableServiceOptions & { matchFillAfterMs: MatchmakerOptions['fillAfterMs']; matchTickMs: number }> = {}): Services {
   const hub = new Hub();
   const tables = new TableService(db, hub, {
     now: options.now ?? (() => new Date()),
     botDelayMs: options.botDelayMs ?? 900,
     liveTimeouts: options.liveTimeouts ?? { pass: 90, turn: 60, claim: 12 },
   });
-  return { hub, tables };
+  const matchmaker = new Matchmaker(db, hub, tables, { fillAfterMs: options.matchFillAfterMs ?? { casual: 20_000, ranked: 45_000 }, tickMs: options.matchTickMs ?? 1_000 });
+  const voice = new VoiceRooms(db, hub, tables);
+  hub.onClientMessage = (principalId, message) => voice.handle(principalId, message);
+  return { hub, tables, matchmaker, voice };
 }
 
 export function createApp({ db, content, config, services }: { db: Db; content: Content; config: AppConfig; services?: Services }) {
   const now = config.now ?? (() => new Date());
-  const { hub, tables } = services ?? createServices(db, { now, botDelayMs: 0 });
+  const { hub, tables, matchmaker, voice } = services ?? createServices(db, { now, botDelayMs: 0 });
   const app = new Hono<Env>();
   const limiter = new RateLimiter();
 
@@ -388,7 +411,7 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
     return c.json({ accepted });
   });
 
-  registerPlayRoutes(api, { db, config, hub, tables, fail, limiter, now, clientAddress });
+  registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, fail, limiter, now, clientAddress });
   app.route('/v1', api);
   return app;
 }

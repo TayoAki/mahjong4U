@@ -22,12 +22,15 @@ import { isBlockedEitherWay } from './blocks.ts';
 import { transaction, type Db } from './db.ts';
 import type { Hub } from './realtime.ts';
 import { conversationFor, ensureProfile } from './social.ts';
+import { BOT_RATING, ratingOf, recordAbandon, recordHand } from './stats.ts';
 
 // Online tables: four fixed seats filled by friends or computer players. Each hand is a
 // fresh engine game; the dealer moves one seat to the right every hand.
 
 export type TableMode = 'live' | 'turn';
 export type TableStatus = 'lobby' | 'playing' | 'between' | 'closed';
+/** Private tables are set up by a host; public ones are matched with strangers. */
+export type TableKind = 'private' | 'public';
 
 export interface SeatSpec {
   principalId: string | null;
@@ -53,6 +56,8 @@ interface TableRow {
   scores: string;
   hand_number: number;
   night_id: string | null;
+  kind: TableKind;
+  ranked: number;
   created_at: string;
   updated_at: string;
 }
@@ -120,7 +125,7 @@ export class TableService {
   // Lobby
 
   create(hostId: string, input: { mode: TableMode; seats: SeatInput[]; settings?: Partial<TableSettings>; nightId?: string | null }): string {
-    const active = this.db.prepare(`SELECT COUNT(*) AS n FROM tables WHERE host_id = ? AND status != 'closed'`).get(hostId) as { n: number };
+    const active = this.db.prepare(`SELECT COUNT(*) AS n FROM tables WHERE host_id = ? AND status != 'closed' AND kind = 'private'`).get(hostId) as { n: number };
     if (Number(active.n) >= 20) throw new TableError(409, 'too_many_tables', 'Finish or close a table before starting another.');
     if (input.seats.length !== 3) throw new TableError(400, 'bad_seats', 'Choose who sits in the other three seats.');
     const seats: SeatSpec[] = [{ principalId: hostId, bot: null, reservedFor: null }];
@@ -147,6 +152,44 @@ export class TableService {
     for (const s of seats) if (s.reservedFor) this.hub.send(s.reservedFor, { type: 'table', tableId: id, payload: { invited: true } });
     if (seats.every((s) => s.principalId || s.bot)) this.start(id, hostId);
     return id;
+  }
+
+  /**
+   * A matched live table for strangers: the people found (in a random order, so nobody is
+   * always East), with computer players in any empty seats. The hand starts straight away.
+   */
+  createPublic(humans: string[], ranked: boolean, fill: BotLevel = 'normal'): string {
+    const order = [...humans].sort(() => this.random() - 0.5);
+    const seats: SeatSpec[] = [0, 1, 2, 3].map((i) => (order[i] ? { principalId: order[i]!, bot: null, reservedFor: null } : { principalId: null, bot: fill, reservedFor: null }));
+    const settings: TableSettings = { secondCharleston: true, courtesyPass: true, skipCharleston: false };
+    const id = randomUUID();
+    const now = this.options.now().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO tables (id, code, host_id, mode, status, seats, settings, scores, hand_number, night_id, kind, ranked, created_at, updated_at)
+         VALUES (?, ?, ?, 'live', 'lobby', ?, ?, '[0,0,0,0]', 0, NULL, 'public', ?, ?, ?)`,
+      )
+      .run(id, this.uniqueCode(), order[0]!, JSON.stringify(seats), JSON.stringify(settings), ranked ? 1 : 0, now, now);
+    conversationFor(this.db, 'table', id, this.options.now());
+    this.dealHand(this.row(id), 1);
+    return id;
+  }
+
+  /** The matched game a player is still in the middle of, if any. */
+  activePublicFor(principalId: string): string | null {
+    const rows = this.db.prepare(`SELECT id, seats FROM tables WHERE kind = 'public' AND status = 'playing' AND seats LIKE ?`).all(`%${principalId}%`) as { id: string; seats: string }[];
+    return rows.find((r) => (JSON.parse(r.seats) as SeatSpec[]).some((s) => s.principalId === principalId))?.id ?? null;
+  }
+
+  /** Voice chat is for private tables, between the people seated there. */
+  voiceAllowed(tableId: string, principalId: string): boolean {
+    const row = this.db.prepare('SELECT * FROM tables WHERE id = ?').get(tableId) as TableRow | undefined;
+    return Boolean(row && row.kind === 'private' && row.status !== 'closed' && this.seatsOf(row).some((s) => s.principalId === principalId));
+  }
+
+  seatedPeople(tableId: string): string[] {
+    const row = this.db.prepare('SELECT seats FROM tables WHERE id = ?').get(tableId) as { seats: string } | undefined;
+    return row ? (JSON.parse(row.seats) as SeatSpec[]).flatMap((s) => (s.principalId ? [s.principalId] : [])) : [];
   }
 
   private uniqueCode(): string {
@@ -182,6 +225,7 @@ export class TableService {
     const existing = seats.findIndex((s) => s.principalId === principalId);
     if (existing !== -1) return existing;
     if (row.status === 'closed') throw new TableError(409, 'table_closed', 'This table has closed.');
+    if (row.kind === 'public') throw new TableError(403, 'public_table', 'This is a matched game. Find your own match from the Play tab.');
     if (seats.some((s) => s.principalId && isBlockedEitherWay(this.db, principalId, s.principalId))) {
       throw new TableError(403, 'blocked', 'You can’t join this table.');
     }
@@ -213,6 +257,12 @@ export class TableService {
       if (row.host_id === principalId) return this.close(tableId, principalId);
       seats[position] = { principalId: null, bot: null, reservedFor: null };
     } else {
+      // Leaving a ranked hand before it ends counts as finishing below everyone else.
+      const game = this.currentGame(tableId);
+      if (row.ranked && game?.status === 'playing') {
+        const others = seats.filter((_, p) => p !== position).map((s) => ({ rating: s.principalId ? ratingOf(this.db, s.principalId).rating : BOT_RATING[s.bot ?? 'normal'] }));
+        recordAbandon(this.db, game.id, card.id, principalId, others, this.options.now());
+      }
       // Mid-game a computer player takes over the seat so nobody else's game breaks.
       seats[position] = { principalId: null, bot: 'normal', reservedFor: null };
     }
@@ -269,6 +319,7 @@ export class TableService {
     const row = this.row(tableId);
     if (!this.seatsOf(row).some((s) => s.principalId === principalId)) throw new TableError(403, 'not_seated', 'Only players at the table can deal.');
     if (row.status !== 'between') throw new TableError(409, 'hand_in_progress', 'Finish this hand first.');
+    if (row.kind === 'public') throw new TableError(409, 'one_hand', 'Matched games are one hand. Find another match from the Play tab.');
     this.dealHand(row, row.hand_number + 1);
   }
 
@@ -329,6 +380,17 @@ export class TableService {
           scores[position] = (scores[position] ?? 0) + p;
         });
         this.db.prepare(`UPDATE tables SET status = 'between', scores = ?, updated_at = ? WHERE id = ?`).run(JSON.stringify(scores), now, row.id);
+        // Everyone's results (and ratings at ranked tables), from the seats as they are now.
+        const seats = this.seatsOf(this.row(row.id));
+        recordHand(
+          this.db,
+          game.id,
+          card.id,
+          Boolean(row.ranked),
+          seats.map((s, p) => ({ principalId: s.principalId, bot: s.bot, seat: this.engineSeat(p, game.dealer) })),
+          next.result,
+          this.options.now(),
+        );
       } else {
         this.db.prepare('UPDATE tables SET updated_at = ? WHERE id = ?').run(now, row.id);
       }
@@ -499,6 +561,8 @@ export class TableService {
         settings: JSON.parse(row.settings) as TableSettings,
         scores: JSON.parse(row.scores) as number[],
         nightId: row.night_id,
+        kind: row.kind,
+        ranked: Boolean(row.ranked),
         seats: seats.map((s, position) => ({
           position,
           kind: s.principalId ? ('human' as const) : s.bot ? ('bot' as const) : ('open' as const),
@@ -544,7 +608,8 @@ export class TableService {
   /** Tables a player is in or invited to, with whether it is their move. */
   listFor(principalId: string) {
     const rows = this.db
-      .prepare(`SELECT * FROM tables WHERE status != 'closed' AND (seats LIKE ? OR host_id = ?) ORDER BY updated_at DESC LIMIT 50`)
+      // Finished matched games drop off the list; they were one hand.
+      .prepare(`SELECT * FROM tables WHERE status != 'closed' AND NOT (kind = 'public' AND status = 'between') AND (seats LIKE ? OR host_id = ?) ORDER BY updated_at DESC LIMIT 50`)
       .all(`%${principalId}%`, principalId) as unknown as TableRow[];
     return rows
       .filter((row) => this.seatsOf(row).some((s) => s.principalId === principalId || s.reservedFor === principalId))
@@ -565,6 +630,8 @@ export class TableService {
           invited: position === -1,
           yourMove,
           humans: seats.filter((s) => s.principalId).length,
+          kind: row.kind,
+          ranked: Boolean(row.ranked),
           players: seats.map((_, p) => this.nameAt(row, p)),
           updatedAt: row.updated_at,
         };

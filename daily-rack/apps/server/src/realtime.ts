@@ -15,6 +15,10 @@ export type ServerMessage =
   | { type: 'friends' }
   | { type: 'night'; nightId: string }
   | { type: 'presence'; principalId: string; online: boolean }
+  | { type: 'match'; tableId: string; mode: 'casual' | 'ranked' }
+  | { type: 'voice-roster'; tableId: string; members: string[] }
+  | { type: 'voice-signal'; tableId: string; from: string; data: unknown }
+  | { type: 'voice-denied'; tableId: string }
   | { type: 'pong' };
 
 const TICKET_TTL_MS = 60_000;
@@ -84,6 +88,9 @@ export class Hub {
 
   /** Set by the app so friends hear when someone comes online. */
   onPresence?: (principalId: string, online: boolean) => void;
+
+  /** Set by the app to handle what clients send over their sockets (voice chat setup). */
+  onClientMessage?: (principalId: string, message: Record<string, unknown>) => void;
 
   private prune() {
     const now = Date.now();

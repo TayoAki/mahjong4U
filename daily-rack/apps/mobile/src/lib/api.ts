@@ -185,6 +185,9 @@ export interface TablePayload {
     settings: { secondCharleston: boolean; courtesyPass: boolean; skipCharleston: boolean };
     scores: number[];
     nightId: string | null;
+    /** Private tables are set up by a host; public ones are matched with strangers. */
+    kind: 'private' | 'public';
+    ranked: boolean;
     seats: TableSeat[];
   };
   mySeat: number | null;
@@ -210,6 +213,8 @@ export interface TableSummary {
   yourMove: boolean;
   /** People seated (not computer players or open seats). */
   humans: number;
+  kind: 'private' | 'public';
+  ranked: boolean;
   players: string[];
   updatedAt: string;
 }
@@ -260,6 +265,62 @@ export interface InvitePreview {
 }
 
 // ------------------------------------------------------------------ endpoints
+
+export type QueueMode = 'casual' | 'ranked';
+
+export interface QueueStatus {
+  mode: QueueMode;
+  since: string;
+  waiting: number;
+  /** When computer players fill the empty seats if nobody else turns up. */
+  fillAt: string;
+}
+
+export interface Stats {
+  hands: number;
+  wins: number;
+  winRate: number;
+  selfDrawn: number;
+  jokerless: number;
+  wallGames: number;
+  fed: number;
+  points: number;
+  streak: { current: number; best: number };
+  biggest: { value: number; handId: string; pattern: string | null } | null;
+  card: { id: string; total: number; completed: { handId: string; times: number }[]; sections: { id: string; label: string; total: number; completed: number }[] };
+  ranked: { rating: number; games: number; wins: number; rank: number | null };
+  offline: { hands: number; wins: number };
+  recent: { playedAt: string; won: boolean; value: number; payment: number; handId: string | null; pattern: string | null; ranked: boolean; offline: boolean; wallGame: boolean }[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  player: Profile;
+  score: number;
+  games: number;
+  wins: number;
+  isYou: boolean;
+}
+
+export interface Leaderboard {
+  board: 'rating' | 'weekly';
+  since: string | null;
+  entries: LeaderboardEntry[];
+  you: LeaderboardEntry | null;
+}
+
+export interface OfflineResult {
+  id: string;
+  won: boolean;
+  selfDrawn: boolean;
+  jokerless: boolean;
+  wallGame: boolean;
+  fed: boolean;
+  handId: string | null;
+  value: number;
+  payment: number;
+  playedAt: string;
+}
 
 export const api = {
   guestSession: () => request<{ principalId: string; token?: string; created: boolean }>('POST', '/v1/guest-sessions'),
@@ -312,6 +373,14 @@ export const api = {
   setSeat: (id: string, position: number, seat: SeatChoice) => request<TablePayload>('PUT', `/v1/tables/${id}/seats/${position}`, seat),
   /** `phase` names the step acted on, so a pass made alongside other players isn't refused as stale. */
   act: (id: string, action: Action, version?: number, phase?: string) => request<TablePayload>('POST', `/v1/tables/${id}/actions`, { action, version, phase }),
+
+  matchmaking: () => request<{ queue: QueueStatus | null; phrases: string[] }>('GET', '/v1/matchmaking'),
+  findMatch: (mode: QueueMode) => request<{ queue: QueueStatus }>('POST', '/v1/matchmaking', { mode }),
+  cancelMatch: () => request<{ queue: null }>('DELETE', '/v1/matchmaking'),
+  leaderboard: (board: 'rating' | 'weekly') => request<Leaderboard>('GET', `/v1/leaderboards?board=${board}`),
+  stats: () => request<Stats>('GET', '/v1/me/stats'),
+  offlineResults: (results: OfflineResult[]) => request<{ added: number }>('POST', '/v1/me/offline-results', { results }),
+  voiceConfig: () => request<{ iceServers: { urls: string | string[]; username?: string; credential?: string }[] }>('GET', '/v1/voice/config'),
 
   nights: () => request<{ nights: NightSummary[] }>('GET', '/v1/nights'),
   createNight: (body: { title: string; location: string | null; timeZone: string; slots: string[] }) => request<NightDetail>('POST', '/v1/nights', body),

@@ -20,13 +20,18 @@ export function attachRealtime(server: Server, hub: Hub): WebSocketServer {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       hub.connect(principalId, ws);
-      // Pings keep mobile connections from being dropped by proxies.
+      // Pings keep mobile connections from being dropped by proxies; voice chat setup
+      // messages go to the app.
       ws.on('message', (data) => {
+        let message: Record<string, unknown>;
         try {
-          if ((JSON.parse(String(data)) as { type?: string }).type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+          message = JSON.parse(String(data)) as Record<string, unknown>;
         } catch {
-          // Ignore anything that is not JSON.
+          return; // Ignore anything that is not JSON.
         }
+        if (!message || typeof message !== 'object') return;
+        if (message.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        else hub.onClientMessage?.(principalId, message);
       });
       const drop = () => hub.disconnect(principalId, ws);
       ws.on('close', drop);
