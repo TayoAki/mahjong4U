@@ -12,6 +12,7 @@ import { QUICK_PHRASES, type Matchmaker } from './matchmaking.ts';
 import { importOffline, leaderboard, statsFor } from './stats.ts';
 import type { VoiceRooms } from './voice.ts';
 import { EXPO_TOKEN, PUSH_CATEGORIES, type Notifier } from './push.ts';
+import { PlusError, type PlusService } from './plus.ts';
 import {
   MESSAGE_MAX,
   acceptFriend,
@@ -54,6 +55,7 @@ interface Deps {
   matchmaker: Matchmaker;
   voice: VoiceRooms;
   notifier: Notifier;
+  plus: PlusService;
   fail: Fail;
   limiter: RateLimiter;
   now: () => Date;
@@ -129,7 +131,7 @@ function nightWhen(night: { slots: { id: string; startsAt: string }[]; confirmed
 }
 
 export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
-  const { db, config, hub, tables, matchmaker, voice, notifier, fail, limiter, now } = deps;
+  const { db, config, hub, tables, matchmaker, voice, notifier, plus, fail, limiter, now } = deps;
 
   const me = (c: Context<Env>) => c.get('principal');
   const body = async <T>(c: Context<Env>, schema: z.ZodType<T>) => {
@@ -139,6 +141,8 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   const handle = (c: Context<Env>, error: unknown) => {
     if (error instanceof TableError || error instanceof NightError || error instanceof ModerationError) return fail(c, error.status, error.code, error.message);
     if (error instanceof GameError) return fail(c, 422, error.code, error.message);
+    // The app opens the Plus screen for this, explaining which feature it was.
+    if (error instanceof PlusError) return fail(c, 402, error.code, error.message, { feature: error.feature });
     throw error;
   };
 
@@ -321,6 +325,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     try {
       // Matched games put you at a table with strangers, so the community rules apply.
       requireSocial(db, me(c)!.id, now());
+      if (input.mode === 'ranked') plus.assertRanked(me(c)!.id);
     } catch (error) {
       return handle(c, error);
     }

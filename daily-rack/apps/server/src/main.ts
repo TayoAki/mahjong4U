@@ -19,10 +19,20 @@ const config = {
   secureCookies: env.NODE_ENV === 'production',
   splitThreshold: Number(env.SPLIT_THRESHOLD ?? 30),
   supportEmail: env.SUPPORT_EMAIL || null,
+  privacyUrl: env.PRIVACY_URL || null,
+  termsUrl: env.TERMS_URL || null,
   adminToken: env.ADMIN_TOKEN || null,
   reportWebhookUrl: env.REPORT_WEBHOOK_URL || null,
   // Voice chat: a TURN relay (TURN_URLS, comma separated, with TURN_USERNAME and
   // TURN_CREDENTIAL) helps players behind strict networks connect.
+  // Daily Rack Plus: RevenueCat sends REVENUECAT_WEBHOOK_AUTH with each webhook;
+  // REVENUECAT_SECRET_KEY lets the server ask RevenueCat directly; PLUS_FOR_EVERYONE=1
+  // unlocks Plus for all (a beta, or before the stores are set up).
+  plus: {
+    webhookAuth: env.REVENUECAT_WEBHOOK_AUTH || null,
+    secretKey: env.REVENUECAT_SECRET_KEY || null,
+    forEveryone: env.PLUS_FOR_EVERYONE === '1',
+  },
   iceServers: [
     ...DEFAULT_ICE_SERVERS,
     ...(env.TURN_URLS ? [{ urls: env.TURN_URLS.split(',').map((u) => u.trim()), username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL }] : []),

@@ -6,6 +6,7 @@ import { useSafety } from './safety.tsx';
 import { useSession } from './session.tsx';
 import { track } from './analytics.ts';
 import { playSound } from './sounds.ts';
+import { usePlus } from './plus.tsx';
 
 // Waiting for a public match. The wait carries on while you look around the app; when the
 // server seats you, the table opens wherever you are.
@@ -33,6 +34,7 @@ export function useMatchmaking(): Matchmaking {
 export function MatchmakingProvider({ children }: { children: ReactNode }) {
   const { ready } = useSession();
   const { guard } = useSafety();
+  const { handlePlusError } = usePlus();
   const [queue, setQueue] = useState<QueueStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,12 +87,12 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         if (e instanceof ApiError && e.code === 'in_match' && typeof e.extra.tableId === 'string') router.push(`/table/${e.extra.tableId}`);
-        else setError((e as Error).message);
+        else if (!handlePlusError(e)) setError((e as Error).message);
       } finally {
         setBusy(false);
       }
     },
-    [guard],
+    [guard, handlePlusError],
   );
 
   const cancel = useCallback(async () => {

@@ -11,6 +11,7 @@ import { Avatar, Body, Button, Card, Columns, Display, ErrorPanel, Eyebrow, Head
 import { CardView } from '../../game/CardView.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
 import { NotificationSettings } from '../../components/NotificationSettings.tsx';
+import { PlusCard } from '../../components/PlusCard.tsx';
 import { cancelLocal, forgetPushToken } from '../../lib/notifications';
 import { LESSONS } from '../../lessons/content.ts';
 import { resetLessonProgress, useLessonProgress } from '../../lessons/progress.ts';
@@ -120,6 +121,8 @@ export default function YouScreen() {
                 </Body>
               )}
             </Card>
+
+            <PlusCard />
 
             {progress && (
               <View style={styles.stats}>
@@ -317,6 +320,7 @@ export default function YouScreen() {
       </Sheet>
       <Sheet visible={sheet === 'delete'} title="Delete your data?" onClose={() => setSheet(null)}>
         <Body>This removes your streak, answers, share links, friends, chats and game nights for good. Computer players take your seats at any open tables. It can’t be undone.</Body>
+        <Body small muted>If you subscribe to Daily Rack Plus, cancel it in your App Store or Google Play settings first: deleting your data here doesn’t stop the subscription.</Body>
         <Button title="Delete everything" variant="danger" loading={deleting} onPress={deleteEverything} />
         <Button title="Keep my data" variant="text" onPress={() => setSheet(null)} />
       </Sheet>

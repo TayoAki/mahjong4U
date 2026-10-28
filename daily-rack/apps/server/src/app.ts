@@ -19,6 +19,8 @@ import { registerPlayRoutes } from './play-routes.ts';
 import { Matchmaker, type MatchmakerOptions } from './matchmaking.ts';
 import { VoiceRooms } from './voice.ts';
 import { Notifier, type PushSender } from './push.ts';
+import { PlusService, type PlusConfig } from './plus.ts';
+import { registerPlusRoutes } from './plus-routes.ts';
 
 export interface AppConfig {
   brand: string;
@@ -28,12 +30,17 @@ export interface AppConfig {
   splitThreshold: number;
   /** Shown in the app as the place to reach a person about safety or support. */
   supportEmail?: string | null;
+  /** Linked from the Plus screen, as the App Store and Google Play require for subscriptions. */
+  privacyUrl?: string | null;
+  termsUrl?: string | null;
   /** Unlocks the moderator endpoints under /v1/admin (sent as the x-admin-token header). */
   adminToken?: string | null;
   /** Slack- or Discord-style webhook that hears about every new report. */
   reportWebhookUrl?: string | null;
   /** STUN/TURN servers handed to voice chat clients. */
   iceServers?: IceServer[];
+  /** Daily Rack Plus: RevenueCat webhook auth, secret key, or Plus for everyone. */
+  plus?: PlusConfig;
   now?: () => Date;
 }
 
@@ -99,7 +106,7 @@ const EventsBody = z.object({
 export type Env = { Variables: { requestId: string; principal: Principal | null } };
 export type Fail = (
   c: Context<Env>,
-  status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500,
+  status: 400 | 401 | 402 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500,
   code: string,
   message: string,
   extra?: object,
@@ -164,6 +171,8 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
       splitThreshold: config.splitThreshold,
       timeZone: content.schedule.timeZone,
       supportEmail: config.supportEmail ?? null,
+      privacyUrl: config.privacyUrl ?? null,
+      termsUrl: config.termsUrl ?? null,
     }),
   );
 
@@ -420,7 +429,10 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
     return c.json({ accepted });
   });
 
-  registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, notifier, fail, limiter, now, clientAddress });
+  const plus = new PlusService(db, config.plus ?? {}, now);
+  tables.dealGate = (hostId, cardId, vsComputer) => plus.assertCanDeal(hostId, cardId, vsComputer);
+  registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, notifier, plus, fail, limiter, now, clientAddress });
+  registerPlusRoutes(api, { db, plus, config: config.plus ?? {}, fail, limiter });
   app.route('/v1', api);
   return app;
 }

@@ -10,6 +10,7 @@ import { Badge, Body, Button, Card, Chip, Columns, Display, ErrorPanel, Eyebrow,
 import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { OnlineCard } from '../../game/OnlineCard.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
+import { PlusCard } from '../../components/PlusCard.tsx';
 import { LEVEL_LABEL } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
 
@@ -118,6 +119,7 @@ export default function PlayScreen() {
             </Card>
 
             <OnlineCard rating={rating} />
+            <PlusCard />
 
           </>
         }

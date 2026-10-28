@@ -58,6 +58,16 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
 
 // ------------------------------------------------------------------ types
 
+/** Daily Rack Plus, as the server sees it (the server is what unlocks things). */
+export interface PlusStatus {
+  plus: boolean;
+  until: string | null;
+  source: 'revenuecat' | 'admin' | 'everyone' | null;
+  willRenew: boolean;
+  /** Free hands left today on the 2026 card; null with Plus. */
+  freeHandsLeft: number | null;
+}
+
 /** Which kinds of push notification a player wants. */
 export interface NotificationSettings {
   turns: boolean;
@@ -134,6 +144,9 @@ export interface AppConfig {
   splitThreshold: number;
   timeZone: string;
   supportEmail: string | null;
+  /** Shown on the Plus screen (the stores want both linked next to a subscription). */
+  privacyUrl?: string | null;
+  termsUrl?: string | null;
 }
 
 export interface Profile {
@@ -369,6 +382,8 @@ export const api = {
   bugReport: (report: BugReport) => request<{ sent: boolean; id: string }>('POST', '/v1/bug-reports', report),
   savePushToken: (token: string, platform: 'ios' | 'android') => request<{ saved: boolean; settings: NotificationSettings }>('PUT', '/v1/me/push-token', { token, platform }),
   removePushToken: (token: string) => request<{ removed: boolean }>('DELETE', '/v1/me/push-token', { token }),
+  plusStatus: () => request<PlusStatus>('GET', '/v1/me/plus'),
+  plusSync: () => request<PlusStatus & { synced: boolean }>('POST', '/v1/me/plus/sync', {}),
   notificationSettings: () => request<{ settings: NotificationSettings; devices: number }>('GET', '/v1/me/notifications'),
   updateNotificationSettings: (change: Partial<NotificationSettings>) => request<{ settings: NotificationSettings; devices: number }>('PUT', '/v1/me/notifications', change),
   rename: (name: string) => request<Profile>('PUT', '/v1/me/profile', { name }),

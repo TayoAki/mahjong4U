@@ -9,6 +9,8 @@ import { Body, Button, Card, Chip, ErrorPanel, Heading, Row, Screen, Segmented, 
 import { LEVEL_LABEL, SeatSheet } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
 import { useNotifications } from '../../lib/notification-prompt.tsx';
+import { usePlus } from '../../lib/plus.tsx';
+import { PLUS, isPremiumCard } from '@daily-rack/core';
 
 const SIDES = ['On your right (South)', 'Across (West)', 'On your left (North)'];
 
@@ -16,6 +18,7 @@ const SIDES = ['On your right (South)', 'Across (West)', 'On your left (North)']
 export default function NewTableScreen() {
   const router = useRouter();
   const { ask } = useNotifications();
+  const { plus, freeHandsLeft, handlePlusError } = usePlus();
   const { friend } = useLocalSearchParams<{ friend?: string }>();
   const [friends, setFriends] = useState<FriendsOverview['friends']>([]);
   const [mode, setMode] = useState<'live' | 'turn'>('turn');
@@ -55,7 +58,7 @@ export default function NewTableScreen() {
       // Turn-based games and friends' seats are where "your move" pushes earn their keep.
       if (mode === 'turn' || seats.some((s) => s.type === 'friend')) setTimeout(() => ask('turn-table'), 1200);
     } catch (e) {
-      setError((e as Error).message);
+      if (!handlePlusError(e)) setError((e as Error).message);
       setBusy(false);
     }
   };
@@ -88,9 +91,22 @@ export default function NewTableScreen() {
           <Heading>Which card?</Heading>
           <View style={{ gap: 8 }}>
             {cards.map((c) => (
-              <Chip key={c.id} label={c.name} selected={(cardId ?? cards[0]!.id) === c.id} onPress={() => setCardId(c.id)} testID={`card-${c.id}`} />
+              <Chip
+                key={c.id}
+                label={isPremiumCard(c.id) && !plus ? `${c.name} · Plus` : c.name}
+                selected={(cardId ?? cards[0]!.id) === c.id}
+                onPress={() => setCardId(c.id)}
+                testID={`card-${c.id}`}
+              />
             ))}
           </View>
+          {isPremiumCard(cardId) && !plus && (
+            <Body small muted>
+              {seats.every((s) => s.type === 'bot')
+                ? `Against the computer you get ${PLUS.freeCardHandsPerDay} free hands a day on this card${freeHandsLeft !== null ? ` (${freeHandsLeft} left today)` : ''}. Plus makes it unlimited.`
+                : 'Hosting friends on this card comes with Plus. Your friends join free.'}
+            </Body>
+          )}
         </View>
       )}
 

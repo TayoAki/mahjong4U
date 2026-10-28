@@ -71,6 +71,25 @@ Mahjong is having a moment, and a lot of players are brand new, so the app is bu
 
 Push needs an Expo project: run `npx eas-cli@latest init` in `apps/mobile` (it writes `extra.eas.projectId` to `app.json`), then add an APNs key and an FCM V1 key with `eas credentials`. Until then, reminders on the phone still work and the server simply has no phones to send to.
 
+## Daily Rack Plus (free tier and subscription)
+
+New players should never meet a paywall before they can play, so the free tier is generous:
+
+- **Free:** today's rack with streaks and clips, every lesson, unlimited games on the house card, games with friends, chat, Game Night and voice chat, quick matches, and 3 hands a day on the 2026 card against the computer.
+- **Plus:** the 2026 card as much as you like, hosting friends on it (they play free), and ranked games with ratings and the leaderboard. Suggested prices: $5.99 a month or $39.99 a year with a 7-day free trial on the yearly plan.
+
+The rules live in `packages/core/src/plans.ts`. The server enforces them (a 402 `plus_required` with the feature), and the app opens the Plus screen with Pip, the real store prices, "Always free", restore, the auto-renew fine print and a "Maybe later" that's always there. A free trial gets a local reminder two days before it ends. The web build explains that Plus comes with the phone apps.
+
+Purchases go through RevenueCat (`react-native-purchases`). The RevenueCat project "Daily Rack" has iOS and Android apps for `app.dailyrack.mobile`, a `plus` entitlement, products `dailyrack_plus_monthly` and `dailyrack_plus_annual` (Google Play: `dailyrack_plus:monthly` and `dailyrack_plus:annual`), and a default offering with yearly and monthly packages. Development builds use RevenueCat's Test Store, so purchases can be tried without a store account; release builds use the App Store and Google Play. The public SDK keys are in `apps/mobile/app.json` under `extra.revenuecat`.
+
+The server learns about purchases from RevenueCat's webhook (`POST /v1/webhooks/revenuecat`, checked against `REVENUECAT_WEBHOOK_AUTH`), and with `REVENUECAT_SECRET_KEY` it also asks RevenueCat directly after a purchase or webhook, as RevenueCat recommends. Restoring on a new phone moves Plus to the new guest. Moderators can give Plus by hand: `npm run reports -- plus <playerId> 30` (or `forever`, or `off`).
+
+To start selling:
+1. App Store Connect: a subscription group with `dailyrack_plus_monthly` and `dailyrack_plus_annual`, prices, and a 7-day free trial introductory offer on the yearly plan. Google Play Console: subscription `dailyrack_plus` with base plans `monthly` and `annual`.
+2. RevenueCat: add the App Store Connect API key and In-App Purchase key to the iOS app, and a Play service account to the Android app.
+3. RevenueCat: create a secret API key and set it on the server as `REVENUECAT_SECRET_KEY`.
+4. Host a privacy policy and terms, and set `PRIVACY_URL` and `TERMS_URL` (iOS falls back to Apple's standard terms). Both stores want these linked next to a subscription.
+
 ## iPad and big screens
 
 iPads turn freely (phones stay upright), and Android tablets are unlocked at startup. On big screens the tabs move to a sidebar, Today, Play and You use two columns, sheets open as centered cards, tiles grow, and the game table puts the felt on the left with your rack and moves on the right in landscape.
@@ -171,6 +190,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `NODE_ENV` | unset | `production` marks session cookies Secure |
 | `ADMIN_TOKEN` | unset | Secret for the moderator endpoints and `npm run reports`. Unset means no moderator access. |
 | `REPORT_WEBHOOK_URL` | unset | Slack or Discord incoming webhook that hears about each new report |
+| `REVENUECAT_WEBHOOK_AUTH` | unset | The Authorization header value RevenueCat sends with each webhook. Unset turns the webhook off. |
+| `REVENUECAT_SECRET_KEY` | unset | RevenueCat secret API key, so the server can look a subscriber up itself |
+| `PLUS_FOR_EVERYONE` | unset | `1` gives everyone Plus (a beta, or before the stores are set up) |
+| `PRIVACY_URL`, `TERMS_URL` | unset | Linked from the Plus screen |
 | `PUSH_DISABLED` | unset | `1` stops push notifications. Otherwise they go through Expo's push service to phones that registered. |
 | `EXPO_ACCESS_TOKEN` | unset | Only needed if "enhanced push security" is turned on for the Expo project |
 | `SUPPORT_EMAIL` | unset | Contact address shown with the Contact us form on the You tab (App Store review expects one) |

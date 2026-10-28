@@ -3,7 +3,8 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
-import { HOUSE_CARD, TILE_FACES, cardToSpec, type PlayerView } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, TILE_FACES, cardFromSpec, cardToSpec, registerCard, type PlayerView } from '@daily-rack/core/mahjong';
+import { PLUS } from '@daily-rack/core';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { loadCards } from './cards.ts';
@@ -13,6 +14,7 @@ import { loadContent, syncRevisions } from './content.ts';
 import { openDb, type Db } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
 import type { ExpoMessage, ExpoTicket } from './push.ts';
+import { PlusService } from './plus.ts';
 
 const content = loadContent(join(import.meta.dirname, '../../../content'), { devRotate: true });
 const config = { brand: 'Daily Rack', publicBaseUrl: 'https://dailyrack.test', secureCookies: false, splitThreshold: 30, adminToken: 'test-moderator-token' };
@@ -61,6 +63,13 @@ async function device(name?: string, { rules = true }: { rules?: boolean } = {})
 }
 
 type Device = Awaited<ReturnType<typeof device>>;
+
+/** Ranked games need Daily Rack Plus; a moderator can give it. */
+async function givePlus(...players: Device[]) {
+  for (const p of players) {
+    await app.request(`/v1/admin/players/${p.id}/plus`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': 'test-moderator-token' }, body: JSON.stringify({ days: 30 }) });
+  }
+}
 
 async function befriend(a: Device, b: Device) {
   await a.call('POST', '/v1/friends/requests', { code: b.profile.code });
@@ -838,6 +847,7 @@ describe('stats, ranked play and voice chat', () => {
     quickMatches();
     const ann = await device('Ann');
     const bea = await device('Bea');
+    await givePlus(ann, bea);
     expect((await ann.call('POST', '/v1/matchmaking', { mode: 'ranked' })).body.queue).toMatchObject({ mode: 'ranked' });
     await bea.call('POST', '/v1/matchmaking', { mode: 'ranked' });
     const tableId = await publicTableOf(ann);
@@ -885,6 +895,7 @@ describe('stats, ranked play and voice chat', () => {
   it('counts leaving a ranked hand early as a loss', async () => {
     quickMatches();
     const ann = await device('Ann');
+    await givePlus(ann);
     await ann.call('POST', '/v1/matchmaking', { mode: 'ranked' });
     const tableId = await publicTableOf(ann);
     await ann.call('POST', `/v1/tables/${tableId}/leave`);
@@ -951,5 +962,96 @@ describe('extra cards', () => {
     expect(created.body.table.cardId).toBe('club-card-test');
     expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], cardId: 'nope' })).body.error.code).toBe('unknown_card');
     await playOut(created.body.table.id, [ann]);
+  });
+});
+
+describe('Daily Rack Plus', () => {
+  const premium = PLUS.premiumCards[0]!;
+  const bots = [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }];
+  const moderator = (path: string, body: unknown) =>
+    app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': 'test-moderator-token' }, body: JSON.stringify(body) });
+  // Stands in for the premium card, so these tests don't depend on its hands.
+  beforeEach(() => registerCard(cardFromSpec({ ...cardToSpec(HOUSE_CARD), id: premium, name: 'Premium card' })));
+
+  it('gives free players a few hands a day on the premium card against the computer, and unlimited with Plus', async () => {
+    const ann = await device('Ann');
+    expect((await ann.call('GET', '/v1/me/plus')).body).toMatchObject({ plus: false, freeHandsLeft: PLUS.freeCardHandsPerDay });
+    for (let i = 0; i < PLUS.freeCardHandsPerDay; i++) {
+      expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: bots, cardId: premium })).status).toBe(201);
+    }
+    expect((await ann.call('GET', '/v1/me/plus')).body.freeHandsLeft).toBe(0);
+    const blocked = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: bots, cardId: premium });
+    expect(blocked).toMatchObject({ status: 402, body: { error: { code: 'plus_required', feature: 'premium-card' } } });
+    // The house card is always free.
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: bots })).status).toBe(201);
+
+    expect((await moderator(`/v1/admin/players/${ann.id}/plus`, { days: 30 })).status).toBe(200);
+    expect((await ann.call('GET', '/v1/me/plus')).body).toMatchObject({ plus: true, source: 'admin', freeHandsLeft: null });
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: bots, cardId: premium })).status).toBe(201);
+    await moderator(`/v1/admin/players/${ann.id}/plus`, { days: 0 });
+    expect((await ann.call('GET', '/v1/me/plus')).body.plus).toBe(false);
+    expect((await app.request(`/v1/admin/players/${ann.id}/plus`, { method: 'POST', body: '{"days":30}' })).status).toBe(401);
+  });
+
+  it('lets a Plus host bring friends to the premium card for free, and keeps ranked games for Plus', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    const seats = [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }];
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats, cardId: premium })).body.error).toMatchObject({ code: 'plus_required', feature: 'host-premium-card' });
+    await moderator(`/v1/admin/players/${ann.id}/plus`, { days: null });
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats, cardId: premium });
+    expect(created.status).toBe(201);
+    expect((await bea.call('POST', `/v1/tables/${created.body.table.id}/join`)).status).toBe(200);
+    expect((await ann.call('POST', `/v1/tables/${created.body.table.id}/start`)).status).toBe(200);
+
+    expect((await bea.call('POST', '/v1/matchmaking', { mode: 'ranked' })).body.error).toMatchObject({ code: 'plus_required', feature: 'ranked' });
+    expect((await bea.call('POST', '/v1/matchmaking', { mode: 'casual' })).status).toBe(200);
+    await bea.call('DELETE', '/v1/matchmaking');
+    expect((await ann.call('POST', '/v1/matchmaking', { mode: 'ranked' })).status).toBe(200);
+    await ann.call('DELETE', '/v1/matchmaking');
+  });
+
+  it('keeps Plus up to date from RevenueCat webhooks, once per event, and follows a restore to a new guest', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    const hooked = createApp({ db, content, config: { ...config, plus: { webhookAuth: 'Bearer hook-secret' } }, services });
+    const send = (event: object, auth = 'Bearer hook-secret') =>
+      hooked.request('/v1/webhooks/revenuecat', { method: 'POST', headers: { 'content-type': 'application/json', authorization: auth }, body: JSON.stringify({ api_version: '1.0', event }) });
+    const later = Date.now() + 30 * 86_400_000;
+    const purchase = { id: 'evt-1', type: 'INITIAL_PURCHASE', app_user_id: ann.id, original_app_user_id: ann.id, aliases: [ann.id], entitlement_ids: ['plus'], expiration_at_ms: later, product_id: 'dailyrack_plus_annual' };
+
+    expect((await app.request('/v1/webhooks/revenuecat', { method: 'POST', body: '{}' })).status).toBe(404);
+    expect((await send(purchase, 'Bearer wrong')).status).toBe(401);
+    expect((await send(purchase)).status).toBe(200);
+    expect((await ann.call('GET', '/v1/me/plus')).body).toMatchObject({ plus: true, source: 'revenuecat', willRenew: true, until: new Date(later).toISOString() });
+    expect((await send(purchase)).status).toBe(200);
+
+    await send({ ...purchase, id: 'evt-2', type: 'CANCELLATION' });
+    expect((await ann.call('GET', '/v1/me/plus')).body).toMatchObject({ plus: true, willRenew: false });
+
+    // Restored on a new phone (a new guest): Plus moves with the purchase.
+    await send({ id: 'evt-3', type: 'TRANSFER', transferred_from: [ann.id], transferred_to: [bea.id] });
+    expect((await ann.call('GET', '/v1/me/plus')).body.plus).toBe(false);
+    expect((await bea.call('GET', '/v1/me/plus')).body.plus).toBe(true);
+
+    await send({ ...purchase, id: 'evt-4', type: 'EXPIRATION', app_user_id: bea.id, original_app_user_id: bea.id, aliases: [bea.id], expiration_at_ms: Date.now() - 1000 });
+    expect((await bea.call('GET', '/v1/me/plus')).body.plus).toBe(false);
+  });
+
+  it('asks RevenueCat directly when it has a secret key', async () => {
+    const ann = await device('Ann');
+    const until = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    const calls: string[] = [];
+    const fake = (async (url: string, init?: RequestInit) => {
+      calls.push(`${url} ${(init?.headers as Record<string, string>).authorization}`);
+      return new Response(JSON.stringify({ subscriber: { entitlements: { plus: { expires_date: until, product_identifier: 'dailyrack_plus_monthly' } }, subscriptions: { dailyrack_plus_monthly: { unsubscribe_detected_at: null } } } }));
+    }) as typeof fetch;
+    const service = new PlusService(db, { secretKey: 'sk_test' }, () => new Date(), fake);
+    expect(await service.sync(ann.id)).toBe(true);
+    expect(calls).toEqual([`https://api.revenuecat.com/v1/subscribers/${ann.id} Bearer sk_test`]);
+    expect(service.status(ann.id)).toMatchObject({ plus: true, until, willRenew: true, source: 'revenuecat' });
+    expect(await new PlusService(db, {}).sync(ann.id)).toBe(false);
+    expect(new PlusService(db, { forEveryone: true }).status('anyone')).toMatchObject({ plus: true, source: 'everyone' });
   });
 });

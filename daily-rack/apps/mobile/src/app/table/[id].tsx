@@ -17,10 +17,12 @@ import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { Lobby } from '../../game/Lobby.tsx';
 import { useVoice } from '../../voice/useVoice.ts';
 import { VoiceBar } from '../../voice/VoiceBar.tsx';
+import { usePlus } from '../../lib/plus.tsx';
 
 export default function TableScreen() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { handlePlusError } = usePlus();
   const { principalId } = useSession();
   const { connected } = useRealtime();
   const { ensureName } = useSafety();
@@ -92,7 +94,7 @@ export default function TableScreen() {
       if (result && typeof result === 'object' && 'table' in result) setData(result as TablePayload);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'stale') load();
-      setError((e as Error).message);
+      if (!handlePlusError(e)) setError((e as Error).message);
     } finally {
       setBusy(false);
     }

@@ -510,6 +510,25 @@ try {
   await shot(page, '32-offline-game');
   check('an offline game deals on the device', offlineDealt);
 
+  // ------------------------------------------------------------------ 7b. Daily Rack Plus
+  await page.goto(`${BASE}/play`);
+  await page.getByTestId('match-ranked').waitFor();
+  const rankedLabel = (await page.getByTestId('match-ranked').textContent()) ?? '';
+  await page.getByTestId('match-ranked').click();
+  const plusOpened = await page.getByTestId('plus-features').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await shot(page, '32b-plus');
+  check('ranked games open the Plus screen for free players', rankedLabel.includes('Plus') && plusOpened && (await page.getByText('Ranked games, ratings and the leaderboard come with Plus').count()) > 0);
+  check('the Plus screen lists what stays free and says where to subscribe', (await page.getByText('Always free').count()) > 0 && (await page.getByText('Plus is available in the Daily Rack app for iPhone and Android.').count()) > 0);
+  await page.getByTestId('plus-later').click();
+  if (process.env.E2E_ADMIN_TOKEN) {
+    const me = await api(page, 'GET', '/v1/me/profile');
+    await fetch(`${BASE}/v1/admin/players/${me.id}/plus`, { method: 'POST', headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ days: 7 }) });
+    await page.goto(`${BASE}/you`);
+    const member = await page.getByText('You’re a member', { exact: false }).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    check('a Plus member sees their membership', member);
+    await fetch(`${BASE}/v1/admin/players/${me.id}/plus`, { method: 'POST', headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ days: 0 }) });
+  }
+
   // ------------------------------------------------------------------ 8. Report a problem
   await page.goto(`${BASE}/you`);
   await page.getByTestId('report-problem').scrollIntoViewIfNeeded();

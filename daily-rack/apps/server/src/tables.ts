@@ -118,6 +118,8 @@ const GROUP_NAMES: Record<number, string> = { 3: 'pung', 4: 'kong', 5: 'quint', 
 export class TableService {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private random = rng(Date.now() & 0xffffffff);
+  /** Set by the app: throws if a hand on this card can't be dealt for this host (Plus rules). */
+  dealGate?: (hostId: string, cardId: string, vsComputer: boolean) => void;
 
   constructor(
     private db: Db,
@@ -138,6 +140,8 @@ export class TableService {
       else if (s.type === 'friend' && s.friendId) seats.push({ principalId: null, bot: null, reservedFor: s.friendId });
       else seats.push({ principalId: null, bot: null, reservedFor: null });
     }
+    // Premium cards need Plus (or a free hand left against the computer) before anything is saved.
+    this.dealGate?.(hostId, cardById(input.cardId).id, seats.slice(1).every((s) => s.bot));
     const settings: TableSettings = {
       secondCharleston: input.settings?.secondCharleston ?? true,
       courtesyPass: input.settings?.courtesyPass ?? true,
@@ -350,6 +354,7 @@ export class TableService {
   }
 
   private dealHand(row: TableRow, handNumber: number) {
+    if (row.kind === 'private') this.dealGate?.(row.host_id, row.card_id, this.seatsOf(row).slice(1).every((s) => s.bot));
     const settings = JSON.parse(row.settings) as TableSettings;
     const dealer = (handNumber - 1) % 4;
     const state = newGame(this.cardOf(row), { seed: Math.floor(this.random() * 2 ** 31), ...settings });

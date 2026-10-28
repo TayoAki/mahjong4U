@@ -311,6 +311,23 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   `,
+  `
+  -- Daily Rack Plus: who has it and until when (null = no end), from RevenueCat or given by
+  -- hand; and the RevenueCat webhook events already handled, so retries count once.
+  CREATE TABLE plus_members (
+    principal_id TEXT PRIMARY KEY REFERENCES principals(id) ON DELETE CASCADE,
+    until TEXT,
+    source TEXT NOT NULL CHECK (source IN ('revenuecat', 'admin')),
+    will_renew INTEGER NOT NULL DEFAULT 0,
+    product_id TEXT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE revenuecat_events (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    received_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

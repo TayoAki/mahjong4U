@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMatchmaking } from '../lib/matchmaking.tsx';
+import { usePlus } from '../lib/plus.tsx';
 import { Body, Button, Card, ErrorPanel, Heading, Icon, Row } from '../components/ui.tsx';
 import { colors } from '../theme.ts';
 import { formatSeconds } from './useCountdown.ts';
@@ -10,6 +11,7 @@ import { formatSeconds } from './useCountdown.ts';
 export function OnlineCard({ rating }: { rating: number | null }) {
   const router = useRouter();
   const { queue, busy, error, find, cancel } = useMatchmaking();
+  const { plus, openPlus } = usePlus();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!queue) return;
@@ -40,7 +42,14 @@ export function OnlineCard({ rating }: { rating: number | null }) {
           <Body muted>Live games with other players, one hand each. Chat uses quick phrases, so it stays friendly.</Body>
           <Row gap={10}>
             <Button style={{ flex: 1 }} title="Quick match" icon="play" onPress={() => find('casual')} loading={busy} testID="match-casual" />
-            <Button style={{ flex: 1 }} title="Ranked" variant="secondary" onPress={() => find('ranked')} disabled={busy} testID="match-ranked" />
+            <Button
+              style={{ flex: 1 }}
+              title={plus ? 'Ranked' : 'Ranked · Plus'}
+              variant="secondary"
+              onPress={() => (plus ? find('ranked') : openPlus('ranked'))}
+              disabled={busy}
+              testID="match-ranked"
+            />
           </Row>
         </>
       )}

@@ -8,6 +8,7 @@
 //   ... node scripts/reports.mjs bugs [all]                                             problems reported from the app
 //   ... node scripts/reports.mjs bug <bugReportId>                                      one problem in full; saves its screenshot
 //   ... node scripts/reports.mjs close-bug <bugReportId>                                mark a problem handled (reopen-bug undoes it)
+//   ... node scripts/reports.mjs plus <playerId> <days|forever|off>                     give Daily Rack Plus by hand (testers, support)
 //
 // remove-content hides the reported message for everyone. suspend also hides everything the
 // player has written and stops them chatting, adding friends or joining game nights.
@@ -85,6 +86,14 @@ if (command === 'open' || command === 'all') {
 } else if ((command === 'close-bug' || command === 'reopen-bug') && id) {
   const { status } = await call('POST', `/bug-reports/${id}`, { action: command === 'close-bug' ? 'close' : 'reopen' });
   console.log(`Problem report ${id}: ${status}.`);
+} else if (command === 'plus' && id && action) {
+  const days = action === 'forever' ? null : action === 'off' ? 0 : Number(action);
+  if (days !== null && !Number.isInteger(days)) {
+    console.error('Give a number of days, "forever" or "off".');
+    process.exit(1);
+  }
+  const status = await call('POST', `/players/${id}/plus`, { days });
+  console.log(status.plus ? `Player ${id} has Plus${status.until ? ` until ${status.until}` : ' with no end date'}.` : `Player ${id} doesn't have Plus.`);
 } else if (command === 'resolve' && id && ['dismiss', 'remove-content', 'suspend'].includes(action)) {
   await call('POST', `/reports/${id}`, { action });
   console.log(`Report ${id}: ${action}.`);
@@ -93,7 +102,7 @@ if (command === 'open' || command === 'all') {
   console.log(unsuspended ? `Player ${id} can chat again.` : `Player ${id} was not suspended.`);
 } else {
   console.error(
-    'Usage: node scripts/reports.mjs [open|all] | feedback | bugs [all] | bug <id> | close-bug <id> | reopen-bug <id> | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId>',
+    'Usage: node scripts/reports.mjs [open|all] | feedback | bugs [all] | bug <id> | close-bug <id> | reopen-bug <id> | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId> | plus <playerId> <days|forever|off>',
   );
   process.exit(1);
 }
