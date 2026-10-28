@@ -62,6 +62,30 @@ function deficit(groups: readonly ConcreteGroup[], counts: Counts): number {
   return missingNatural + Math.max(0, missingJokerable - counts.jokers);
 }
 
+export interface ExposureFit {
+  concrete: ConcreteHand;
+  /** Groups left to fill once the exposures are taken out. */
+  remaining: ConcreteGroup[];
+}
+
+/**
+ * Every concrete hand that is still consistent with a seat's exposures, judged from the
+ * exposures alone (so anyone at the table can work it out). Once a seat has exposed,
+ * concealed hands are out.
+ */
+export function handsFittingExposures(card: Card, exposures: readonly Exposure[]): ExposureFit[] {
+  return [...eachHandFittingExposures(card, exposures)];
+}
+
+/** handsFittingExposures one at a time, for callers that can stop early. */
+export function* eachHandFittingExposures(card: Card, exposures: readonly Exposure[]): Generator<ExposureFit> {
+  for (const concrete of concreteHands(card)) {
+    if (concrete.hand.concealed && exposures.length > 0) continue;
+    const remaining = withoutExposures(concrete.groups, exposures);
+    if (remaining) yield { concrete, remaining };
+  }
+}
+
 /** Every concrete hand the player could still make, closest first. */
 export function analyze(card: Card, concealed: readonly number[], exposures: readonly Exposure[]): HandFit[] {
   const counts = count(concealed);

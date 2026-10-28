@@ -1,5 +1,5 @@
 import type { Alignment, AlternatePass, PublicPuzzle, ReviewState, Section, Suggestion } from '@daily-rack/core';
-import type { Action, BotLevel, CardSpec, PlayerView } from '@daily-rack/core/mahjong';
+import type { Action, BotLevel, CardSpec, DeadReason, PlayerView } from '@daily-rack/core/mahjong';
 import { API_BASE } from './config.ts';
 import { noteProblem } from './diagnostics.ts';
 
@@ -189,7 +189,8 @@ export interface LogEntry {
   at: string;
   position: number | null;
   text: string;
-  event: { type: string; tile?: number; size?: number; position?: number; from?: number | null };
+  /** `reason` comes with 'dead-hand' events. */
+  event: { type: string; tile?: number; size?: number; position?: number; from?: number | null; reason?: DeadReason };
 }
 
 export interface TablePayload {
