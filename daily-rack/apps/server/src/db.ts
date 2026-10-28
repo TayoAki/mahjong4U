@@ -275,6 +275,22 @@ const MIGRATIONS: string[] = [
   -- Which card a table plays with (the house card unless the host picks another).
   ALTER TABLE tables ADD COLUMN card_id TEXT NOT NULL DEFAULT 'daily-rack-house-2026';
   `,
+  `
+  -- "Report a problem" from the app: what went wrong, where, the device and app details the
+  -- app attaches (JSON), and an optional screenshot kept right here.
+  CREATE TABLE bug_reports (
+    id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+    description TEXT NOT NULL,
+    screen TEXT NOT NULL,
+    details TEXT NOT NULL,
+    screenshot BLOB,
+    screenshot_type TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX bug_reports_by_status ON bug_reports (status, created_at);
+  `,
 ];
 
 export type Db = DatabaseSync;

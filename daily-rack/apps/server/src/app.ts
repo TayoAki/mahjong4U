@@ -98,7 +98,7 @@ const EventsBody = z.object({
 export type Env = { Variables: { requestId: string; principal: Principal | null } };
 export type Fail = (
   c: Context<Env>,
-  status: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 429 | 500,
+  status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500,
   code: string,
   message: string,
   extra?: object,

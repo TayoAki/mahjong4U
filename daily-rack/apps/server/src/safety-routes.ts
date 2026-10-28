@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Context, Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import type { AppConfig, Env, Fail, RateLimiter } from './app.ts';
 import type { Hub } from './realtime.ts';
+import { BugReportBody, BugReportError, MAX_BUG_REPORT_BODY, bugScreenshot, deviceLine, fileBugReport, listBugReports, setBugReportStatus } from './bug-reports.ts';
 import {
   REPORT_REASONS,
   acceptRules,
@@ -45,7 +47,7 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
   const { db, hub, config, fail, limiter, now, handle, body } = deps;
   const me = (c: Context<Env>) => c.get('principal');
 
-  for (const path of ['/me/rules', '/blocks', '/blocks/*', '/reports', '/feedback']) {
+  for (const path of ['/me/rules', '/blocks', '/blocks/*', '/reports', '/feedback', '/bug-reports']) {
     api.use(path, async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
   }
 
@@ -118,6 +120,33 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
     return c.json({ sent: true }, 201);
   });
 
+  // ---------------------------------------------------------------- report a problem
+
+  api.post(
+    '/bug-reports',
+    bodyLimit({ maxSize: MAX_BUG_REPORT_BODY, onError: (c) => fail(c as Context<Env>, 413, 'too_large', 'That report is too large. Try again without the screenshot.') }),
+    async (c) => {
+      if (!limiter.allow(`bug-report:${me(c)!.id}`, 6, 3_600_000)) return fail(c, 429, 'rate_limited', 'You have sent a lot of reports. Try again later.');
+      const input = await body(c, BugReportBody);
+      if (!input) return fail(c, 400, 'invalid_input', 'Tell us what went wrong (up to 4,000 characters).');
+      let id: string;
+      try {
+        ({ id } = fileBugReport(db, me(c)!.id, input, now()));
+      } catch (error) {
+        if (error instanceof BugReportError) return fail(c, 400, 'bad_screenshot', error.message);
+        return handle(c, error);
+      }
+      const name = ensureProfile(db, me(c)!.id, now()).name;
+      const device = deviceLine(input.details);
+      console.log(JSON.stringify({ level: 'info', message: 'bug_report_received', bugReportId: id, screen: input.screen, screenshot: Boolean(input.screenshot) }));
+      notifyModerators(
+        config.reportWebhookUrl,
+        `New Daily Rack problem report from ${name} on ${input.screen}${device ? ` (${device})` : ''}${input.screenshot ? ', with a screenshot' : ''}: ${input.description.slice(0, 300)}. Report ${id}.`,
+      );
+      return c.json({ sent: true, id }, 201);
+    },
+  );
+
   // ---------------------------------------------------------------- moderators
 
   const admin = async (c: Context<Env>, next: () => Promise<void>) => {
@@ -143,6 +172,21 @@ export function registerSafetyRoutes(api: Hono<Env>, deps: Deps): void {
   });
 
   api.post('/admin/players/:id/unsuspend', (c) => c.json({ unsuspended: unsuspend(db, c.req.param('id')) }));
+
+  api.get('/admin/bug-reports', (c) => c.json({ bugReports: listBugReports(db, c.req.query('status') === 'all' ? 'all' : 'open', now()) }));
+
+  api.get('/admin/bug-reports/:id/screenshot', (c) => {
+    const shot = bugScreenshot(db, c.req.param('id'));
+    if (!shot) return fail(c, 404, 'not_found', 'That report has no screenshot.');
+    return c.body(Buffer.from(shot.bytes), 200, { 'content-type': shot.type, 'cache-control': 'private, no-store' });
+  });
+
+  api.post('/admin/bug-reports/:id', async (c) => {
+    const input = await body(c, z.object({ action: z.enum(['close', 'reopen']) }));
+    if (!input) return fail(c, 400, 'invalid_input', 'Choose close or reopen.');
+    if (!setBugReportStatus(db, c.req.param('id'), input.action === 'close' ? 'closed' : 'open')) return fail(c, 404, 'not_found', 'No such report.');
+    return c.json({ status: input.action === 'close' ? 'closed' : 'open' });
+  });
 
   api.get('/admin/feedback', (c) => {
     const rows = db.prepare('SELECT * FROM feedback ORDER BY created_at DESC LIMIT 200').all() as { id: string; principal_id: string; message: string; created_at: string }[];

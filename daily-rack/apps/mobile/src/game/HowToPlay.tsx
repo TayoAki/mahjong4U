@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Body, Button, Sheet } from '../components/ui.tsx';
+import { useReportProblem } from '../lib/report-problem.tsx';
 import { Tile } from '../components/Tile.tsx';
 import { colors } from '../theme.ts';
 
@@ -30,6 +31,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function HowToPlay({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { reportProblem } = useReportProblem();
   return (
     <Sheet visible={visible} title="How to play" onClose={onClose}>
       <Section title="The goal">
@@ -63,6 +65,17 @@ export function HowToPlay({ visible, onClose }: { visible: boolean; onClose: () 
         ))}
       </Section>
       <Button title="Got it" onPress={onClose} />
+      <Button
+        title="Something not working? Report a problem"
+        variant="text"
+        icon="flag"
+        onPress={() => {
+          onClose();
+          // Once this sheet has slid away, a screenshot shows the table as you saw it.
+          reportProblem({ capture: true, delayMs: 450 });
+        }}
+        testID="help-report-problem"
+      />
     </Sheet>
   );
 }

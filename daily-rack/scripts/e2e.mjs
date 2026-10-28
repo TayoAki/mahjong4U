@@ -7,6 +7,7 @@
 //   6. Safety: community rules, the word filter, reporting a message, blocking and unblocking.
 //   7. Voice chat at a private table, a quick match together, lessons, stats, the
 //      leaderboard and an offline game.
+//   8. Report a problem, with a screenshot, from the You tab and from a table's help sheet.
 //      (Start the server with MATCH_FILL_CASUAL_MS=3000 or the quick match waits 20 s.)
 // Usage: BASE_URL=http://localhost:8787 node scripts/e2e.mjs
 //   (server running on a fresh DB with the web build: npm run build && BOT_DELAY_MS=120 npm start)
@@ -451,6 +452,39 @@ try {
   const offlineDealt = await page.getByTestId('table-status').waitFor({ timeout: 10_000 }).then(() => true, () => false);
   await shot(page, '32-offline-game');
   check('an offline game deals on the device', offlineDealt);
+
+  // ------------------------------------------------------------------ 8. Report a problem
+  await page.goto(`${BASE}/you`);
+  await page.getByTestId('report-problem').scrollIntoViewIfNeeded();
+  await page.getByTestId('report-problem').click();
+  await page.getByTestId('problem-input').fill('E2E: the Suggest button picked a joker');
+  await page.getByTestId('problem-details-toggle').click();
+  const problemDetails = (await page.getByTestId('problem-details').textContent()) ?? '';
+  check('a problem report shows what it sends', problemDetails.includes('Screen: /you') && /Device: \S/.test(problemDetails) && problemDetails.includes('Settings:'), problemDetails.slice(0, 100));
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 10_000 }), page.getByTestId('problem-add-shot').click()]);
+  await chooser.setFiles(join(OUT, '05-play-tab.png'));
+  check('a screenshot can be attached to a problem report', await page.getByTestId('problem-shot').waitFor({ timeout: 10_000 }).then(() => true, () => false));
+  await shot(page, '33-report-problem');
+  await page.getByTestId('send-problem').click();
+  check('a problem report sends', await page.getByTestId('problem-sent').waitFor({ timeout: 15_000 }).then(() => true, () => false));
+  if (process.env.E2E_ADMIN_TOKEN) {
+    const headers = { 'x-admin-token': process.env.E2E_ADMIN_TOKEN };
+    const { bugReports } = await (await fetch(`${BASE}/v1/admin/bug-reports`, { headers })).json();
+    const filed = bugReports.find((b) => b.description.startsWith('E2E: the Suggest button'));
+    const image = filed?.hasScreenshot ? await fetch(`${BASE}/v1/admin/bug-reports/${filed.id}/screenshot`, { headers }) : null;
+    const bytes = image?.ok ? (await image.arrayBuffer()).byteLength : 0;
+    check(
+      'moderators see the problem with device details and the screenshot',
+      filed?.screen === '/you' && typeof filed.details.device === 'string' && image?.headers.get('content-type') === 'image/jpeg' && bytes > 1000,
+      filed ? `${filed.details.device}, ${filed.details.os}, screenshot ${(bytes / 1024).toFixed(0)} KB` : 'missing',
+    );
+  }
+  await page.goto(`${BASE}/offline`);
+  await page.getByLabel('How to play').click();
+  await page.getByTestId('help-report-problem').scrollIntoViewIfNeeded();
+  await page.getByTestId('help-report-problem').click();
+  await page.getByTestId('problem-details-toggle').click({ timeout: 10_000 });
+  check('the table’s help sheet opens a report for that screen', ((await page.getByTestId('problem-details').textContent()) ?? '').includes('Screen: /offline'));
 
   await page.goto(`${BASE}/`);
   await page.getByTestId('today-primary').waitFor();

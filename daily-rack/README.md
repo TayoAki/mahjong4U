@@ -84,6 +84,10 @@ Chat makes this an app with user-generated content, so it has what the App Store
 - **Block.** Blocking works both ways: no messages, requests, shared tables or game nights. Unblock on the You tab.
 - **Moderators.** `npm run reports` lists open reports with the exact text; dismiss, remove the message, or suspend the player. An optional webhook posts each new report to Slack or Discord. Reports must be reviewed within 24 hours.
 
+## Report a problem
+
+Players report bugs from the You tab, from the How to play sheet at any table, or from the crash screen. The app attaches the screen they were on, the device, OS and app version, a few settings and the app's recent errors, plus an optional screenshot (taken of the table on phones, or picked from Photos anywhere). Players see everything that's sent first. Read them with `npm run reports -- bugs` and `npm run reports -- bug <id>` (which saves the screenshot); details in [`docs/MODERATION.md`](docs/MODERATION.md#problem-reports).
+
 ## Run it
 
 Requires Node 22.13 or newer.
@@ -164,7 +168,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `npm run content:check` | Validate all puzzles and the schedule; lists any not yet teacher-reviewed |
 | `npm run seed:demo -- [revisionId] [count]` | Add labelled demo answers so the split can be seen in development |
 | `node scripts/make-sounds.mjs` | Rebuild the table sounds in `apps/mobile/assets/sounds` (synthesized, deterministic) |
-| `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend; `npm run reports feedback` lists Contact us messages (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
+| `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend; `npm run reports feedback` lists Contact us messages; `npm run reports -- bugs` lists problem reports and `bug <id>` shows one with its screenshot (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
 | `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
 
 ## Adding a daily rack

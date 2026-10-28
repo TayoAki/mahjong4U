@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { ApiError, api, getBearer, setBearer, type MyProfile } from './api.ts';
 import { readJson, writeJson } from './storage.ts';
 import { syncOfflineResults } from '../offline/results.ts';
+import { sendQueuedBugReports } from './bug-reports.ts';
 
 // One guest identity per device, created on first launch. Native keeps its token in the
 // keychain/keystore; the web build relies on the server's HttpOnly cookie. If the server
@@ -67,8 +68,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         const profile = await api.profile();
         void writeJson(CACHE_KEY, { principalId: session.principalId, profile });
-        // Hands played offline join your stats as soon as the server is reachable.
+        // Hands played offline join your stats, and problem reports go out, once the server is reachable.
         void syncOfflineResults().catch(() => undefined);
+        void sendQueuedBugReports().catch(() => undefined);
         if (!cancelled) setState({ ready: true, error: null, principalId: session.principalId, profile, offline: false });
       } catch (error) {
         const cache = error instanceof ApiError && error.code === 'network' ? await readJson<{ principalId: string; profile: MyProfile } | null>(CACHE_KEY, null) : null;

@@ -3,6 +3,7 @@ import { Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-nati
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api, getConfig, type Profile, type Progress } from '../../lib/api.ts';
 import { updatePrefs, usePrefs } from '../../lib/prefs.ts';
+import { useReportProblem } from '../../lib/report-problem.tsx';
 import { useSafety } from '../../lib/safety.tsx';
 import { forgetSession, useSession } from '../../lib/session.tsx';
 import { clearAll } from '../../lib/storage.ts';
@@ -30,6 +31,7 @@ export default function YouScreen() {
   const [blocked, setBlocked] = useState<Profile[]>([]);
   const [supportEmail, setSupportEmail] = useState<string | null>(null);
   const { openRules, version } = useSafety();
+  const { reportProblem } = useReportProblem();
 
   useEffect(() => setName(profile?.name ?? ''), [profile?.name]);
   const load = useCallback(() => {
@@ -222,6 +224,7 @@ export default function YouScreen() {
           ))
         )}
         <Button title="Community rules" variant="text" icon="help" onPress={openRules} />
+        <Button title="Report a problem" variant="text" icon="flag" onPress={() => reportProblem()} testID="report-problem" />
         <Button
           title="Contact us"
           variant="text"
@@ -260,7 +263,7 @@ export default function YouScreen() {
           </>
         ) : (
           <>
-            <Body>Found a bug, have an idea, or need help with a player? Tell us here.</Body>
+            <Body>Have an idea, a question, or need help with a player? Tell us here. If something isn’t working, Report a problem sends us the details we need to fix it.</Body>
             <TextInput
               value={feedback}
               onChangeText={(t) => setFeedback(t.slice(0, 2000))}

@@ -1,6 +1,7 @@
 import type { Alignment, AlternatePass, PublicPuzzle, ReviewState, Section, Suggestion } from '@daily-rack/core';
 import type { Action, BotLevel, CardSpec, PlayerView } from '@daily-rack/core/mahjong';
 import { API_BASE } from './config.ts';
+import { noteProblem } from './diagnostics.ts';
 
 export class ApiError extends Error {
   constructor(
@@ -37,6 +38,7 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
+    noteProblem(`${method} ${path.split('?')[0]}: no connection`);
     throw new ApiError(0, 'network', 'You seem to be offline. Check your connection and try again.', true);
   }
   const text = await res.text();
@@ -48,12 +50,21 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
   }
   if (!res.ok) {
     const { code, message, retryable, ...extra } = data?.error ?? {};
+    noteProblem(`${method} ${path.split('?')[0]}: ${res.status} ${code ?? 'unknown'}`);
     throw new ApiError(res.status, code ?? 'unknown', message ?? 'Something went wrong.', Boolean(retryable), extra);
   }
   return data as T;
 }
 
 // ------------------------------------------------------------------ types
+
+/** "Report a problem": what went wrong, where, the details the app attaches and an optional screenshot. */
+export interface BugReport {
+  description: string;
+  screen: string;
+  details: Record<string, string | number | boolean | null | string[]>;
+  screenshot?: { type: 'image/jpeg'; data: string } | null;
+}
 
 export interface Progress {
   streak: number;
@@ -346,6 +357,7 @@ export const api = {
   report: (body: { playerId?: string; messageId?: string; reason: ReportReason; note?: string | null; block?: boolean }) =>
     request<{ reported: boolean; id: string; blocked: boolean }>('POST', '/v1/reports', body),
   feedback: (message: string) => request<{ sent: boolean }>('POST', '/v1/feedback', { message }),
+  bugReport: (report: BugReport) => request<{ sent: boolean; id: string }>('POST', '/v1/bug-reports', report),
   rename: (name: string) => request<Profile>('PUT', '/v1/me/profile', { name }),
   realtimeTicket: () => request<{ ticket: string }>('POST', '/v1/realtime/tickets'),
 

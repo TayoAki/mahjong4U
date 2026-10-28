@@ -51,9 +51,17 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Save your rack clips to Photos.",
+          "photosPermission": "Save your rack clips to Photos, and pick a screenshot to attach when you report a problem.",
           "savePhotosPermission": "Save your rack clips to Photos.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Save your rack clips to Photos, and pick a screenshot to attach when you report a problem.",
+          "cameraPermission": "Daily Rack does not use your camera. The voice chat library lists this entry, but the app never asks for camera access.",
+          "microphonePermission": "Talk with friends at your table in voice chat, and record an optional voiceover for your rack clip."
         }
       ],
       [

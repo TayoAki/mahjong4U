@@ -16,12 +16,27 @@ Two newer features change who can talk to whom, by design:
 
 Apple also expects published contact information. The You tab has a **Contact us** form: messages are stored on the server (and sent to `REPORT_WEBHOOK_URL` if set); read them with `ADMIN_TOKEN=... API_URL=... npm run reports feedback`. Set `SUPPORT_EMAIL` on the server too and the form shows that address as well. Use the same address as the support URL on the App Store listing.
 
+## Problem reports
+
+Players tell us about bugs with **Report a problem**: on the You tab, at the bottom of the How to play sheet at any table, and on the screen the app shows if something crashes. They write what went wrong; the app adds the screen they were on, the device, OS and app version, text size, a few settings (large tiles, table sounds, hints) and the last few errors the app ran into. At a table on a phone it also takes a screenshot of the table first, and anywhere they can pick a screenshot from Photos; they see the screenshot, and the full list of details, before sending, and can remove the screenshot. Reports written with no connection are kept on the phone and sent once it's back online. Up to 6 reports an hour per player; screenshots are shrunk to a small JPEG (up to 1.5 MB is accepted) and stored with the report. Deleting your data deletes your reports too.
+
+```bash
+ADMIN_TOKEN=... API_URL=https://your-server npm run reports -- bugs            # open problem reports
+ADMIN_TOKEN=... API_URL=https://your-server npm run reports -- bugs all        # everything recent
+ADMIN_TOKEN=... API_URL=https://your-server npm run reports -- bug <id>        # every detail, and saves the screenshot here
+ADMIN_TOKEN=... API_URL=https://your-server npm run reports -- close-bug <id>  # done with it (reopen-bug undoes it)
+```
+
+The first 8 characters of an id are enough for `bug`. With `REPORT_WEBHOOK_URL` set, each new problem report posts a one-line alert with the screen, the device and the first 300 characters. Problem reports don't have the 24-hour rule that player reports do, but they're how you'll hear about bugs on phones nobody here has tested on.
+
+For the App Store privacy label and the Play data safety form: problem reports collect diagnostics (crash data and other diagnostic data) and, when a player attaches one, a photo (the screenshot), linked to their guest id and used only to fix the app. Nothing is sent unless the player sends a report.
+
 ## Setting it up on the server
 
 | Variable | What it does |
 | --- | --- |
 | `ADMIN_TOKEN` | A long random secret that unlocks the moderator endpoints. Without it, `/v1/admin` doesn't exist. Generate one with `openssl rand -hex 32`. |
-| `REPORT_WEBHOOK_URL` | Optional. A Slack or Discord incoming-webhook URL. Every new report posts a one-line alert there so you see it quickly. |
+| `REPORT_WEBHOOK_URL` | Optional. A Slack or Discord incoming-webhook URL. Every new report, Contact us message and problem report posts a one-line alert there so you see it quickly. |
 | `SUPPORT_EMAIL` | Shown in the app as the contact for safety and support. |
 
 ## Reviewing reports

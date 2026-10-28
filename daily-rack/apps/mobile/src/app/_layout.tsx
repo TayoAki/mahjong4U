@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
@@ -9,9 +9,13 @@ import { SessionProvider, useSession } from '../lib/session.tsx';
 import { RealtimeProvider } from '../lib/realtime.tsx';
 import { SafetyProvider } from '../lib/safety.tsx';
 import { MatchmakingProvider } from '../lib/matchmaking.tsx';
-import { Body, Button, ErrorPanel, Loading, Screen } from '../components/ui.tsx';
+import { ReportProblemProvider, ReportProblemSheet } from '../lib/report-problem.tsx';
+import { installProblemCatcher, noteProblem } from '../lib/diagnostics.ts';
+import { Body, Button, Display, ErrorPanel, Loading, Screen } from '../components/ui.tsx';
 import { OfflineGameView } from '../offline/OfflineGameView.tsx';
 import { colors } from '../theme.ts';
+
+installProblemCatcher();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular, Anton_400Regular });
@@ -20,13 +24,15 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <SessionProvider>
         <RealtimeProvider>
-          <SessionGate ready={fontsLoaded}>
-            <SafetyProvider>
-              <MatchmakingProvider>
-                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
-              </MatchmakingProvider>
-            </SafetyProvider>
-          </SessionGate>
+          <ReportProblemProvider>
+            <SessionGate ready={fontsLoaded}>
+              <SafetyProvider>
+                <MatchmakingProvider>
+                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+                </MatchmakingProvider>
+              </SafetyProvider>
+            </SessionGate>
+          </ReportProblemProvider>
         </RealtimeProvider>
       </SessionProvider>
     </SafeAreaProvider>
@@ -52,4 +58,24 @@ function SessionGate({ ready, children }: { ready: boolean; children: ReactNode 
   }
   if (!ready || !session.ready) return <Loading label="Setting up the table" />;
   return <>{children}</>;
+}
+
+/** Shown if a screen crashes: a way back in, and a way to tell us what happened. */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const [reporting, setReporting] = useState(false);
+  const [extra] = useState(() => ({ error: error.message.slice(0, 500), stack: (error.stack ?? '').split('\n').slice(0, 10).map((line) => line.trim().slice(0, 300)).filter(Boolean) }));
+  useEffect(() => noteProblem(`Crash: ${error.message}`), [error]);
+  return (
+    <SafeAreaProvider>
+      <Screen>
+        <Display size={30} style={{ marginTop: 32 }}>
+          Something went wrong
+        </Display>
+        <Body>Sorry, the app hit a problem it couldn’t recover from. Try again, and if it keeps happening, please tell us what you were doing.</Body>
+        <Button title="Try again" icon="arrow" onPress={() => void retry()} testID="crash-retry" />
+        <Button title="Report this problem" variant="secondary" icon="flag" onPress={() => setReporting(true)} testID="crash-report" />
+      </Screen>
+      <ReportProblemSheet visible={reporting} onClose={() => setReporting(false)} screen="Crash screen" extra={extra} />
+    </SafeAreaProvider>
+  );
 }

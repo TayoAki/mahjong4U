@@ -635,6 +635,56 @@ describe('table fixes from the walkthrough', () => {
   });
 });
 
+describe('report a problem', () => {
+  const admin = (path: string, init: RequestInit = {}) => app.request(path, { ...init, headers: { 'content-type': 'application/json', 'x-admin-token': 'test-moderator-token', ...(init.headers ?? {}) } });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
+  const details = { device: 'iPhone 15', os: 'iOS 26.1', appVersion: '0.1.0', largeTiles: true, recentErrors: ['GET /v1/daily: 500'] };
+
+  it('takes a report with device details and a screenshot, for moderators to review and close', async () => {
+    const ann = await device('Ann');
+    const sent = await ann.call('POST', '/v1/bug-reports', { description: 'The discard button did nothing', screen: '/table/abc', details, screenshot: { type: 'image/jpeg', data: jpeg.toString('base64') } });
+    expect(sent.status).toBe(201);
+    const open = (await (await admin('/v1/admin/bug-reports')).json()) as { bugReports: any[] };
+    expect(open.bugReports).toMatchObject([{ id: sent.body.id, status: 'open', description: 'The discard button did nothing', screen: '/table/abc', details, hasScreenshot: true, from: { name: 'Ann' } }]);
+
+    const shot = await admin(`/v1/admin/bug-reports/${sent.body.id}/screenshot`);
+    expect(shot.status).toBe(200);
+    expect(shot.headers.get('content-type')).toBe('image/jpeg');
+    expect(Buffer.from(await shot.arrayBuffer())).toEqual(jpeg);
+    expect((await app.request(`/v1/admin/bug-reports/${sent.body.id}/screenshot`)).status).toBe(401);
+
+    const plain = await ann.call('POST', '/v1/bug-reports', { description: 'Sounds stopped', screen: '/you' });
+    expect(plain.status).toBe(201);
+    expect((await admin(`/v1/admin/bug-reports/${plain.body.id}/screenshot`)).status).toBe(404);
+
+    expect((await admin(`/v1/admin/bug-reports/${sent.body.id}`, { method: 'POST', body: JSON.stringify({ action: 'close' }) })).status).toBe(200);
+    expect(((await (await admin('/v1/admin/bug-reports')).json()) as { bugReports: { id: string }[] }).bugReports.map((r) => r.id)).toEqual([plain.body.id]);
+    const all = (await (await admin('/v1/admin/bug-reports?status=all')).json()) as { bugReports: { id: string; status: string }[] };
+    expect(all.bugReports.find((r) => r.id === sent.body.id)?.status).toBe('closed');
+    expect((await admin('/v1/admin/bug-reports/nope', { method: 'POST', body: JSON.stringify({ action: 'close' }) })).status).toBe(404);
+  });
+
+  it('turns away empty reports, fake or huge screenshots, and too many reports', async () => {
+    const ann = await device('Ann');
+    expect((await app.request('/v1/bug-reports', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ description: 'x', screen: '/' }) })).status).toBe(401);
+    expect((await ann.call('POST', '/v1/bug-reports', { description: '   ', screen: '/' })).status).toBe(400);
+    const fake = await ann.call('POST', '/v1/bug-reports', { description: 'Broken', screen: '/', screenshot: { type: 'image/png', data: jpeg.toString('base64') } });
+    expect(fake).toMatchObject({ status: 400, body: { error: { code: 'bad_screenshot' } } });
+    const huge = await ann.call('POST', '/v1/bug-reports', { description: 'Broken', screen: '/', screenshot: { type: 'image/jpeg', data: 'A'.repeat(2_200_000) } });
+    expect(huge.status).toBe(413);
+    const bea = await device('Bea');
+    for (let i = 0; i < 6; i += 1) expect((await bea.call('POST', '/v1/bug-reports', { description: `Problem ${i}`, screen: '/' })).status).toBe(201);
+    expect((await bea.call('POST', '/v1/bug-reports', { description: 'One more', screen: '/' })).status).toBe(429);
+  });
+
+  it('removes a player’s reports when they delete their data', async () => {
+    const ann = await device('Ann');
+    await ann.call('POST', '/v1/bug-reports', { description: 'Broken', screen: '/' });
+    await app.request('/v1/me', { method: 'DELETE', headers: { 'x-confirm-delete': 'delete-my-data', authorization: `Bearer ${ann.token}` } });
+    expect(((await (await admin('/v1/admin/bug-reports?status=all')).json()) as { bugReports: unknown[] }).bugReports).toEqual([]);
+  });
+});
+
 describe('stats, ranked play and voice chat', () => {
   const until = async <T>(fn: () => Promise<T | null | undefined | false>, ms = 3000): Promise<T> => {
     const end = Date.now() + ms;
