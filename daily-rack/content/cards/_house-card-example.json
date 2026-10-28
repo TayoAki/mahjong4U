@@ -1,0 +1,303 @@
+{
+  "id": "my-club-card-2026",
+  "name": "My club card (example)",
+  "description": "Copy this file, rename it without the underscore, and replace the hands with your card.",
+  "sections": [
+    {
+      "id": "evens",
+      "label": "Evens"
+    },
+    {
+      "id": "odds",
+      "label": "Odds"
+    },
+    {
+      "id": "runs",
+      "label": "Runs"
+    },
+    {
+      "id": "like",
+      "label": "Like Numbers"
+    },
+    {
+      "id": "quints",
+      "label": "Quints"
+    },
+    {
+      "id": "369",
+      "label": "3 · 6 · 9"
+    },
+    {
+      "id": "winds",
+      "label": "Winds & Dragons"
+    },
+    {
+      "id": "pairs",
+      "label": "Pairs"
+    }
+  ],
+  "hands": [
+    {
+      "id": "ev1",
+      "section": "evens",
+      "pattern": "FF 2222a 44a 66a 8888a",
+      "value": 25,
+      "concealed": false,
+      "note": "One suit"
+    },
+    {
+      "id": "ev2",
+      "section": "evens",
+      "pattern": "222a 444a 66b 88b FFFF",
+      "value": 25,
+      "concealed": false,
+      "note": "Two suits"
+    },
+    {
+      "id": "ev3",
+      "section": "evens",
+      "pattern": "2222a 4444b 6666c 88a",
+      "value": 30,
+      "concealed": false,
+      "note": "Three suits"
+    },
+    {
+      "id": "ev4",
+      "section": "evens",
+      "pattern": "FFF 22a 44a 666b 8888c",
+      "value": 25,
+      "concealed": false,
+      "note": "Three suits"
+    },
+    {
+      "id": "ev5",
+      "section": "evens",
+      "pattern": "FF 444a 666a 444b 666b",
+      "value": 25,
+      "concealed": false,
+      "note": "Fours and sixes in two suits"
+    },
+    {
+      "id": "od1",
+      "section": "odds",
+      "pattern": "11a 333a 555a 777a 999a",
+      "value": 30,
+      "concealed": false,
+      "note": "One suit"
+    },
+    {
+      "id": "od2",
+      "section": "odds",
+      "pattern": "FF 1111a 3333b 5555c",
+      "value": 25,
+      "concealed": false,
+      "note": "Three suits"
+    },
+    {
+      "id": "od3",
+      "section": "odds",
+      "pattern": "111a 33a 555b 77b 9999c",
+      "value": 25,
+      "concealed": false,
+      "note": "Three suits"
+    },
+    {
+      "id": "od4",
+      "section": "odds",
+      "pattern": "FFFF 1a 3a 5a 777a 9999a",
+      "value": 30,
+      "concealed": false,
+      "note": "One suit; 1, 3, 5 are singles"
+    },
+    {
+      "id": "ru1",
+      "section": "runs",
+      "pattern": "FF xxxxa yyyya zzzza",
+      "value": 25,
+      "concealed": false,
+      "note": "Three consecutive numbers, one suit"
+    },
+    {
+      "id": "ru2",
+      "section": "runs",
+      "pattern": "xxxa yyyya zzzb uuuub",
+      "value": 25,
+      "concealed": false,
+      "note": "Four consecutive numbers, two suits"
+    },
+    {
+      "id": "ru3",
+      "section": "runs",
+      "pattern": "FF xxxxa yyyyb zzzzc",
+      "value": 25,
+      "concealed": false,
+      "note": "Three consecutive numbers, three suits"
+    },
+    {
+      "id": "ru4",
+      "section": "runs",
+      "pattern": "xxa yya zza FFFF uuuub",
+      "value": 30,
+      "concealed": false,
+      "note": "Four consecutive numbers, two suits"
+    },
+    {
+      "id": "ln1",
+      "section": "like",
+      "pattern": "FF xxxxa xxxxb xxxxc",
+      "value": 25,
+      "concealed": false,
+      "note": "Any one number in three suits"
+    },
+    {
+      "id": "ln2",
+      "section": "like",
+      "pattern": "xxxa xxxb xxxxc DDDDa",
+      "value": 25,
+      "concealed": false,
+      "note": "Any number, dragon of the first suit"
+    },
+    {
+      "id": "ln3",
+      "section": "like",
+      "pattern": "FFF xxa xxxb xxxxc DDc",
+      "value": 30,
+      "concealed": false,
+      "note": "Any number, dragon of the third suit"
+    },
+    {
+      "id": "qu1",
+      "section": "quints",
+      "pattern": "FFFF xxxxxa yyyyya",
+      "value": 40,
+      "concealed": false,
+      "note": "Two consecutive quints, one suit"
+    },
+    {
+      "id": "qu2",
+      "section": "quints",
+      "pattern": "22222a 44444b DDDDb",
+      "value": 45,
+      "concealed": false,
+      "note": "Even quints with a matching dragon"
+    },
+    {
+      "id": "qu3",
+      "section": "quints",
+      "pattern": "NNNNN SSSSS FFFF",
+      "value": 45,
+      "concealed": false,
+      "note": "North and South quints"
+    },
+    {
+      "id": "qu4",
+      "section": "quints",
+      "pattern": "FFFFF xxxxxa xxxxb",
+      "value": 40,
+      "concealed": false,
+      "note": "Any like number"
+    },
+    {
+      "id": "t1",
+      "section": "369",
+      "pattern": "FF 333a 666a 999a 666b",
+      "value": 25,
+      "concealed": false,
+      "note": "Two suits"
+    },
+    {
+      "id": "t2",
+      "section": "369",
+      "pattern": "3333a 6666b 9999c FF",
+      "value": 25,
+      "concealed": false,
+      "note": "Three suits"
+    },
+    {
+      "id": "t3",
+      "section": "369",
+      "pattern": "33a 666a 99a 3333b DDDb",
+      "value": 30,
+      "concealed": false,
+      "note": "Two suits with a matching dragon"
+    },
+    {
+      "id": "t4",
+      "section": "369",
+      "pattern": "3a 6a 9a 3b 6b 9b 3c 6c 9c FFFFF",
+      "value": 50,
+      "concealed": true,
+      "note": "Concealed"
+    },
+    {
+      "id": "wd1",
+      "section": "winds",
+      "pattern": "NNNN EEEE WWWW SS",
+      "value": 25,
+      "concealed": false
+    },
+    {
+      "id": "wd2",
+      "section": "winds",
+      "pattern": "FF NNN EEE WWW SSS",
+      "value": 25,
+      "concealed": false
+    },
+    {
+      "id": "wd3",
+      "section": "winds",
+      "pattern": "DDDDa DDDDb DDDDc NN",
+      "value": 30,
+      "concealed": false,
+      "note": "All three dragons"
+    },
+    {
+      "id": "wd4",
+      "section": "winds",
+      "pattern": "FF NN EE WW SS DDDDa",
+      "value": 30,
+      "concealed": false,
+      "note": "Any one dragon"
+    },
+    {
+      "id": "wd5",
+      "section": "winds",
+      "pattern": "NNN SSS xxxxa xxxxb",
+      "value": 30,
+      "concealed": false,
+      "note": "Any like number in two suits"
+    },
+    {
+      "id": "pa1",
+      "section": "pairs",
+      "pattern": "FF 22a 44a 66a 88a 22b 44b",
+      "value": 50,
+      "concealed": true,
+      "note": "Concealed, no jokers"
+    },
+    {
+      "id": "pa2",
+      "section": "pairs",
+      "pattern": "FF 11a 33a 55a 77a 99a 11b",
+      "value": 50,
+      "concealed": true,
+      "note": "Concealed, no jokers"
+    },
+    {
+      "id": "pa3",
+      "section": "pairs",
+      "pattern": "NN EE WW SS DDa DDb DDc",
+      "value": 50,
+      "concealed": true,
+      "note": "Concealed, no jokers"
+    },
+    {
+      "id": "pa4",
+      "section": "pairs",
+      "pattern": "xxa yya zza xxb yyb zzb FF",
+      "value": 50,
+      "concealed": true,
+      "note": "Concealed, no jokers"
+    }
+  ]
+}

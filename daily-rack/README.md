@@ -4,6 +4,12 @@ An American mahjong app with two halves:
 
 - **The daily rack.** Everyone gets the same 13-tile deal each day. You pick a section, pass three tiles, compare your pass with one strong pass and with how everyone else passed, then export your answer as a 9:16 clip for Reels or TikTok.
 - **Sit down to a game.** Full four-seat American mahjong (Charleston, courtesy pass, calling discards, jokers and joker swaps, Mahjong and payments) against computer players or with friends, live or turn-based. Friends add each other by code, chat, and plan in-person **Game Nights** with time votes, RSVPs and a calendar file, with an online table as the fallback when the group can't meet.
+- **Play people online.** A quick match or a ranked game with strangers, live, one hand each. Computer players fill empty seats if nobody else turns up in time. Ranked play moves an Elo-style rating, and there are leaderboards for rating and for this week's points. Strangers chat in quick phrases only.
+- **Voice chat** at private tables with friends (WebRTC, directly between devices).
+- **Stats and progress:** hands, wins, streaks, biggest hand, rating and rank, recent hands, and which hands on the card you've made.
+- **Lessons:** ten short interactive lessons, from the tiles to scoring.
+- **Offline play** against the computer, entirely on the device. Finished hands join your stats when you're back online.
+- **Large-tile mode** with big corner numbers, and **extra cards**: a table can play with another card dropped into `content/cards` (see the README there).
 
 It is one Expo app (Expo SDK 58) for iOS, Android and the web. There is no sign-in: each player is a guest on their device. A shared link opens in any phone browser with nothing to install. Players agree to community rules before chatting, messages are filtered, and anyone can be reported or blocked (see [`docs/MODERATION.md`](docs/MODERATION.md)).
 
@@ -20,6 +26,10 @@ Built from the product handoff in [`docs/handoff/`](docs/handoff/README.md). Wha
 | Community rules | Reporting a message | Blocked players |
 | --- | --- | --- |
 | ![Community rules](docs/screenshots/community-rules.png) | ![Report](docs/screenshots/report.png) | ![Safety settings](docs/screenshots/safety-settings.png) |
+
+| Voice chat | Lessons | Stats |
+| --- | --- | --- |
+| ![Voice chat](docs/screenshots/voice-chat.png) | ![Lesson](docs/screenshots/lesson.png) | ![Stats](docs/screenshots/stats.png) |
 
 Exported video frames (hook, a tile sliding out with captions, the closing question, the end card):
 
@@ -134,6 +144,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `BRAND_NAME` | `Daily Rack` | Name on the end card |
 | `SPLIT_THRESHOLD` | `30` | Answers needed before rates are shown |
 | `BOT_DELAY_MS` | `900` | Pause before each computer move, so people can follow the play |
+| `MATCH_FILL_CASUAL_MS`, `MATCH_FILL_RANKED_MS` | `20000`, `45000` | How long the first person waiting for a public match waits before computer players fill the empty seats |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | unset | A TURN relay for voice chat (comma-separated URLs). Public STUN servers are used either way, and TURN helps players on strict networks connect. |
 | `DEV_ROTATE` | unset | `1` rotates content on unscheduled days |
 | `NODE_ENV` | unset | `production` marks session cookies Secure |
 | `ADMIN_TOKEN` | unset | Secret for the moderator endpoints and `npm run reports`. Unset means no moderator access. |

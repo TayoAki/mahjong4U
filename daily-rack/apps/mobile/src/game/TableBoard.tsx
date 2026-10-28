@@ -21,6 +21,8 @@ interface Props {
   nameOf: (seat: number) => string;
   onPlayer: (seat: TableSeat) => void;
   active: (seat: Seat) => boolean;
+  /** Large-tile mode: the table lies flat and the discards are drawn bigger. */
+  large?: boolean;
 }
 
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
@@ -46,7 +48,7 @@ function Turned({ deg, w, h, children }: { deg: number; w: number; h: number; ch
   );
 }
 
-export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer, active }: Props) {
+export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer, active, large = false }: Props) {
   const { width } = useWindowDimensions();
   const ready = useAfterFirstRender();
   const me = view.seat;
@@ -61,7 +63,7 @@ export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer,
   const inner = Math.min(width, 560) - 40 - RIM * 2 - PAD * 2;
   const room = inner - 2 * (SIDE + GAP);
   const discardsOf = (seat: Seat) => view.discards.map((d, i) => ({ ...d, i })).filter((d) => d.seat === seat);
-  const rows = Math.max(3, ...SEATS.map((s) => Math.ceil(discardsOf(s).length / PER_ROW)));
+  const rows = Math.max(large ? 2 : 3, ...SEATS.map((s) => Math.ceil(discardsOf(s).length / PER_ROW)));
   let t = 26;
   while (t > 11 && 2 * rows * (lyingHeight(t) + 2) + PER_ROW * t + 5 + 2 * GAP > room) t -= 1;
   const riverW = PER_ROW * t + (PER_ROW - 1);
@@ -180,7 +182,7 @@ export function TableBoard({ view, caption, seatInfo, scoreOf, nameOf, onPlayer,
 
   return (
     // Tipped back a little, as the table looks from your chair.
-    <View style={[styles.rim, { transform: [{ perspective: 1100 }, { rotateX: '16deg' }, { scale: 0.98 }] }]}>
+    <View style={[styles.rim, !large && { transform: [{ perspective: 1100 }, { rotateX: '16deg' }, { scale: 0.98 }] }]}>
       <View style={styles.felt}>
         <Text style={styles.caption} numberOfLines={1}>
           {caption}

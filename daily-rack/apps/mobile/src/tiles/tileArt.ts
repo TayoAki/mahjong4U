@@ -51,13 +51,15 @@ export interface TileSvgOptions {
   hideIndex?: boolean;
   /** Intrinsic pixel scale; rasterizing at 3x keeps tiles sharp in a 1080p frame. */
   scale?: number;
+  /** A large, dark corner number for large-tile mode. */
+  bigIndex?: boolean;
 }
 
 export function tileSvg(faceCode: string, options: TileSvgOptions = {}): string {
   const face = parseFace(faceCode);
   const scale = options.scale ?? 1;
   const body = face ? faceArt(face) : `<rect x="30" y="40" width="40" height="50" rx="6" fill="none" stroke="${INK}" stroke-width="4"/>`;
-  const index = face && !options.hideIndex ? cornerIndex(face) : '';
+  const index = face && !options.hideIndex ? cornerIndex(face, options.bigIndex ?? false) : '';
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TILE_W} ${TILE_H}" width="${TILE_W * scale}" height="${TILE_H * scale}">` +
     `<rect x="1" y="1" width="98" height="128" rx="11" fill="${IVORY}"/>` +
@@ -165,12 +167,18 @@ function joker(): string {
   );
 }
 
-function cornerIndex(face: TileFace): string {
+function cornerIndex(face: TileFace, big: boolean): string {
   let label = '';
   if (face.kind === 'suited') label = String(face.rank);
   else if (face.kind === 'wind') label = face.wind.charAt(0);
   else if (face.kind === 'flower') label = 'F';
   else if (face.kind === 'dragon' && face.color === 'WHITE') label = '0';
   if (!label) return '';
+  // Large-tile mode: a bigger, darker number on a small ivory backing so it reads over busy art.
+  if (big)
+    return (
+      `<rect x="3" y="4" width="${label.length > 1 ? 34 : 24}" height="29" rx="6" fill="#FFF8E9" opacity="0.94"/>` +
+      `<text x="7" y="28" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="25" fill="#2B2F2A">${label}</text>`
+    );
   return `<text x="10" y="20" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14" fill="#8A8F86">${label}</text>`;
 }

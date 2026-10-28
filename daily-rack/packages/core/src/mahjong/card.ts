@@ -128,7 +128,7 @@ export const HOUSE_CARD: Card = {
     hand('pa1', 'pairs', 'FF 22a 44a 66a 88a 22b 44b', 50, { concealed: true, note: 'Concealed, no jokers' }),
     hand('pa2', 'pairs', 'FF 11a 33a 55a 77a 99a 11b', 50, { concealed: true, note: 'Concealed, no jokers' }),
     hand('pa3', 'pairs', 'NN EE WW SS DDa DDb DDc', 50, { concealed: true, note: 'Concealed, no jokers' }),
-    hand('pa4', 'pairs', 'xxa yya zza xxb yyb zzb FF', 50, { concealed: true, note: 'Concealed, no jokers' }),
+    hand('pa4', 'pairs', 'xxa yya zza xxb yyb zzb FF', 50, { concealed: true, note: 'Three consecutive numbers in two suits; concealed, no jokers' }),
   ],
 };
 
@@ -252,4 +252,58 @@ export function validateCard(card: Card): string[] {
     }
   }
   return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Cards as data: the house card ships with the engine; other cards (a club card, or a
+// published card the owner has the right to use) can be loaded from JSON at runtime.
+
+export interface CardSpec {
+  id: string;
+  name: string;
+  description: string;
+  sections: { id: string; label: string }[];
+  hands: { id: string; section: string; pattern: string; value: number; concealed?: boolean; note?: string }[];
+}
+
+/** Builds a card from plain data. Throws on a pattern the card language can't read. */
+export function cardFromSpec(spec: CardSpec): Card {
+  return {
+    id: spec.id,
+    name: spec.name,
+    description: spec.description,
+    sections: spec.sections.map((s) => ({ id: s.id, label: s.label })),
+    hands: spec.hands.map((h) => hand(h.id, h.section, h.pattern.trim(), h.value, { concealed: h.concealed, note: h.note })),
+  };
+}
+
+export function cardToSpec(card: Card): CardSpec {
+  return {
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    sections: card.sections,
+    hands: card.hands.map((h) => ({ id: h.id, section: h.section, pattern: h.pattern, value: h.value, concealed: h.concealed, ...(h.note ? { note: h.note } : {}) })),
+  };
+}
+
+const registry = new Map<string, Card>([[HOUSE_CARD.id, HOUSE_CARD]]);
+
+/** Makes a card available by id (to tables, hints and the card view). */
+export function registerCard(card: Card): void {
+  concreteCache.delete(card.id);
+  registry.set(card.id, card);
+}
+
+/** The card with this id, or the house card if it isn't known here. */
+export function cardById(id: string | null | undefined): Card {
+  return (id && registry.get(id)) || HOUSE_CARD;
+}
+
+export function hasCard(id: string): boolean {
+  return registry.has(id);
+}
+
+export function allCards(): Card[] {
+  return [...registry.values()];
 }

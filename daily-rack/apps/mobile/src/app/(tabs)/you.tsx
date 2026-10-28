@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { api, getConfig, type Profile, type Progress } from '../../lib/api.ts';
 import { updatePrefs, usePrefs } from '../../lib/prefs.ts';
 import { useSafety } from '../../lib/safety.tsx';
@@ -8,9 +8,14 @@ import { forgetSession, useSession } from '../../lib/session.tsx';
 import { clearAll } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { CardView } from '../../game/CardView.tsx';
+import { LinkCard } from '../../components/LinkCard.tsx';
+import { LESSONS } from '../../lessons/content.ts';
+import { resetLessonProgress, useLessonProgress } from '../../lessons/progress.ts';
 import { colors, fonts } from '../../theme.ts';
 
 export default function YouScreen() {
+  const router = useRouter();
+  const lessons = useLessonProgress();
   const { profile, refreshProfile, retry } = useSession();
   const prefs = usePrefs();
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -57,6 +62,7 @@ export default function YouScreen() {
     try {
       await api.deleteMe();
       await clearAll();
+      resetLessonProgress();
       await forgetSession();
       setSheet(null);
       if (Platform.OS === 'web') window.location.assign('/');
@@ -128,6 +134,15 @@ export default function YouScreen() {
         </Card>
       )}
 
+      <LinkCard
+        icon="card"
+        title="Lessons"
+        body={lessons.loaded ? `${LESSONS.filter((l) => lessons.done.has(l.id)).length} of ${LESSONS.length} done. Learn the game step by step.` : 'Learn the game step by step.'}
+        onPress={() => router.push('/lessons')}
+        testID="you-lessons"
+      />
+      <LinkCard icon="flame" title="Your stats" body="Hands, wins, streaks, rating and card progress." onPress={() => router.push('/stats')} testID="you-stats" />
+
       <Card style={{ gap: 10 }}>
         <Heading>At the table</Heading>
         <Body small muted>
@@ -140,6 +155,15 @@ export default function YouScreen() {
           options={[
             { value: 'on', label: 'Hints on' },
             { value: 'off', label: 'Hints off' },
+          ]}
+        />
+        <Segmented
+          label="Tile size"
+          value={prefs.largeTiles ? 'large' : 'standard'}
+          onChange={(v) => updatePrefs({ largeTiles: v === 'large' })}
+          options={[
+            { value: 'standard', label: 'Standard tiles' },
+            { value: 'large', label: 'Large tiles' },
           ]}
         />
         <Segmented
@@ -160,7 +184,7 @@ export default function YouScreen() {
       <Card style={{ gap: 10 }}>
         <Heading>Clip captions</Heading>
         <Segmented
-          label="Caption colour"
+          label="Caption color"
           value={prefs.captionStyle}
           onChange={(captionStyle) => updatePrefs({ captionStyle })}
           options={[

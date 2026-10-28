@@ -71,9 +71,9 @@ export default function LeaderboardScreen() {
       </Body>
       {error && <ErrorPanel message={error} onRetry={load} />}
       {!data && !error && <Loading label="Loading the leaderboard" />}
-      {data && data.entries.length === 0 && <Notice>No ranked games {board === 'weekly' ? 'this week' : 'yet'}. Play a ranked game from the Play tab to be first.</Notice>}
       {data && (
         <View style={{ gap: 6 }} testID="leaderboard-list">
+          {data.entries.length === 0 && <Notice>No ranked games {board === 'weekly' ? 'this week' : 'yet'}. Play a ranked game from the Play tab to be first.</Notice>}
           {data.entries.map((e) => row(e))}
           {data.you && !data.entries.some((e) => e.isYou) && (
             <>

@@ -271,6 +271,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX ratings_by_rating ON ratings (rating DESC);
   `,
+  `
+  -- Which card a table plays with (the house card unless the host picks another).
+  ALTER TABLE tables ADD COLUMN card_id TEXT NOT NULL DEFAULT 'daily-rack-house-2026';
+  `,
 ];
 
 export type Db = DatabaseSync;

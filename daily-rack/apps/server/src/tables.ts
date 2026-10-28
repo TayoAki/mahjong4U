@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { shortLabel } from '@daily-rack/core';
 import {
-  HOUSE_CARD,
   GameError,
+  cardById,
+  type Card,
   applyAction,
   botAction,
   faceOf,
@@ -58,6 +59,7 @@ interface TableRow {
   night_id: string | null;
   kind: TableKind;
   ranked: number;
+  card_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -107,7 +109,6 @@ export interface SeatInput {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LOG_LIMIT = 80;
-const card = HOUSE_CARD;
 const WINDS = ['East', 'South', 'West', 'North'];
 const GROUP_NAMES: Record<number, string> = { 3: 'pung', 4: 'kong', 5: 'quint', 6: 'sextet' };
 
@@ -124,7 +125,7 @@ export class TableService {
   // -------------------------------------------------------------------------
   // Lobby
 
-  create(hostId: string, input: { mode: TableMode; seats: SeatInput[]; settings?: Partial<TableSettings>; nightId?: string | null }): string {
+  create(hostId: string, input: { mode: TableMode; seats: SeatInput[]; settings?: Partial<TableSettings>; nightId?: string | null; cardId?: string }): string {
     const active = this.db.prepare(`SELECT COUNT(*) AS n FROM tables WHERE host_id = ? AND status != 'closed' AND kind = 'private'`).get(hostId) as { n: number };
     if (Number(active.n) >= 20) throw new TableError(409, 'too_many_tables', 'Finish or close a table before starting another.');
     if (input.seats.length !== 3) throw new TableError(400, 'bad_seats', 'Choose who sits in the other three seats.');
@@ -143,10 +144,10 @@ export class TableService {
     const now = this.options.now().toISOString();
     this.db
       .prepare(
-        `INSERT INTO tables (id, code, host_id, mode, status, seats, settings, scores, hand_number, night_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'lobby', ?, ?, '[0,0,0,0]', 0, ?, ?, ?)`,
+        `INSERT INTO tables (id, code, host_id, mode, status, seats, settings, scores, hand_number, night_id, card_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'lobby', ?, ?, '[0,0,0,0]', 0, ?, ?, ?, ?)`,
       )
-      .run(id, this.uniqueCode(), hostId, input.mode, JSON.stringify(seats), JSON.stringify(settings), input.nightId ?? null, now, now);
+      .run(id, this.uniqueCode(), hostId, input.mode, JSON.stringify(seats), JSON.stringify(settings), input.nightId ?? null, cardById(input.cardId).id, now, now);
     conversationFor(this.db, 'table', id, this.options.now());
     // Reserved friends hear about the invite straight away.
     for (const s of seats) if (s.reservedFor) this.hub.send(s.reservedFor, { type: 'table', tableId: id, payload: { invited: true } });
@@ -190,6 +191,11 @@ export class TableService {
   seatedPeople(tableId: string): string[] {
     const row = this.db.prepare('SELECT seats FROM tables WHERE id = ?').get(tableId) as { seats: string } | undefined;
     return row ? (JSON.parse(row.seats) as SeatSpec[]).flatMap((s) => (s.principalId ? [s.principalId] : [])) : [];
+  }
+
+  /** The card this table plays with. */
+  private cardOf(row: TableRow): Card {
+    return cardById(row.card_id);
   }
 
   private uniqueCode(): string {
@@ -261,7 +267,7 @@ export class TableService {
       const game = this.currentGame(tableId);
       if (row.ranked && game?.status === 'playing') {
         const others = seats.filter((_, p) => p !== position).map((s) => ({ rating: s.principalId ? ratingOf(this.db, s.principalId).rating : BOT_RATING[s.bot ?? 'normal'] }));
-        recordAbandon(this.db, game.id, card.id, principalId, others, this.options.now());
+        recordAbandon(this.db, game.id, row.card_id, principalId, others, this.options.now());
       }
       // Mid-game a computer player takes over the seat so nobody else's game breaks.
       seats[position] = { principalId: null, bot: 'normal', reservedFor: null };
@@ -326,7 +332,7 @@ export class TableService {
   private dealHand(row: TableRow, handNumber: number) {
     const settings = JSON.parse(row.settings) as TableSettings;
     const dealer = (handNumber - 1) % 4;
-    const state = newGame(card, { seed: Math.floor(this.random() * 2 ** 31), ...settings });
+    const state = newGame(this.cardOf(row), { seed: Math.floor(this.random() * 2 ** 31), ...settings });
     const now = this.options.now().toISOString();
     transaction(this.db, () => {
       this.db
@@ -364,7 +370,7 @@ export class TableService {
 
   private apply(row: TableRow, game: GameRow, seat: Seat, action: Action, notes: LogEntry[] = []) {
     const state = JSON.parse(game.state) as GameState;
-    const { state: next, events } = applyAction(card, state, seat, action);
+    const { state: next, events } = applyAction(this.cardOf(row), state, seat, action);
     const now = this.options.now().toISOString();
     const log = [...(JSON.parse(game.log) as LogEntry[]), ...notes, ...events.map((e) => this.describe(row, game.dealer, e, now))].slice(-LOG_LIMIT);
     const ended = next.phase.kind === 'ended';
@@ -385,7 +391,7 @@ export class TableService {
         recordHand(
           this.db,
           game.id,
-          card.id,
+          row.card_id,
           Boolean(row.ranked),
           seats.map((s, p) => ({ principalId: s.principalId, bot: s.bot, seat: this.engineSeat(p, game.dealer) })),
           next.result,
@@ -444,7 +450,7 @@ export class TableService {
     const notes = timedOut
       ? [this.entry(position, `${this.nameAt(row, position)} ran out of time, so the computer moved for them.`, { type: 'timeout', position })]
       : [];
-    this.apply(row, game, seat, botAction(card, state, seat, level, this.random), notes);
+    this.apply(row, game, seat, botAction(this.cardOf(row), state, seat, level, this.random), notes);
   }
 
   /** A live-table player ran out of time: a computer player makes this one move for them. */
@@ -563,6 +569,7 @@ export class TableService {
         nightId: row.night_id,
         kind: row.kind,
         ranked: Boolean(row.ranked),
+        cardId: row.card_id,
         seats: seats.map((s, position) => ({
           position,
           kind: s.principalId ? ('human' as const) : s.bot ? ('bot' as const) : ('open' as const),
@@ -586,7 +593,7 @@ export class TableService {
               deadline: game.deadline,
               /** Engine seat -> table position for this hand. */
               positions: [0, 1, 2, 3].map((s) => this.position(s as Seat, game.dealer)),
-              view: playerView(card, JSON.parse(game.state) as GameState, this.engineSeat(myPosition, game.dealer)),
+              view: playerView(this.cardOf(row), JSON.parse(game.state) as GameState, this.engineSeat(myPosition, game.dealer)),
               log: JSON.parse(game.log) as LogEntry[],
             }
           : null,

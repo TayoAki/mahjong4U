@@ -7,6 +7,7 @@ import { useRealtime, useRealtimeMessages } from '../../lib/realtime.tsx';
 import { useSession } from '../../lib/session.tsx';
 import { useSafety } from '../../lib/safety.tsx';
 import { useMatchmaking } from '../../lib/matchmaking.tsx';
+import { CardContext, useTableCard } from '../../lib/cards.tsx';
 import { track } from '../../lib/analytics.ts';
 import { ChatPanel } from '../../components/ChatPanel.tsx';
 import { Body, Button, Card, Display, ErrorPanel, IconButton, Loading, Row, Screen, Sheet, TopBar } from '../../components/ui.tsx';
@@ -45,6 +46,9 @@ export default function TableScreen() {
   }, [id]);
   // Reload on (re)connect so nothing pushed while the socket was down is missed.
   useEffect(load, [load, connected]);
+
+  // Hints, the card sheet and the winning-hand layout follow the table's card.
+  const card = useTableCard(data?.table.cardId);
 
   // Voice chat is for friends at private tables.
   const voiceAllowed = Boolean(data && data.table.kind === 'private' && data.mySeat !== null && data.table.status !== 'closed');
@@ -120,7 +124,7 @@ export default function TableScreen() {
         right={
           <Row gap={0}>
             <IconButton icon="help" label="How to play" onPress={() => setSheet('help')} />
-            <IconButton icon="card" label="House card" onPress={() => setSheet('card')} />
+            <IconButton icon="card" label={card.name} onPress={() => setSheet('card')} />
             <IconButton
               icon="chat"
               label={unread ? `Table chat, ${unread} new` : 'Table chat'}
@@ -142,7 +146,7 @@ export default function TableScreen() {
       <Sheet visible={sheet === 'chat'} title="Table chat" onClose={() => setSheet(null)}>
         <ChatPanel conversationId={data.conversationId} height={420} emptyText="Say hello to the table." phrases={isPublic ? phrases : undefined} />
       </Sheet>
-      <Sheet visible={sheet === 'card'} title="House card" onClose={() => setSheet(null)}>
+      <Sheet visible={sheet === 'card'} title={card.name} onClose={() => setSheet(null)}>
         <CardView />
       </Sheet>
       <HowToPlay visible={sheet === 'help'} onClose={() => setSheet(null)} />
@@ -226,7 +230,7 @@ export default function TableScreen() {
 
   if (table.status === 'lobby' || !data.game) {
     return (
-      <>
+      <CardContext.Provider value={card}>
         <Lobby
           data={data}
           header={header}
@@ -238,12 +242,12 @@ export default function TableScreen() {
           leave={() => setSheet('leave')}
         />
         {sheets}
-      </>
+      </CardContext.Provider>
     );
   }
 
   return (
-    <>
+    <CardContext.Provider value={card}>
       <GameScreen
         data={data}
         header={header}
@@ -263,6 +267,6 @@ export default function TableScreen() {
         resultNote={ratingNote}
       />
       {sheets}
-    </>
+    </CardContext.Provider>
   );
 }

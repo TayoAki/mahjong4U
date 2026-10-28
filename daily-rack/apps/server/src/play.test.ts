@@ -3,7 +3,10 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
-import { HOUSE_CARD, TILE_FACES, type PlayerView } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, TILE_FACES, cardToSpec, type PlayerView } from '@daily-rack/core/mahjong';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { loadCards } from './cards.ts';
 import { ratingChanges } from './stats.ts';
 import { createApp, createServices, type Services } from './app.ts';
 import { loadContent, syncRevisions } from './content.ts';
@@ -780,5 +783,26 @@ describe('stats, ranked play and voice chat', () => {
     send(bea, { type: 'voice-leave', tableId });
     expect(last(ann, 'voice-roster')).toMatchObject({ members: [ann.id] });
     expect((await ann.call('GET', '/v1/voice/config')).body.iceServers).toEqual([]);
+  });
+});
+
+describe('extra cards', () => {
+  it('loads valid cards from a folder, skips broken ones, and lets a table play with one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cards-'));
+    const spec = { ...cardToSpec(HOUSE_CARD), id: 'club-card-test', name: 'Club card' };
+    writeFileSync(join(dir, 'club.json'), JSON.stringify(spec));
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify({ ...spec, id: 'broken', hands: [{ id: 'x', section: 'evens', pattern: 'FF 22a', value: 25 }] }));
+    writeFileSync(join(dir, '_skipped.json'), 'not even json');
+    const { loaded, errors } = loadCards(dir);
+    expect(loaded).toEqual(['club-card-test']);
+    expect(errors.join()).toMatch(/broken\.json: .*expected 14/);
+
+    const ann = await device('Ann');
+    const cards = (await ann.call('GET', '/v1/cards')).body.cards as { id: string }[];
+    expect(cards.map((c) => c.id)).toEqual([HOUSE_CARD.id, 'club-card-test']);
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], cardId: 'club-card-test', settings: { skipCharleston: true } });
+    expect(created.body.table.cardId).toBe('club-card-test');
+    expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], cardId: 'nope' })).body.error.code).toBe('unknown_card');
+    await playOut(created.body.table.id, [ann]);
   });
 });

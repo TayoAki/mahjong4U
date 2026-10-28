@@ -123,10 +123,10 @@ export function ClipStudio({ attemptId }: { attemptId: string }) {
               </View>
             ))}
             <Body small bold>
-              Caption colour
+              Caption color
             </Body>
             <Segmented
-              label="Caption colour"
+              label="Caption color"
               value={style}
               onChange={(s) => {
                 setStyle(s);

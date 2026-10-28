@@ -9,6 +9,11 @@ Daily Rack lets players message each other (direct chat, table chat, Game Night 
 | A way to report offensive content, with timely responses | Tap any message from someone else, or the **⋯** next to a player (friends list, friend requests, chat header, table seats, Game Night guests), then **Report**. Reports are private. The reported message disappears for the reporter at once, and for everyone once two different players report it. **You must review every report within 24 hours** (see below). |
 | A way to block abusive users | The same menus have **Block**. Blocking works both ways: neither player sees the other's messages, they can't send friend requests, join each other's tables or open each other's game nights, and any friendship ends. The blocked player isn't told. Players can unblock on the You tab. |
 
+Two newer features change who can talk to whom, by design:
+
+- **Matched games with strangers** (Quick match and Ranked): players must have agreed to the community rules first, and at those tables they can only send a fixed set of friendly quick phrases ("Good luck!", "Nice hand!" and the like). There is no free text and no voice chat with strangers, which keeps random matchmaking clear of the free-chat-with-strangers rules in Guideline 1.2 and Google Play's chat policy. Blocked players are never matched together, and the report and block menus work on matched tables' seats.
+- **Voice chat** only works at private tables, between people seated there (friends or people given the code). The audio goes directly between their devices and isn't recorded or stored. The server only passes along connection setup, and only between seated players who haven't blocked each other. Anyone can mute anyone for themselves, and blocking someone drops them from your call at once. Voice can't be filtered, so it stays limited to tables players set up themselves.
+
 Apple also expects published contact information. The You tab has a **Contact us** form: messages are stored on the server (and sent to `REPORT_WEBHOOK_URL` if set); read them with `ADMIN_TOKEN=... API_URL=... npm run reports feedback`. Set `SUPPORT_EMAIL` on the server too and the form shows that address as well. Use the same address as the support URL on the App Store listing.
 
 ## Setting it up on the server
@@ -44,6 +49,6 @@ A suspension can be undone with `unsuspend`. Players who think they were suspend
 
 Put this in the review notes so the reviewer can find the features:
 
-> Chat is between friends, players at the same table and Game Night guests. Before the first message or friend request, players must agree to the community rules (zero tolerance for objectionable content). Messages, names and Game Night details are filtered. To report or block: tap any message from another player, or the ⋯ button next to a player's name in Friends, a chat, a table or a Game Night. Blocked players are listed on the You tab, where they can be unblocked. We review reports within 24 hours and suspend abusive players.
+> Chat is between friends, players at the same table and Game Night guests. In matched games with strangers (Play > Quick match or Ranked), players can only send preset quick phrases, and there is no voice chat. Voice chat is only available at private tables players set up with friends. Before the first message or friend request, players must agree to the community rules (zero tolerance for objectionable content). Messages, names and Game Night details are filtered. To report or block: tap any message from another player, or the ⋯ button next to a player's name in Friends, a chat, a table or a Game Night. Blocked players are listed on the You tab, where they can be unblocked. We review reports within 24 hours and suspend abusive players.
 
 The reviewer needs a second account to see chat. Two simulators, or a simulator and the web build, each start as their own guest.

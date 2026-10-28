@@ -5,6 +5,9 @@
 //   4. The friends sit at the same live table and play a hand together, with table chat.
 //   5. Game Night: plan, invite link, vote, RSVP, lock in, calendar file, play online instead.
 //   6. Safety: community rules, the word filter, reporting a message, blocking and unblocking.
+//   7. Voice chat at a private table, a quick match together, lessons, stats, the
+//      leaderboard and an offline game.
+//      (Start the server with MATCH_FILL_CASUAL_MS=3000 or the quick match waits 20 s.)
 // Usage: BASE_URL=http://localhost:8787 node scripts/e2e.mjs
 //   (server running on a fresh DB with the web build: npm run build && BOT_DELAY_MS=120 npm start)
 //   Set E2E_ADMIN_TOKEN to the server's ADMIN_TOKEN to also check the moderator view.
@@ -389,6 +392,65 @@ try {
   await carlPage.goto(`${BASE}${link.path}`);
   await carlPage.getByText('Someone shared this exact rack with you.').waitFor();
   check('shared rack link opens the exact rack', true);
+
+  // ------------------------------------------------------------------ 7. Online play and learning
+  const api = (p, method, path, body) =>
+    p.evaluate(
+      async ([m, url, b]) => (await fetch(url, { method: m, credentials: 'include', headers: { 'content-type': 'application/json' }, body: b ? JSON.stringify(b) : undefined })).json(),
+      [method, path, body],
+    );
+  const voiceTable = (await api(page, 'POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'open' }, { type: 'bot' }, { type: 'bot' }] })).table;
+  await api(beaPage, 'POST', '/v1/tables/join', { code: voiceTable.code });
+  await bea.grantPermissions(['microphone'], { origin: BASE });
+  for (const p of [page, beaPage]) {
+    await p.goto(`${BASE}/table/${voiceTable.id}`);
+    await p.getByTestId('voice-join').click({ timeout: 15_000 });
+  }
+  let voiceUp = false;
+  for (let i = 0; i < 60 && !voiceUp; i++) {
+    voiceUp = (await page.getByTestId('voice-peer-connected').count()) > 0 && (await beaPage.getByTestId('voice-peer-connected').count()) > 0;
+    if (!voiceUp) await page.waitForTimeout(250);
+  }
+  await shot(page, '28-voice-chat');
+  check('voice chat connects two players at a private table', voiceUp);
+  for (const p of [page, beaPage]) await tap(p, 'voice-leave');
+  await api(page, 'POST', `/v1/tables/${voiceTable.id}/close`);
+
+  for (const p of [page, beaPage]) await p.goto(`${BASE}/play`);
+  await page.getByTestId('match-casual').click();
+  await beaPage.getByTestId('match-casual').click();
+  await page.waitForURL(/\/table\//, { timeout: 40_000 });
+  await beaPage.waitForURL(/\/table\//, { timeout: 40_000 });
+  check('a quick match seats both players at the same table', page.url() === beaPage.url());
+  await page.getByLabel(/^Table chat/).click();
+  await page.getByLabel('Send: Good luck!').click({ timeout: 10_000 });
+  await beaPage.getByLabel(/^Table chat/).click();
+  const phraseArrived = await beaPage.getByText('Good luck!').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await shot(beaPage, '29-quick-match-chat');
+  check('matched games chat in quick phrases', phraseArrived);
+  const matchId = page.url().split('/').pop();
+  for (const p of [page, beaPage]) await api(p, 'POST', `/v1/tables/${matchId}/leave`);
+
+  await page.goto(`${BASE}/lessons`);
+  await page.locator('[data-testid^="lesson-row-"]').first().waitFor();
+  const lessonCount = await page.locator('[data-testid^="lesson-row-"]').count();
+  await page.locator('[data-testid^="lesson-row-"]').first().click();
+  await page.getByTestId('lesson-next').waitFor();
+  await shot(page, '30-lesson');
+  check('ten lessons, and one opens', lessonCount === 10, `${lessonCount} lessons`);
+
+  await page.goto(`${BASE}/stats`);
+  const statsShown = await page.getByTestId('stats-summary').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await shot(page, '31-stats');
+  check('stats show the hands played', statsShown);
+  await page.goto(`${BASE}/leaderboard`);
+  check('the leaderboard opens', await page.getByTestId('leaderboard-list').waitFor({ timeout: 10_000 }).then(() => true, () => false));
+
+  await page.goto(`${BASE}/offline`);
+  await page.getByTestId('offline-deal').click();
+  const offlineDealt = await page.getByTestId('table-status').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await shot(page, '32-offline-game');
+  check('an offline game deals on the device', offlineDealt);
 
   await page.goto(`${BASE}/`);
   await page.getByTestId('today-primary').waitFor();

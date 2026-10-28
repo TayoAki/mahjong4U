@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
-  HOUSE_CARD,
   SEATS,
   SEAT_WINDS,
   arrangeWin,
@@ -18,9 +17,10 @@ import type { TablePayload } from '../lib/api.ts';
 import { updatePrefs, usePrefs } from '../lib/prefs.ts';
 import { useSafety } from '../lib/safety.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
-import { Tile, TileButton } from '../components/Tile.tsx';
+import { Tile, TileButton, TileStyle } from '../components/Tile.tsx';
 import { Arrive, useAfterFirstRender } from '../components/Arrive.tsx';
 import { playSound, preloadSounds, setSoundsEnabled } from '../lib/sounds.ts';
+import { useActiveCard } from '../lib/cards.tsx';
 import { useTableSounds } from './useTableSounds.ts';
 import { HandHints, Pattern } from './CardView.tsx';
 import { Exposures, TableBoard } from './TableBoard.tsx';
@@ -73,6 +73,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   const prompt = view.prompt;
   const phase = view.phase;
   const prefs = usePrefs();
+  const card = useActiveCard();
   const { openPlayer } = useSafety();
   const { width } = useWindowDimensions();
   const [sort, setSort] = useState<SortMode>('suit');
@@ -141,7 +142,9 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   }, [view.hand, view.drawn, sort]);
   const myExposures = view.players[me]?.exposures ?? [];
   const rackWidth = Math.min(width, 560) - 40 - 16;
-  const tileWidth = Math.max(34, Math.min(52, Math.floor((rackWidth - 6 * 6) / 7)));
+  // Large-tile mode stands five tiles to a row instead of seven.
+  const perRow = prefs.largeTiles ? 5 : 7;
+  const tileWidth = Math.max(34, Math.min(prefs.largeTiles ? 72 : 52, Math.floor((rackWidth - 6 * (perRow - 1)) / perRow)));
 
   const send = (action: Action) => {
     if (action.type === 'charleston-pass' || action.type === 'courtesy-pass' || action.type === 'discard') setReceived(null);
@@ -172,7 +175,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   // Learning aid, like the hand analysers in other mahjong apps: pick the tiles that the
   // closest hands on the card don't use. Jokers are never suggested.
   const suggest = () => {
-    const scores = tileScores(HOUSE_CARD, view.hand, myExposures, 'hard');
+    const scores = tileScores(card, view.hand, myExposures, 'hard');
     const picks = [...scores.entries()]
       .filter(([t]) => !isJoker(t))
       .sort((a, b) => a[1] - b[1])
@@ -426,44 +429,47 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   const active = (seat: Seat) => (phase.kind === 'turn' && phase.seat === seat) || ('waitingFor' in phase && phase.waitingFor.includes(seat));
 
   return (
-    <Screen footer={footer}>
-      {header}
-      {error && <ErrorPanel message={error} />}
-      {view.result && <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} />}
+    <TileStyle.Provider value={{ bigIndex: prefs.largeTiles }}>
+      <Screen footer={footer}>
+        {header}
+        {error && <ErrorPanel message={error} />}
+        {view.result && <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} />}
 
-      <TableBoard
-        view={view}
-        caption={`Hand ${game.handNumber} · ${data.table.mode === 'live' ? 'Live' : 'Turn-based'}`}
-        seatInfo={seatInfo}
-        scoreOf={scoreOf}
-        nameOf={nameOf}
-        active={active}
-        onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
-      />
+        <TableBoard
+          view={view}
+          caption={`Hand ${game.handNumber} · ${data.table.mode === 'live' ? 'Live' : 'Turn-based'}`}
+          large={prefs.largeTiles}
+          seatInfo={seatInfo}
+          scoreOf={scoreOf}
+          nameOf={nameOf}
+          active={active}
+          onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
+        />
 
-      {game.log.length > 0 && (
-        <View style={{ gap: 4 }} accessible accessibilityLabel={`Recent play: ${game.log.slice(-3).map((e) => e.text).join(' ')}`}>
-          {game.log.slice(-3).map((entry, i) => (
-            <Text key={`${entry.at}-${i}`} style={[styles.log, entry.event.type === 'timeout' && styles.logTimeout]} numberOfLines={2}>
-              {entry.text}
-            </Text>
+        {game.log.length > 0 && (
+          <View style={{ gap: 4 }} accessible accessibilityLabel={`Recent play: ${game.log.slice(-3).map((e) => e.text).join(' ')}`}>
+            {game.log.slice(-3).map((entry, i) => (
+              <Text key={`${entry.at}-${i}`} style={[styles.log, entry.event.type === 'timeout' && styles.logTimeout]} numberOfLines={2}>
+                {entry.text}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {!ended &&
+          (prefs.showHints ? (
+            <Card tone="sage">
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Heading>Closest hands</Heading>
+                <Button variant="text" compact title="Hide" onPress={() => updatePrefs({ showHints: false })} />
+              </Row>
+              <HandHints hand={view.hand} exposures={myExposures} />
+            </Card>
+          ) : (
+            <Button variant="text" compact icon="bulb" title="Show closest hands" onPress={() => updatePrefs({ showHints: true })} />
           ))}
-        </View>
-      )}
-
-      {!ended &&
-        (prefs.showHints ? (
-          <Card tone="sage">
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Heading>Closest hands</Heading>
-              <Button variant="text" compact title="Hide" onPress={() => updatePrefs({ showHints: false })} />
-            </Row>
-            <HandHints hand={view.hand} exposures={myExposures} />
-          </Card>
-        ) : (
-          <Button variant="text" compact icon="bulb" title="Show closest hands" onPress={() => updatePrefs({ showHints: true })} />
-        ))}
-    </Screen>
+      </Screen>
+    </TileStyle.Provider>
   );
 }
 
@@ -472,13 +478,14 @@ function ResultPanel({ data, nameOf, note }: { data: TablePayload; nameOf: (seat
   const view = game.view;
   const result = view.result!;
   const me = view.seat;
+  const card = useActiveCard();
   const { width } = useWindowDimensions();
   const winner = result.winner;
   const title = result.kind === 'wall' ? 'Wall game. Nobody wins this one.' : winner === me ? 'Mahjong! You won the hand.' : `${nameOf(winner!)} called Mahjong.`;
   // The winning hand laid out group by group, the way it reads on the card.
   const arranged =
     result.kind === 'mahjong' && winner !== null && result.handId
-      ? arrangeWin(HOUSE_CARD, result.handId, result.assignment ?? '', result.hands[winner] ?? [], view.players[winner]?.exposures ?? [])
+      ? arrangeWin(card, result.handId, result.assignment ?? '', result.hands[winner] ?? [], view.players[winner]?.exposures ?? [])
       : null;
   const groupTile = Math.max(16, Math.min(26, Math.floor((Math.min(width, 560) - 72 - 6 * 6) / 14)));
   return (

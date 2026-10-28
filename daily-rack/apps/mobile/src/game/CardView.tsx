@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { HOUSE_CARD, analyze, type CardHand, type ConcreteGroup, type Exposure } from '@daily-rack/core/mahjong';
+import { analyze, type CardHand, type ConcreteGroup, type Exposure } from '@daily-rack/core/mahjong';
+import { useActiveCard } from '../lib/cards.tsx';
 import { Tile } from '../components/Tile.tsx';
 import { Body, Notice } from '../components/ui.tsx';
 import { SUIT_COLORS, colors } from '../theme.ts';
@@ -47,15 +48,16 @@ function HandRow({ hand }: { hand: CardHand }) {
 }
 
 export function CardView() {
+  const card = useActiveCard();
   return (
     <View style={{ gap: 16 }}>
       <Notice>
-        {HOUSE_CARD.description} F is a flower, D a dragon, 0 the white dragon. Colours mark different suits; 1 2 3 stand for any consecutive (or like) numbers. X = may be exposed, C = concealed.
+        {card.description} F is a flower, D a dragon, 0 the white dragon. Colors mark different suits; 1 2 3 stand for any consecutive (or like) numbers. X = may be exposed, C = concealed.
       </Notice>
-      {HOUSE_CARD.sections.map((section) => (
+      {card.sections.map((section) => (
         <View key={section.id} style={{ gap: 4 }}>
           <Text style={styles.section}>{section.label}</Text>
-          {HOUSE_CARD.hands
+          {card.hands
             .filter((h) => h.section === section.id)
             .map((h) => (
               <HandRow key={h.id} hand={h} />
@@ -82,10 +84,11 @@ function GroupTiles({ groups, width }: { groups: ConcreteGroup[]; width: number 
 
 /** The closest hands on the card to what you hold, with the tiles each one needs. */
 export function HandHints({ hand, exposures, limit = 3 }: { hand: number[]; exposures: Exposure[]; limit?: number }) {
+  const card = useActiveCard();
   const fits = useMemo(() => {
     const seen = new Set<string>();
-    return analyze(HOUSE_CARD, hand, exposures).filter((f) => !seen.has(f.concrete.hand.id) && seen.add(f.concrete.hand.id)).slice(0, limit);
-  }, [hand, exposures, limit]);
+    return analyze(card, hand, exposures).filter((f) => !seen.has(f.concrete.hand.id) && seen.add(f.concrete.hand.id)).slice(0, limit);
+  }, [card, hand, exposures, limit]);
   if (fits.length === 0) return <Body muted>No hand on the card fits your exposures any more. Keep discarding safely.</Body>;
   return (
     <View style={{ gap: 12 }}>

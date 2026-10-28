@@ -1,5 +1,5 @@
 import type { Alignment, AlternatePass, PublicPuzzle, ReviewState, Section, Suggestion } from '@daily-rack/core';
-import type { Action, BotLevel, PlayerView } from '@daily-rack/core/mahjong';
+import type { Action, BotLevel, CardSpec, PlayerView } from '@daily-rack/core/mahjong';
 import { API_BASE } from './config.ts';
 
 export class ApiError extends Error {
@@ -188,6 +188,8 @@ export interface TablePayload {
     /** Private tables are set up by a host; public ones are matched with strangers. */
     kind: 'private' | 'public';
     ranked: boolean;
+    /** The card this table plays with. */
+    cardId: string;
     seats: TableSeat[];
   };
   mySeat: number | null;
@@ -361,7 +363,7 @@ export const api = {
   markRead: (conversationId: string) => request<{ read: boolean }>('POST', `/v1/conversations/${conversationId}/read`),
 
   tables: () => request<{ tables: TableSummary[] }>('GET', '/v1/tables'),
-  createTable: (body: { mode: 'live' | 'turn'; seats: SeatChoice[]; settings?: Partial<TablePayload['table']['settings']> }) =>
+  createTable: (body: { mode: 'live' | 'turn'; seats: SeatChoice[]; settings?: Partial<TablePayload['table']['settings']>; cardId?: string }) =>
     request<TablePayload>('POST', '/v1/tables', body),
   table: (id: string) => request<TablePayload>('GET', `/v1/tables/${id}`),
   joinByCode: (code: string) => request<TablePayload>('POST', '/v1/tables/join', { code }),
@@ -380,6 +382,7 @@ export const api = {
   leaderboard: (board: 'rating' | 'weekly') => request<Leaderboard>('GET', `/v1/leaderboards?board=${board}`),
   stats: () => request<Stats>('GET', '/v1/me/stats'),
   offlineResults: (results: OfflineResult[]) => request<{ added: number }>('POST', '/v1/me/offline-results', { results }),
+  cards: () => request<{ cards: CardSpec[] }>('GET', '/v1/cards'),
   voiceConfig: () => request<{ iceServers: { urls: string | string[]; username?: string; credential?: string }[] }>('GET', '/v1/voice/config'),
 
   nights: () => request<{ nights: NightSummary[] }>('GET', '/v1/nights'),

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api, type FriendsOverview, type SeatChoice } from '../../lib/api.ts';
 import { track } from '../../lib/analytics.ts';
 import { useSafety } from '../../lib/safety.tsx';
+import { useCardList } from '../../lib/cards.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, Row, Screen, Segmented, TopBar } from '../../components/ui.tsx';
 import { LEVEL_LABEL, SeatSheet } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
@@ -24,6 +25,8 @@ export default function NewTableScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { ensureName } = useSafety();
+  const cards = useCardList();
+  const [cardId, setCardId] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -44,7 +47,7 @@ export default function NewTableScreen() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createTable({ mode, seats, settings: { secondCharleston, courtesyPass, skipCharleston } });
+      const created = await api.createTable({ mode, seats, settings: { secondCharleston, courtesyPass, skipCharleston }, ...(cardId ? { cardId } : {}) });
       track('table_created', { mode, vsComputer: seats.every((s) => s.type === 'bot'), friends: seats.filter((s) => s.type === 'friend').length });
       router.replace(`/table/${created.table.id}`);
     } catch (e) {
@@ -75,6 +78,17 @@ export default function NewTableScreen() {
             : 'Play at your own pace. Each player gets a nudge when it’s their move, and the game waits for them.'}
         </Body>
       </View>
+
+      {cards.length > 1 && (
+        <View style={{ gap: 10 }}>
+          <Heading>Which card?</Heading>
+          <View style={{ gap: 8 }}>
+            {cards.map((c) => (
+              <Chip key={c.id} label={c.name} selected={(cardId ?? cards[0]!.id) === c.id} onPress={() => setCardId(c.id)} testID={`card-${c.id}`} />
+            ))}
+          </View>
+        </View>
+      )}
 
       <View style={{ gap: 10 }}>
         <Heading>Seats</Heading>

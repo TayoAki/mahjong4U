@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
-import { GameError } from '@daily-rack/core/mahjong';
+import { GameError, allCards, cardToSpec, hasCard } from '@daily-rack/core/mahjong';
 import type { Db } from './db.ts';
 import type { AppConfig, Env, Fail, RateLimiter } from './app.ts';
 import type { Hub } from './realtime.ts';
@@ -64,6 +64,7 @@ const TableBody = z.object({
   mode: z.enum(['live', 'turn']),
   seats: z.array(SeatBody).length(3),
   settings: z.object({ secondCharleston: z.boolean(), courtesyPass: z.boolean(), skipCharleston: z.boolean() }).partial().optional(),
+  cardId: z.string().max(80).optional(),
 });
 const Tiles = z.array(z.number().int().min(0).max(151)).max(3);
 const ActionBody = z.object({
@@ -292,6 +293,9 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
 
   api.get('/voice/config', (c) => c.json({ iceServers: config.iceServers ?? [] }));
 
+  // The cards tables can play with: the house card first, then any loaded from content/cards.
+  api.get('/cards', (c) => c.json({ cards: allCards().map(cardToSpec) }));
+
   // ---------------------------------------------------------------- tables
 
   api.get('/tables', (c) => c.json({ tables: tables.listFor(me(c)!.id) }));
@@ -304,8 +308,9 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
         return fail(c, 403, 'not_friends', 'You can only hold seats for friends.');
       }
     }
+    if (input.cardId && !hasCard(input.cardId)) return fail(c, 400, 'unknown_card', 'That card isn’t available.');
     try {
-      const id = tables.create(me(c)!.id, { mode: input.mode, seats: input.seats as SeatInput[], settings: input.settings });
+      const id = tables.create(me(c)!.id, { mode: input.mode, seats: input.seats as SeatInput[], settings: input.settings, cardId: input.cardId });
       return c.json(tables.viewFor(id, me(c)!.id), 201);
     } catch (error) {
       return handle(c, error);

@@ -4,8 +4,9 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import type { BotLevel } from '@daily-rack/core/mahjong';
 import { api, type TableSummary } from '../../lib/api.ts';
 import { useRealtimeMessages } from '../../lib/realtime.tsx';
+import { useSession } from '../../lib/session.tsx';
 import { track } from '../../lib/analytics.ts';
-import { Badge, Body, Button, Card, Chip, Display, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
+import { Badge, Body, Button, Card, Chip, Display, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { OnlineCard } from '../../game/OnlineCard.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
@@ -23,6 +24,7 @@ export default function PlayScreen() {
   const [removing, setRemoving] = useState<TableSummary | null>(null);
   const [help, setHelp] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
+  const { offline } = useSession();
 
   const load = useCallback(() => {
     api
@@ -91,7 +93,11 @@ export default function PlayScreen() {
         <Body muted>Full American mahjong: Charleston, calling tiles, jokers and Mahjong. Live or turn-based.</Body>
         <Button title="New to mahjong? How to play" variant="text" compact icon="help" onPress={() => setHelp(true)} style={{ alignSelf: 'flex-start' }} testID="how-to-play" />
       </View>
-      {error && <ErrorPanel message={error} />}
+      {offline ? (
+        <Notice>You’re offline. You can still play the computer offline and take the lessons; online games come back when your connection does.</Notice>
+      ) : (
+        error && <ErrorPanel message={error} />
+      )}
 
       <Card tone="felt" style={{ gap: 12 }}>
         <Row>
@@ -105,6 +111,7 @@ export default function PlayScreen() {
           <Chip label="Quick: skip it" selected={quick} onPress={() => setQuick(true)} />
         </Row>
         <Button title="Deal me in" icon="arrow" onPress={playComputer} loading={busy === 'quick'} testID="quick-play" />
+        <Button title="No connection? Play offline" variant="light" compact onPress={() => router.push('/offline')} testID="play-offline" />
       </Card>
 
       <OnlineCard rating={rating} />

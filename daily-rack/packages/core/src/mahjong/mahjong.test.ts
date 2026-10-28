@@ -5,6 +5,10 @@ import {
   applyAction,
   arrangeWin,
   botAction,
+  cardById,
+  cardFromSpec,
+  cardToSpec,
+  registerCard,
   concretize,
   exposureOptions,
   SEATS,
@@ -342,5 +346,21 @@ describe('phase keys', () => {
     expect(phaseKey({ kind: 'claim', tile: 17, from: 0, responses: [{ type: 'pass' }, null, null, null] })).toBe('claim:17');
     expect(publicPhaseKey({ kind: 'claim', tile: 17, from: 0 })).toBe('claim:17');
     expect(publicPhaseKey({ kind: 'turn', seat: 1 })).toBe('turn');
+  });
+});
+
+describe('cards as data', () => {
+  it('round-trips the house card and registers another card by id', () => {
+    const spec = cardToSpec(card);
+    const copy = cardFromSpec({ ...spec, id: 'club-card', name: 'Club card' });
+    expect(validateCard(copy)).toEqual([]);
+    expect(copy.hands.map((h) => h.groups.length)).toEqual(card.hands.map((h) => h.groups.length));
+    expect(cardById('club-card')).toBe(card);
+    registerCard(copy);
+    expect(cardById('club-card').name).toBe('Club card');
+    expect(cardById('nope')).toBe(card);
+    expect(() => cardFromSpec({ ...spec, hands: [{ id: 'x', section: 'evens', pattern: 'QQQ', value: 25 }] })).toThrow(/bad pattern/);
+    const short = cardFromSpec({ ...spec, hands: [{ id: 'x', section: 'evens', pattern: 'FF 2222a', value: 25 }] });
+    expect(validateCard(short).join()).toMatch(/expected 14/);
   });
 });

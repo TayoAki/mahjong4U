@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { DEFAULT_ICE_SERVERS, createApp, createServices } from './app.ts';
 import { loadContent, syncRevisions } from './content.ts';
+import { loadCards } from './cards.ts';
 import { openDb } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
 
@@ -28,7 +29,10 @@ const config = {
 };
 
 const db = openDb(env.DATABASE_PATH ?? join(root, 'data/daily-rack.db'));
-const content = loadContent(env.CONTENT_DIR ?? join(root, 'content'), { devRotate: env.DEV_ROTATE === '1' });
+const contentDir = env.CONTENT_DIR ?? join(root, 'content');
+const content = loadContent(contentDir, { devRotate: env.DEV_ROTATE === '1' });
+const cards = loadCards(join(contentDir, 'cards'));
+for (const problem of cards.errors) console.log(JSON.stringify({ level: 'warn', message: 'card_skipped', problem }));
 syncRevisions(db, content, new Date());
 
 const services = createServices(db, {
@@ -54,6 +58,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
       message: 'daily-rack server listening',
       port: info.port,
       revisions: content.revisions.size,
+      cards: cards.loaded,
       devRotate: env.DEV_ROTATE === '1',
       webDist: existsSync(webDist),
     }),

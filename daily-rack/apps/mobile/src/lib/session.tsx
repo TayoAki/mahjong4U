@@ -1,18 +1,26 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { api, getBearer, setBearer, type MyProfile } from './api.ts';
+import { ApiError, api, getBearer, setBearer, type MyProfile } from './api.ts';
+import { readJson, writeJson } from './storage.ts';
+import { syncOfflineResults } from '../offline/results.ts';
 
 // One guest identity per device, created on first launch. Native keeps its token in the
-// keychain/keystore; the web build relies on the server's HttpOnly cookie.
+// keychain/keystore; the web build relies on the server's HttpOnly cookie. If the server
+// can't be reached but this device has been here before, the app still opens (offline)
+// with the last known profile, so offline games and lessons work, and keeps trying.
 
 const TOKEN_KEY = 'dr.session';
+const CACHE_KEY = 'dr:session-cache';
+const OFFLINE_RETRY_MS = 20_000;
 
 interface Session {
   ready: boolean;
   error: string | null;
   principalId: string | null;
   profile: MyProfile | null;
+  /** True while the server can't be reached; the app runs on what it last knew. */
+  offline: boolean;
   refreshProfile: () => Promise<void>;
   retry: () => void;
 }
@@ -22,6 +30,7 @@ const SessionContext = createContext<Session>({
   error: null,
   principalId: null,
   profile: null,
+  offline: false,
   refreshProfile: async () => undefined,
   retry: () => undefined,
 });
@@ -36,11 +45,12 @@ async function storedToken(): Promise<string | null> {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ ready: boolean; error: string | null; principalId: string | null; profile: MyProfile | null }>({
+  const [state, setState] = useState<{ ready: boolean; error: string | null; principalId: string | null; profile: MyProfile | null; offline: boolean }>({
     ready: false,
     error: null,
     principalId: null,
     profile: null,
+    offline: false,
   });
   const [attempt, setAttempt] = useState(0);
 
@@ -56,15 +66,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           await SecureStore.setItemAsync(TOKEN_KEY, session.token).catch(() => undefined);
         }
         const profile = await api.profile();
-        if (!cancelled) setState({ ready: true, error: null, principalId: session.principalId, profile });
+        void writeJson(CACHE_KEY, { principalId: session.principalId, profile });
+        // Hands played offline join your stats as soon as the server is reachable.
+        void syncOfflineResults().catch(() => undefined);
+        if (!cancelled) setState({ ready: true, error: null, principalId: session.principalId, profile, offline: false });
       } catch (error) {
-        if (!cancelled) setState((s) => ({ ...s, ready: false, error: (error as Error).message }));
+        const cache = error instanceof ApiError && error.code === 'network' ? await readJson<{ principalId: string; profile: MyProfile } | null>(CACHE_KEY, null) : null;
+        if (cancelled) return;
+        if (cache) setState({ ready: true, error: null, principalId: cache.principalId, profile: cache.profile, offline: true });
+        else setState((s) => ({ ...s, ready: false, error: (error as Error).message }));
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [attempt]);
+
+  // While offline, keep checking for the connection to come back.
+  useEffect(() => {
+    if (!state.offline) return;
+    const timer = setTimeout(() => setAttempt((n) => n + 1), OFFLINE_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [state.offline, attempt]);
 
   const refreshProfile = useCallback(async () => {
     const profile = await api.profile();

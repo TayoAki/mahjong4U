@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { createContext, memo, useContext } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { tileSvg } from '../tiles/tileArt.ts';
@@ -6,14 +6,18 @@ import { colors, table } from '../theme.ts';
 
 const RATIO = 130 / 100;
 const svgCache = new Map<string, string>();
-function xmlFor(face: string): string {
-  let xml = svgCache.get(face);
+function xmlFor(face: string, bigIndex: boolean): string {
+  const key = `${face}:${bigIndex}`;
+  let xml = svgCache.get(key);
   if (!xml) {
-    xml = tileSvg(face);
-    svgCache.set(face, xml);
+    xml = tileSvg(face, { bigIndex });
+    svgCache.set(key, xml);
   }
   return xml;
 }
+
+/** Large-tile mode: tiles inside draw a big, dark corner number. */
+export const TileStyle = createContext({ bigIndex: false });
 
 /**
  * How much of a real tile's body shows: 'standing' tiles (your rack) show the blue back
@@ -42,6 +46,7 @@ export const Tile = memo(function Tile({
   depth?: TileDepth;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { bigIndex } = useContext(TileStyle);
   const height = width * RATIO;
   const radius = width * 0.1;
   const art = (
@@ -58,7 +63,7 @@ export const Tile = memo(function Tile({
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <SvgXml xml={xmlFor(face)} width={width} height={height} />
+      <SvgXml xml={xmlFor(face, bigIndex)} width={width} height={height} />
     </View>
   );
   if (!depth) return art;
