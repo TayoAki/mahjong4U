@@ -9,7 +9,8 @@
 //   5. Game Night: plan, invite link, vote, RSVP, lock in, calendar file, play online instead.
 //   6. Safety: community rules, the word filter, reporting a message, blocking and unblocking.
 //   7. Voice chat at a private table, a quick match together, the Learn tab and a lesson,
-//      stats, the leaderboard and an offline game.
+//      stats, the leaderboard and an offline game; then a practice round with Pip: the
+//      Charleston suggestion, the discard coach, "All discards" and a take-back.
 //   8. Report a problem, with a screenshot, from the You tab and from a table's help sheet.
 //      (Start the server with MATCH_FILL_CASUAL_MS=3000 or the quick match waits 20 s.)
 // Usage: BASE_URL=http://localhost:8787 node scripts/e2e.mjs
@@ -711,6 +712,53 @@ try {
     check('a Plus member sees their membership', member);
     await fetch(`${BASE}/v1/admin/players/${me.id}/plus`, { method: 'POST', headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ days: 0 }) });
   }
+
+  // ------------------------------------------------------------------ 7c. A practice round with Pip
+  const errorsBeforePractice = pageErrors.length;
+  await page.goto(`${BASE}/play`);
+  check('the Play tab offers a practice round with Pip', await page.getByTestId('open-practice').waitFor({ timeout: 10_000 }).then(() => true, () => false));
+  await page.goto(`${BASE}/learn`);
+  await page.getByTestId('practice-round').click();
+  await page.getByTestId('practice-deal').click({ timeout: 10_000 });
+  const coachPass = await page.getByTestId('coach-pass').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  const passWords = (await page.getByTestId('coach-words').textContent().catch(() => '')) ?? '';
+  const pipMarked = await page.locator('[data-testid^="rack-tile-"][aria-label*="Pip suggests it"]').count();
+  await shot(page, '32d-practice-charleston');
+  check('the practice round opens from Learn, with Pip’s Charleston pass marked on the rack', coachPass && passWords.startsWith('Pip would pass') && pipMarked === 3, passWords.slice(0, 120));
+  await page.getByTestId('coach-use-pick').click();
+  const passLabel = (await page.getByTestId('action-pass').textContent()) ?? '';
+  await page.getByTestId('action-pass').click();
+  check('“Use Pip’s pick” picks the three tiles to pass', passLabel.startsWith('Pass right'), passLabel);
+  // The rest of the Charleston on Pip's advice, up to your first discard (you're East).
+  for (const until = Date.now() + 90_000; Date.now() < until && !(await visible(page, 'coach-discard')); ) {
+    if (await visible(page, 'coach-use-pick')) {
+      await tap(page, 'coach-use-pick');
+      if (await visible(page, 'action-pass')) await tap(page, 'action-pass');
+      else await tap(page, 'action-courtesy-pass');
+    } else if (await visible(page, 'action-vote-no')) await tap(page, 'action-vote-no');
+    else if (await visible(page, 'action-courtesy-0')) await tap(page, 'action-courtesy-0');
+    else await page.waitForTimeout(150);
+  }
+  const discardWords = (await page.getByTestId('coach-words').textContent().catch(() => '')) ?? '';
+  check('at your discard, the coach shows Pip’s best tiles', (await visible(page, 'coach-discard')) && discardWords.startsWith('Pip would throw'), discardWords.slice(0, 120));
+  await page.getByTestId('coach-all-discards').click();
+  await page.getByTestId('all-discards').waitFor({ timeout: 5000 });
+  const discardRows = await page.locator('[data-testid^="discard-row-"]').count();
+  const bestRows = await page.locator('[data-testid^="discard-row-"][aria-label*="Pip’s best"]').count();
+  await shot(page, '32e-practice-all-discards');
+  check('“All discards” lists every tile with Pip’s best marked', discardRows >= 5 && bestRows >= 1, `${discardRows} rows, ${bestRows} best`);
+  // Tapping a row picks that tile and closes the sheet.
+  await page.locator('[data-testid^="discard-row-"][aria-label*="Pip’s best"]').first().click();
+  const rackTiles = page.locator('[data-testid^="rack-tile-"]');
+  const handBefore = await rackTiles.count();
+  await page.getByTestId('action-discard').click();
+  const thrown = await page.waitForFunction((n) => document.querySelectorAll('[data-testid^="rack-tile-"]').length < n, handBefore, { timeout: 5000 }).then(() => true, () => false);
+  await page.getByTestId('practice-take-back').click();
+  const backToTurn = await page.getByTestId('coach-discard').waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const statusAfter = (await page.getByTestId('table-status').textContent()) ?? '';
+  await shot(page, '32f-practice-take-back');
+  check('a discard can be taken back', thrown && backToTurn && (await rackTiles.count()) === handBefore && statusAfter.startsWith('Your turn'), statusAfter);
+  check('the practice round has no page errors', pageErrors.length === errorsBeforePractice, pageErrors.slice(errorsBeforePractice).join(' | '));
 
   // ------------------------------------------------------------------ 8. Report a problem
   await page.goto(`${BASE}/you`);

@@ -1,9 +1,9 @@
 import { shortLabel } from '@daily-rack/core';
 import {
-  HOUSE_CARD,
   SEAT_WINDS,
   applyAction,
   botAction,
+  cardById,
   faceOf,
   newGame,
   pendingSeats,
@@ -21,8 +21,8 @@ import { newKey } from '../lib/storage.ts';
 // A game against computer players that runs entirely on the device, for when there's no
 // connection (or you'd just rather not use one). It plays by the same engine as the server
 // and hands the game screen the same shape of data, so the table looks and works the same.
+// The practice round with Pip plays its hand this way too.
 
-const card = HOUSE_CARD;
 const BOT_NAMES = ['Mabel', 'Rosie', 'Dot', 'Hazel'];
 const GROUP_NAMES: Record<number, string> = { 3: 'pung', 4: 'kong', 5: 'quint', 6: 'sextet' };
 const LOG_LIMIT = 80;
@@ -30,6 +30,8 @@ const LOG_LIMIT = 80;
 export interface OfflineSettings {
   level: BotLevel;
   skipCharleston: boolean;
+  /** The card to deal with (it must be registered); the house card when left out. */
+  cardId?: string;
 }
 
 /** Everything needed to pick a game back up later. You always sit at position 0. */
@@ -54,7 +56,7 @@ const entry = (position: number | null, text: string, event: LogEntry['event']):
 
 function deal(save: Omit<OfflineSave, 'state' | 'version' | 'log' | 'gameId' | 'recorded'>, me: string): OfflineSave {
   const random = rng((Date.now() ^ (save.handNumber * 7919)) >>> 0);
-  const state = newGame(card, { seed: Math.floor(random() * 2 ** 31), secondCharleston: true, courtesyPass: true, skipCharleston: save.settings.skipCharleston });
+  const state = newGame(cardById(save.settings.cardId), { seed: Math.floor(random() * 2 ** 31), secondCharleston: true, courtesyPass: true, skipCharleston: save.settings.skipCharleston });
   return {
     ...save,
     gameId: newKey(),
@@ -109,7 +111,7 @@ function describe(save: OfflineSave, event: GameEvent, me: string): LogEntry {
 }
 
 function apply(save: OfflineSave, seat: Seat, action: Action, me: string): OfflineSave {
-  const { state, events } = applyAction(card, save.state, seat, action);
+  const { state, events } = applyAction(cardById(save.state.cardId), save.state, seat, action);
   const next: OfflineSave = { ...save, state, version: save.version + 1, log: [...save.log, ...events.map((e) => describe(save, e, me))].slice(-LOG_LIMIT) };
   if (state.phase.kind === 'ended' && state.result) {
     next.scores = save.scores.map((score, position) => score + (state.result!.payments[engineSeat(position, save.dealer)] ?? 0));
@@ -129,7 +131,7 @@ export function botStep(save: OfflineSave, me: string): OfflineSave | null {
   const seat = pendingSeats(save.state).find((s) => s !== mine);
   if (seat === undefined) return null;
   const random = rng((save.version * 2654435761) >>> 0);
-  return apply(save, seat, botAction(card, save.state, seat, save.settings.level, random), me);
+  return apply(save, seat, botAction(cardById(save.state.cardId), save.state, seat, save.settings.level, random), me);
 }
 
 /** Your result for this hand, for your stats once you're back online. */
@@ -169,7 +171,7 @@ export function offlinePayload(save: OfflineSave, me: string): TablePayload {
       nightId: null,
       kind: 'private',
       ranked: false,
-      cardId: card.id,
+      cardId: save.state.cardId,
       seats: [0, 1, 2, 3].map((position) => ({
         position,
         kind: position === 0 ? ('human' as const) : ('bot' as const),
@@ -190,7 +192,7 @@ export function offlinePayload(save: OfflineSave, me: string): TablePayload {
       handNumber: save.handNumber,
       deadline: null,
       positions: [0, 1, 2, 3].map((s) => positionOf(s as Seat, save.dealer)),
-      view: playerView(card, save.state, engineSeat(0, save.dealer)),
+      view: playerView(cardById(save.state.cardId), save.state, engineSeat(0, save.dealer)),
       log: save.log,
     },
   };

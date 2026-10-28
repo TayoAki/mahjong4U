@@ -48,7 +48,8 @@ function unseen(key: string, held: readonly number[], seen: Seen): number {
   return Math.max(0, copies - held.filter((t) => keyFor(t) === key).length - (seen.get(key) ?? 0));
 }
 
-type Judgement = Pick<TileChoice, 'distance' | 'helpers' | 'lines' | 'nearest'>;
+/** How good what's left of a hand is (see TileChoice). */
+export type Judgement = Pick<TileChoice, 'distance' | 'helpers' | 'lines' | 'nearest'>;
 
 /** How good `rest` is: the nearest hand, the useful draws and the lines that close. */
 function judge(card: Card, rest: readonly number[], exposures: readonly Exposure[], held: readonly number[], seen: Seen): Judgement {
@@ -89,6 +90,14 @@ export function rankDiscards(card: Card, concealed: readonly number[], exposures
 /** Every tile you could pass in a Charleston, best to pass first. Jokers can't be passed. */
 export function rankPassTiles(card: Card, hand: readonly number[], seen: Seen = new Map()): TileChoice[] {
   return rankDiscards(card, hand, [], seen).filter((c) => c.key !== JOKER);
+}
+
+/**
+ * What's left once `tiles` have gone from the hand (a pass, say), judged the way a discard
+ * is. Lets a choice of several tiles be compared with the coach's.
+ */
+export function judgeRest(card: Card, hand: readonly number[], tiles: readonly number[], exposures: readonly Exposure[] = [], seen: Seen = new Map()): Judgement {
+  return judge(card, tiles.reduce<number[]>((rest, t) => without(rest, t), [...hand]), exposures, hand, seen);
 }
 
 /** A pass of `count` tiles, chosen one at a time: always the tile that costs the least. */

@@ -48,6 +48,26 @@ interface Props {
   rematch?: () => void;
   /** A line for the result, such as a ranked game's rating change. */
   resultNote?: string | null;
+  /**
+   * A coach for your moves, such as Pip in a practice round. It's drawn where your moves go
+   * and is handed them, with the tiles you've picked, so it can show them, pick tiles for
+   * you, or make a move itself.
+   */
+  coach?: (table: CoachTable) => ReactNode;
+  /** Tiles Pip suggests, marked on your rack. */
+  marked?: number[];
+}
+
+/** What a coach at the table sees and can do. */
+export interface CoachTable {
+  /** The tiles you've picked. */
+  selected: number[];
+  /** Picks tiles for you; an empty list clears your pick. */
+  select: (tiles: number[]) => void;
+  /** Makes a move, with the same sounds and feel as the buttons. */
+  send: (action: Action) => void;
+  /** Your moves as the table shows them, to draw (or hold back while the coach asks something). */
+  moves: ReactNode;
 }
 
 const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
@@ -74,7 +94,7 @@ interface Received {
  * players around the felt with their tiles face down, and your rack pinned at the bottom
  * with whatever you can do right now just above it.
  */
-export function GameScreen({ data, header, busy, error, act, nextHand, leave, rematch, resultNote }: Props) {
+export function GameScreen({ data, header, busy, error, act, nextHand, leave, rematch, resultNote, coach, marked }: Props) {
   const game = data.game!;
   const view = game.view;
   const me = view.seat;
@@ -228,6 +248,12 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
     feel('pick');
     playSound('tap');
     setSelected((s) => (s.includes(tile) ? s.filter((t) => t !== tile) : need === 1 ? [tile] : s.length < need ? [...s, tile] : [...s.slice(1), tile]));
+  };
+
+  const select = (tiles: number[]) => {
+    setSelected(tiles);
+    setNotice(null);
+    setJokerWarned(false);
   };
 
   // Learning aid, like the hand analysers in other mahjong apps: pick the tiles that the
@@ -396,13 +422,14 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
   })();
 
   const receivedSet = new Set(received?.tiles ?? []);
+  const markedSet = new Set(marked ?? []);
   const ended = phase.kind === 'ended';
   const rackItems: RackItem[] = hand.map((t) => ({
     tile: t,
-    label: `${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}`,
+    label: `${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}${markedSet.has(t) ? ', Pip suggests it' : ''}`,
     selected: selected.includes(t),
-    highlight: (view.drawn === t || receivedSet.has(t)) && !selected.includes(t),
-    badge: receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined,
+    highlight: (view.drawn === t || receivedSet.has(t) || markedSet.has(t)) && !selected.includes(t),
+    badge: markedSet.has(t) ? 'Pip' : receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined,
   }));
 
   const footer = (
@@ -454,7 +481,8 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
           )}
         </View>
       )}
-      {data.table.mode === 'turn' && !ended && !prompt && !myDead && <Text style={styles.small}>Turn-based: we’ll let you know when it’s your move.</Text>}
+      {/* A coached hand is played right here, so there's no move to be told about. */}
+      {data.table.mode === 'turn' && !coach && !ended && !prompt && !myDead && <Text style={styles.small}>Turn-based: we’ll let you know when it’s your move.</Text>}
       {jokerWarned && <Notice tone="warn">Jokers fill any group of 3 or more, so throwing one away is rarely right, and nobody can call it. Tap again to discard it anyway.</Notice>}
       {notice && (
         <Text style={[styles.tip, !notice.startsWith('Suggested') && styles.tipWarn]} testID="rack-notice">
@@ -472,7 +500,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
         </>
       ) : (
         <>
-          {actions}
+          {coach ? coach({ selected, select, send, moves: actions }) : actions}
           <Row style={{ justifyContent: 'space-between' }} gap={4}>
             <Text style={styles.mine} numberOfLines={1}>
               {SEAT_WINDS[me]} · {formatScore(scoreOf(me))}
@@ -484,7 +512,8 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave, re
                 color={colors.muted}
                 onPress={() => updatePrefs({ sounds: !prefs.sounds })}
               />
-              {need > 0 && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
+              {/* A coach makes its own suggestions. */}
+              {need > 0 && !coach && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
               <Button
                 variant="text"
                 compact

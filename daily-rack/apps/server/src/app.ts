@@ -79,6 +79,8 @@ const CLIENT_EVENTS = new Set([
   'match_found',
   'voice_joined',
   'offline_game_started',
+  'practice_started',
+  'practice_finished',
   'lesson_completed',
 ]);
 

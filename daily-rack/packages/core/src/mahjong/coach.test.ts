@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOUSE_CARD, TILE_FACES, adviseClaim, bestDistance, cardById, concreteHands, isJoker, keyOf, rankDiscards, rankPassTiles, suggestPass, type ConcreteGroup } from './index.ts';
+import { HOUSE_CARD, TILE_FACES, adviseClaim, bestDistance, cardById, concreteHands, isJoker, judgeRest, keyOf, rankDiscards, rankPassTiles, suggestPass, type ConcreteGroup } from './index.ts';
 
 const card = HOUSE_CARD;
 
@@ -73,6 +73,17 @@ describe('coach', () => {
     const after = (out: number[]) => bestDistance(card, hand.filter((t) => !out.includes(t)), []);
     const needed = hand.filter((t) => !isJoker(t) && keyOf(t) !== S).slice(0, 3);
     expect(after(pass)).toBeLessThanOrEqual(after(needed));
+  });
+
+  it('judges what a pass leaves, the same way as a discard', () => {
+    const take = tileTaker();
+    const hand = [...handOf([F, G], [S], take), ...take('JOKER')].slice(0, 13);
+    const stray = rankPassTiles(card, hand).find((c) => c.key === S)!;
+    const { distance, helpers, lines, nearest } = judgeRest(card, hand, [stray.tile]);
+    expect({ distance, helpers, lines, nearest }).toEqual({ distance: stray.distance, helpers: stray.helpers, lines: stray.lines, nearest: stray.nearest });
+    // Passing Pip's three never leaves you further away than passing three tiles the hand needs.
+    const needed = hand.filter((t) => !isJoker(t) && keyOf(t) !== S).slice(0, 3);
+    expect(judgeRest(card, hand, suggestPass(card, hand)).distance).toBeLessThanOrEqual(judgeRest(card, hand, needed).distance);
   });
 
   it('says call it for Mahjong, call it to expose, or let it go', () => {
