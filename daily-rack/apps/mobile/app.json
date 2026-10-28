@@ -51,6 +51,13 @@
           "savePhotosPermission": "Save your rack clips to Photos.",
           "isAccessMediaLocationEnabled": false
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Record an optional voiceover for your rack clip.",
+          "enableBackgroundPlayback": false
+        }
       ]
     ],
     "extra": {

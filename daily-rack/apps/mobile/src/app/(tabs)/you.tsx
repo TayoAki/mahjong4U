@@ -142,6 +142,18 @@ export default function YouScreen() {
             { value: 'off', label: 'Hints off' },
           ]}
         />
+        <Segmented
+          label="Table sounds"
+          value={prefs.sounds ? 'on' : 'off'}
+          onChange={(v) => updatePrefs({ sounds: v === 'on' })}
+          options={[
+            { value: 'on', label: 'Sounds on' },
+            { value: 'off', label: 'Sounds off' },
+          ]}
+        />
+        <Body small muted>
+          Tile sounds follow your phone’s silent switch.
+        </Body>
         <Button title="Read the house card" variant="text" icon="card" onPress={() => setSheet('card')} />
       </Card>
 

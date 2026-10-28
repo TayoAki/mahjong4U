@@ -48,13 +48,15 @@ export interface Preferences {
   frequency: 'new' | 'weekly' | 'teach' | null;
   captionStyle: 'blue' | 'magenta';
   showHints: boolean;
+  /** Tile sounds at the table. */
+  sounds: boolean;
 }
 
 export const PREFS_KEY = 'dr:prefs';
 export const FIRST_OPEN_KEY = 'dr:first-open-done';
 export const PREFS_ASKED_KEY = 'dr:prefs-asked';
 
-export const DEFAULT_PREFS: Preferences = { card: null, frequency: null, captionStyle: 'blue', showHints: true };
+export const DEFAULT_PREFS: Preferences = { card: null, frequency: null, captionStyle: 'blue', showHints: true, sounds: true };
 
 export async function readPrefs(): Promise<Preferences> {
   return { ...DEFAULT_PREFS, ...(await readJson<Partial<Preferences>>(PREFS_KEY, {})) };

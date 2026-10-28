@@ -17,9 +17,11 @@ import {
 import type { TablePayload } from '../lib/api.ts';
 import { updatePrefs, usePrefs } from '../lib/prefs.ts';
 import { useSafety } from '../lib/safety.tsx';
-import { Body, Button, Card, Chip, ErrorPanel, Heading, Notice, Row, Screen } from '../components/ui.tsx';
+import { Body, Button, Card, Chip, ErrorPanel, Heading, IconButton, Notice, Row, Screen } from '../components/ui.tsx';
 import { Tile, TileButton } from '../components/Tile.tsx';
 import { Arrive, useAfterFirstRender } from '../components/Arrive.tsx';
+import { playSound, preloadSounds, setSoundsEnabled } from '../lib/sounds.ts';
+import { useTableSounds } from './useTableSounds.ts';
 import { HandHints, Pattern } from './CardView.tsx';
 import { Exposures, TableBoard } from './TableBoard.tsx';
 import { faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
@@ -76,6 +78,10 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
   const [received, setReceived] = useState<Received | null>(null);
   const [dismissedTimeout, setDismissedTimeout] = useState<string | null>(null);
   const seconds = useCountdown(game.deadline);
+  const ownDiscard = useRef<number | null>(null);
+  useEffect(() => setSoundsEnabled(prefs.sounds), [prefs.sounds]);
+  useEffect(preloadSounds, []);
+  useTableSounds(game.id, view, ownDiscard);
 
   const seatInfo = (seat: number) => data.table.seats[game.positions[seat] ?? 0]!;
   const nameOf = (seat: number) => shortName(seatInfo(seat).name);
@@ -136,6 +142,13 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
   const send = (action: Action) => {
     if (action.type === 'charleston-pass' || action.type === 'courtesy-pass' || action.type === 'discard') setReceived(null);
     feel(action.type === 'discard' || action.type === 'claim' || action.type === 'charleston-pass' || action.type === 'courtesy-pass' ? 'place' : 'pick');
+    // Your own tiles sound the moment you let go, without waiting for the server.
+    if (action.type === 'discard') {
+      ownDiscard.current = action.tile;
+      playSound('place');
+    } else if (action.type === 'charleston-pass' || action.type === 'courtesy-pass') {
+      playSound('pass');
+    }
     act(action);
   };
 
@@ -148,6 +161,7 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
     setNotice(null);
     setJokerWarned(false);
     feel('pick');
+    playSound('tap');
     setSelected((s) => (s.includes(tile) ? s.filter((t) => t !== tile) : need === 1 ? [tile] : s.length < need ? [...s, tile] : [...s.slice(1), tile]));
   };
 
@@ -358,9 +372,15 @@ export function GameScreen({ data, header, busy, error, act, nextHand, leave }: 
           {actions}
           <Row style={{ justifyContent: 'space-between' }} gap={4}>
             <Text style={styles.mine} numberOfLines={1}>
-              You · {SEAT_WINDS[me]} · {formatScore(scoreOf(me))}
+              {SEAT_WINDS[me]} · {formatScore(scoreOf(me))}
             </Text>
             <Row gap={0}>
+              <IconButton
+                icon={prefs.sounds ? 'sound' : 'mute'}
+                label={prefs.sounds ? 'Turn table sounds off' : 'Turn table sounds on'}
+                color={colors.muted}
+                onPress={() => updatePrefs({ sounds: !prefs.sounds })}
+              />
               {need > 0 && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
               <Button variant="text" compact icon="sort" title={sort === 'suit' ? 'By suit' : 'By number'} onPress={() => setSort(sort === 'suit' ? 'number' : 'suit')} />
             </Row>
