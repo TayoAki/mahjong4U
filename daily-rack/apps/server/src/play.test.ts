@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serve } from '@hono/node-server';
-import { HOUSE_CARD, TILE_FACES, cardFromSpec, cardToSpec, registerCard, type PlayerView } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, TILE_FACES, cardToSpec, type PlayerView } from '@daily-rack/core/mahjong';
 import { PLUS } from '@daily-rack/core';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -983,8 +983,9 @@ describe('Daily Rack Plus', () => {
   const bots = [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }];
   const moderator = (path: string, body: unknown) =>
     app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': 'test-moderator-token' }, body: JSON.stringify(body) });
-  // Stands in for the premium card, so these tests don't depend on its hands.
-  beforeEach(() => registerCard(cardFromSpec({ ...cardToSpec(HOUSE_CARD), id: premium, name: 'Premium card' })));
+  beforeEach(() => {
+    expect(loadCards(join(import.meta.dirname, '../../../content/cards')).loaded).toContain(premium);
+  });
 
   it('gives free players a few hands a day on the premium card against the computer, and unlimited with Plus', async () => {
     const ann = await device('Ann');

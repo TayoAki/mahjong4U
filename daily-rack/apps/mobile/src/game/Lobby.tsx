@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { BotLevel } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, type BotLevel } from '@daily-rack/core/mahjong';
 import { api, getConfig, type FriendsOverview, type SeatChoice, type TablePayload, type TableSeat } from '../lib/api.ts';
 import { publicLink } from '../lib/config.ts';
 import { copyText, shareLink } from '../lib/share.ts';
+import { useActiveCard } from '../lib/cards.tsx';
 import { useSafety } from '../lib/safety.tsx';
 import { Avatar, Body, Button, Card, ErrorPanel, Eyebrow, Heading, Icon, IconButton, Notice, Row, Screen, Segmented, Sheet } from '../components/ui.tsx';
 import { colors, fonts } from '../theme.ts';
@@ -26,6 +27,7 @@ export function Lobby({ data, header, principalId, busy, error, start, setSeat, 
   const { table } = data;
   const isHost = table.hostId === principalId;
   const { openPlayer } = useSafety();
+  const card = useActiveCard();
   const [friends, setFriends] = useState<FriendsOverview['friends']>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -123,7 +125,7 @@ export function Lobby({ data, header, principalId, busy, error, start, setSeat, 
           {table.settings.skipCharleston
             ? 'No Charleston: play starts straight away.'
             : `Charleston: first round always${table.settings.secondCharleston ? ', second round if everyone agrees' : ''}${table.settings.courtesyPass ? ', then an optional courtesy pass' : ''}.`}{' '}
-          Hands come from the Daily Rack house card. Whoever throws the winning tile pays double; a self-drawn Mahjong collects double from everyone.
+          Hands come from the {card.id === HOUSE_CARD.id ? 'Daily Rack house card' : card.name}. Whoever throws the winning tile pays double; a self-drawn Mahjong collects double from everyone.
         </Body>
       </Card>
       {!isHost && <Notice>The host deals the first hand once every seat is filled.</Notice>}

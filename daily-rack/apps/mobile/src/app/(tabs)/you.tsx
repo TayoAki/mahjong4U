@@ -265,8 +265,8 @@ export default function YouScreen() {
             </Card>
 
             <Notice>
-              Daily Rack is an independent app. It is not affiliated with or endorsed by the National Mah Jongg League and does not reproduce any official card. Games use the original Daily Rack house
-              card.
+              Daily Rack is an independent app. It is not affiliated with or endorsed by the National Mah Jongg League. Public and offline games use the original Daily Rack house card;
+              hosts can also choose the 2026 card for private tables.
             </Notice>
           </>
         }

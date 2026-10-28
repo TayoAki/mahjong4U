@@ -520,6 +520,22 @@ try {
   check('ranked games open the Plus screen for free players', rankedLabel.includes('Plus') && plusOpened && (await page.getByText('Ranked games, ratings and the leaderboard come with Plus').count()) > 0);
   check('the Plus screen lists what stays free and says where to subscribe', (await page.getByText('Always free').count()) > 0 && (await page.getByText('Plus is available in the Daily Rack app for iPhone and Android.').count()) > 0);
   await page.getByTestId('plus-later').click();
+
+  // The 2026 card: a free player can deal a hand on it against the computer and read it.
+  await page.goto(`${BASE}/table/new`);
+  const cardChip = page.getByTestId('card-card-2026');
+  const cardLabel = (await cardChip.textContent({ timeout: 10_000 })) ?? '';
+  await cardChip.click();
+  await page.getByTestId('new-seat-1').click();
+  await page.getByTestId('seat-bot').click();
+  await page.getByTestId('create-table').click();
+  const cardTable = await page.waitForURL((u) => /^\/table\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 15_000 }).then(() => true, () => false);
+  await page.getByLabel('2026 card', { exact: true }).first().click();
+  const cardSheet = await page.getByText('Any Like Number').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await shot(page, '32c-2026-card');
+  check('a free player can deal a hand on the 2026 card and read it', cardLabel.includes('Plus') && cardTable && cardSheet, cardLabel);
+  const cardTableId = new URL(page.url()).pathname.split('/').pop();
+  await api(page, 'POST', `/v1/tables/${cardTableId}/leave`);
   if (process.env.E2E_ADMIN_TOKEN) {
     const me = await api(page, 'GET', '/v1/me/profile');
     await fetch(`${BASE}/v1/admin/players/${me.id}/plus`, { method: 'POST', headers: { 'x-admin-token': process.env.E2E_ADMIN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ days: 7 }) });

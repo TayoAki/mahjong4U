@@ -121,8 +121,8 @@ reading. Check these against an official card when one is at hand:
 
 ## Whose card?
 
-The house card is original to this app. Before adding a published card, such as the
-National Mah Jongg League's annual card, make sure you have the right to use its hands in
-the app. The League's terms ask for written consent before its card content is used in
-software. That's a decision for the app's owner and their lawyer, not something this
-folder settles.
+The house card is original to this app. `card-2026.json` was added at the owner's request,
+typed from their own printed tracker. The National Mah Jongg League's terms ask for written
+consent before its card content is used in software, and Daily Rack Plus charges for
+unlimited play on this card, so the owner and their lawyer should settle the right to use
+its hands before launch. This folder doesn't settle that.
