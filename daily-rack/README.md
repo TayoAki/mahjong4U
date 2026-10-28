@@ -1,13 +1,14 @@
 # Daily Rack
 
-An American mahjong app with two halves:
+The American mahjong app that gets you from your first lesson to a real table, and keeps your table together once you have one. Learning apps are crowded, so Daily Rack is built around the two moments nobody serves well: the gap between lessons and open play, and playing with your actual people, whatever number you have. A short daily puzzle keeps players sharp between game nights.
 
-- **The daily rack.** Everyone gets the same 13-tile deal each day. You pick a section, pass three tiles, compare your pass with one strong pass and with how everyone else passed, then export your answer as a 9:16 clip for Reels or TikTok. **Switched off for now**, with the clips; see [Feature switches](#feature-switches).
-- **Sit down to a game.** Full four-seat American mahjong (Charleston, courtesy pass, calling discards, jokers and joker swaps, Mahjong and payments) against computer players or with friends, live or turn-based. Friends add each other by code, chat, and plan in-person **Game Nights** with time votes, RSVPs and a calendar file, with an online table as the fallback when the group can't meet.
+- **Learn, then practise before you show up to a group.** Ten short lessons with Pip, the sparrow, then a **practice round**: an untimed hand against the computer where Pip coaches every pass, discard and call, with take-backs and a review at the end.
+- **The daily rack.** Everyone gets the same deal each day, played at the game table at the moment the first Charleston starts. After your pass, every tile is ranked (best to pass in green) next to the strong pass and how everyone else passed. Then everyone plays the same three discards on from that hand, each one ranked, and shares a text score.
+- **Play with your people, whatever number you have.** Full four-seat American mahjong (Charleston, courtesy pass, calling discards, jokers and joker swaps, Mahjong and payments) with friends or computer players, live or turn-based. Only three of you? A computer takes the empty seat. Just two? **Two-player games**: two hands each, no Charleston. Friends add each other by code and chat.
+- **Game Night** gets everyone around a real table on the same date: time votes, RSVPs, a calendar file, and an online table as the fallback.
 - **Play people online.** A quick match or a ranked game with strangers, live, one hand each. Computer players fill empty seats if nobody else turns up in time. Ranked play moves an Elo-style rating, and there are leaderboards for rating and for this week's points. Strangers chat in quick phrases only.
 - **Voice chat** at private tables with friends (WebRTC, directly between devices).
 - **Stats and progress:** hands, wins, streaks, biggest hand, rating and rank, recent hands, and which hands on the card you've made.
-- **Lessons:** ten short interactive lessons, from the tiles to scoring.
 - **Offline play** against the computer, entirely on the device. Finished hands join your stats when you're back online.
 - **Large-tile mode** with big corner numbers, and **extra cards**: a table can play with another card dropped into `content/cards` (see the README there).
 
@@ -60,16 +61,26 @@ Tile artwork is drawn in code (`apps/mobile/src/tiles/tileArt.ts`) with the Chin
 - **Your own order.** Drag tiles in your rack into any order (a tap still picks a tile); the rack remembers it for the game, and "By suit" / "By number" are a tap away.
 - **Dead hands and "why can't I call this?".** The engine calls a hand dead, from what everyone at the table can see, when its exposures fit no hand on the card or every hand left needs a pair or single that's used up. A dead hand sits out the rest of the hand and still pays the winner, and the table says why. Under any other player's discard, "Why can't I call…?" has Pip explain in plain English (a joker, a concealed hand, only a pair, not enough matching tiles, too late, and so on), using the same rules the game does.
 
+## Two-player games
+
+For couples and pairs of friends, against the computer or each other, live or turn-based, at a private table (choose "2" under "How many of you?" on the new-table form). Each player is dealt 27 tiles; East draws a 28th and discards. There is no Charleston. Each player builds two hands from the card at once, arranging hidden tiles between two racks; every exposure belongs to one hand. Your first Mahjong scores its card value and play goes on; your second ends the game and pays double. Jokerless doubles as usual, and an empty wall is a wall game. Joker swaps work on any exposure except a declared hand. The rules are our own, modelled on the published two-player game; we don't use its name, which is a registered trademark, or its card. Full rules and the decisions behind them: [`docs/TWO-PLAYER.md`](docs/TWO-PLAYER.md). Two-player games count as games played in stats but never touch ratings or leaderboards, and premium cards follow the same Plus rules as four-player tables.
+
 ## Learn to play, Pip and reminders
 
 Mahjong is having a moment, and a lot of players are brand new, so the app is built to feel warm and friendly to them.
 
 - **Pip**, an original sparrow (mahjong means "sparrow"), greets new players, cheers finished lessons and good racks with confetti, says something kind whatever the result, and explains rules at the table. Pip is drawn in SVG (`apps/mobile/src/components/Pip.tsx`) with seven moods and small animations, and respects reduced motion.
-- **Learn tab.** The ten lessons as a winding path in four units, with practice stops between them: today's rack as a Charleston pass, a gentle game against Easy computer players, and a first full game.
+- **Learn tab.** The ten lessons as a winding path in four units, with practice stops between them: today's rack as a Charleston pass, a practice round with Pip, and a first full game against Steady computer players. A "Just the two of you?" lesson explains two-player games.
+- **Practice round** (`/practice`, also on Play and Today). An untimed hand against Easy, Steady or Sharp computer players on the device, Charleston on by default. Pip's panel suggests a pass (the tiles are badged on your rack), names your best discards and gives a gentle heads-up before you throw a tile your closest hand needs, says whether to call a discard, and notes joker swaps and dead hands. "All discards" lists every tile with how far it leaves you and how many unseen tiles would help, best in green. Take back any move. The review shows what you went for, how often you matched Pip and the decision that cost most, then points to a real table: play with friends or plan a Game Night. Practice rounds stay out of stats. Plus members can practise on the 2026 card.
+- **The coach** behind the practice round and the daily rack (`packages/core/src/mahjong/coach.ts`) judges a choice the way a teacher talks it through: tiles still needed for your nearest hand, unseen tiles that would bring it closer, and how many lines on the card stay that close. It takes a few milliseconds per decision.
 - **Notifications.** "Your move" at turn-based tables (once until you play), table invites, friend requests, friends' messages (at most one a minute per chat), Game Night news, and "your game is ready" for matchmaking. Nothing is pushed while the app is open in front of you. Pip asks at a moment it makes sense, never on first launch, and each kind can be turned off on the You tab.
 - **Reminders from Pip**, scheduled on the phone itself, Duolingo-style but gentler: one at the time you usually play (or a time you pick), a streak saver in the evening when your streak is on the line, and come-back nudges after 1, 2, 3, 5, 7 and 14 days that then stop. Game Nights you're going to get a reminder two hours before.
 
 Push needs an Expo project: run `npx eas-cli@latest init` in `apps/mobile` (it writes `extra.eas.projectId` to `app.json`), then add an APNs key and an FCM V1 key with `eas credentials`. Until then, reminders on the phone still work and the server simply has no phones to send to.
+
+## The daily rack
+
+The day's puzzle (a reviewed revision from `content/puzzles`) is shown at the game table: you sit South with Hazel, Dot and Rosie around you, your 13 tiles on the game's rack (tap to choose, drag to arrange), and "First Charleston · Pass right · choose 3" in the action bar, with "What are you aiming for?" as section chips. Jokers can't be passed and your draft survives a reload. The review, inspired by discard trainers like mjlab's, ranks every tile in the deal by what passing it costs, marks your picks and the strong pass, and shows the community split once enough people have answered. Then "Play it on: three discards": Pip passes the strong three so everyone plays on from the same hand, the incoming tiles and draws are seeded from the revision id (`packages/core/src/mahjong/daily.ts`), and each discard is ranked by the coach. The score ("Discards 🟩🟩⬜") is saved on the device and shared as text with the rack's link. Video clips stay switched off.
 
 ## Daily Rack Plus (free tier and subscription)
 
@@ -92,11 +103,11 @@ To start selling:
 
 ## Feature switches
 
-`packages/core/src/features.ts` switches whole features off without deleting them. Both are off right now:
+`packages/core/src/features.ts` switches whole features off without deleting them. Right now the daily rack is on and clips are off:
 
-| Switch | What it hides |
+| Switch | What it hides when off |
 | --- | --- |
-| `dailyRack` | Today's rack and its result, the streak and "racks solved" on the You tab, the rack practice in Learn, and shared rack links. First open lands on Today, which leads with a game and Pip's lessons. Pip's daily reminder becomes the next lesson or a game, with no streak saver. Old `/rack`, `/result/…` and `/r/…` links open Today. |
+| `dailyRack` | Today's rack and its result and daily discards, the streak and "racks solved" on the You tab, the rack practice in Learn, and shared rack links. Today leads with a game and Pip's lessons instead. Pip's daily reminder becomes the next lesson or a game, with no streak saver. Old `/rack`, `/result/…` and `/r/…` links open Today. |
 | `clips` | "Make my clip" on a result (a Done button takes its place) and the clip screen. Clips need the daily rack too. |
 
 The server keeps the daily rack API, share links and content, and reports the switches at `/v1/config` so the E2E run checks whichever state is live. To bring a feature back, set its switch to `true` and deploy; for the phone apps that also means a new build.
@@ -222,7 +233,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `npm run seed:demo -- [revisionId] [count]` | Add labelled demo answers so the split can be seen in development |
 | `node scripts/make-sounds.mjs` | Rebuild the table sounds in `apps/mobile/assets/sounds` (synthesized, deterministic) |
 | `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend; `npm run reports feedback` lists Contact us messages; `npm run reports -- bugs` lists problem reports and `bug <id>` shows one with its screenshot (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
-| `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. With the daily rack or clips switched off, it checks they stay hidden instead. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
+| `npm run e2e` | Drive the web build in headless Chromium on phone viewports: first open, the daily rack at the table with its ranked review, three daily discards and the share text (and a real MP4 export when clips are on), a full hand against the computer, a practice round with Pip (Pip's pass, All discards, a take-back), a two-player game against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. With the daily rack or clips switched off, it checks they stay hidden instead. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
 
 ## Adding a daily rack
 

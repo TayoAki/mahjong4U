@@ -188,7 +188,13 @@ export default function PlayScreen() {
                     </Text>
                     <Body small muted>
                       {t.variant === 'two-player' ? 'Two-player · ' : ''}
-                      {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : t.status === 'between' ? `After hand ${t.handNumber}` : `Hand ${t.handNumber}`} · {t.code}
+                      {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} ·{' '}
+                      {t.status === 'lobby'
+                        ? 'Waiting to start'
+                        : t.status === 'between'
+                          ? `After ${t.variant === 'two-player' ? 'game' : 'hand'} ${t.handNumber}`
+                          : `${t.variant === 'two-player' ? 'Game' : 'Hand'} ${t.handNumber}`}{' '}
+                      · {t.code}
                     </Body>
                   </View>
                   {t.yourMove ? <Badge label="Your move" /> : t.invited ? <Badge label="Invited" tone="ink" /> : null}

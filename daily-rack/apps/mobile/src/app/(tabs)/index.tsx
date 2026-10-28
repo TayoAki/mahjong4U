@@ -170,7 +170,9 @@ export default function TodayScreen() {
                         {t.players.filter((p) => p !== 'Open seat').map((p) => p.replace(' (computer)', '')).join(' · ')}
                       </Text>
                       <Body small muted>
-                        {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} · {t.status === 'lobby' ? 'Waiting to start' : `Hand ${t.handNumber}`}
+                        {t.variant === 'two-player' ? 'Two-player · ' : ''}
+                        {t.kind === 'public' ? (t.ranked ? 'Ranked' : 'Quick match') : t.mode === 'live' ? 'Live' : 'Turn-based'} ·{' '}
+                        {t.status === 'lobby' ? 'Waiting to start' : `${t.variant === 'two-player' ? 'Game' : 'Hand'} ${t.handNumber}`}
                       </Body>
                     </View>
                     <Badge label={t.yourMove ? 'Your move' : 'Invited'} tone={t.yourMove ? 'pink' : 'ink'} />

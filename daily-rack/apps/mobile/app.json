@@ -39,7 +39,7 @@
       "shortName": "Daily Rack",
       "themeColor": "#FAF7F0",
       "backgroundColor": "#FAF7F0",
-      "description": "American mahjong: learn with Pip, play friends or the computer, and plan Game Night."
+      "description": "American mahjong from your first lesson to a real table: lessons and coached practice with Pip, a daily rack, two-player games, and Game Night for your group."
     },
     "plugins": [
       "expo-router",
