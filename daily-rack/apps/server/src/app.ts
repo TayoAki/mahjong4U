@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import {
   ALIGNMENT_COPY,
+  FEATURES,
   alignmentOf,
   contentDay,
   selectionErrors,
@@ -173,6 +174,7 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
       supportEmail: config.supportEmail ?? null,
       privacyUrl: config.privacyUrl ?? null,
       termsUrl: config.termsUrl ?? null,
+      features: FEATURES,
     }),
   );
 

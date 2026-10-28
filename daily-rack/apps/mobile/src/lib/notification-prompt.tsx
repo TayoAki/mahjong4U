@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { FEATURES } from '@daily-rack/core';
 import { api } from './api.ts';
 import { LESSONS } from '../lessons/content.ts';
 import { useLessonProgress } from '../lessons/progress.ts';
@@ -34,7 +35,7 @@ const PERKS: [IconName, string][] = [
   ['play', 'When it’s your move in a turn-based game'],
   ['users', 'Table invites, friend requests and messages'],
   ['calendar', 'Game Night plans, and a reminder before you go'],
-  ['flame', 'A daily reminder for today’s rack, at a time you pick'],
+  ['flame', FEATURES.dailyRack ? 'A daily reminder for today’s rack, at a time you pick' : 'A gentle daily reminder to play or learn, at a time you pick'],
 ];
 
 interface NotificationsContext {
@@ -69,9 +70,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       const now = await pushState();
       setState(now);
       if (now !== 'granted' || !ready) return;
-      const daily = await api.daily().catch(() => null);
+      const daily = FEATURES.dailyRack ? await api.daily().catch(() => null) : null;
       const next = lessons.current.loaded ? LESSONS.find((l) => !lessons.current.done.has(l.id)) : undefined;
       await refreshReminders({
+        dailyRack: FEATURES.dailyRack,
         streak: daily?.progress?.streak ?? 0,
         playedToday: daily?.progress?.playedToday ?? false,
         nextLesson: next ? { id: next.id, title: next.title, minutes: next.minutes } : null,

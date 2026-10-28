@@ -39,7 +39,7 @@
       "shortName": "Daily Rack",
       "themeColor": "#FAF7F0",
       "backgroundColor": "#FAF7F0",
-      "description": "American mahjong: a daily rack puzzle, online games with friends or the computer, and Game Night planning."
+      "description": "American mahjong: learn with Pip, play friends or the computer, and plan Game Night."
     },
     "plugins": [
       "expo-router",

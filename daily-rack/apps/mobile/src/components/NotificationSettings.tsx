@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
+import { FEATURES } from '@daily-rack/core';
 import { api, type NotificationSettings as Settings } from '../lib/api.ts';
 import { useNotifications } from '../lib/notification-prompt.tsx';
 import { REMINDER_TIMES, readReminderPrefs, saveReminderPrefs, type ReminderPrefs } from '../lib/reminders.ts';
@@ -69,7 +70,9 @@ export function NotificationSettings() {
         </Body>
       ) : state !== 'granted' ? (
         <>
-          <PipSays mood="wave">Want a nudge when it’s your move, or a reminder for today’s rack? You pick what you hear about.</PipSays>
+          <PipSays mood="wave">
+            Want a nudge when it’s your move, or a reminder {FEATURES.dailyRack ? 'for today’s rack' : 'to play or learn'}? You pick what you hear about.
+          </PipSays>
           <Button title="Turn on notifications" icon="check" variant="secondary" onPress={() => ask('settings')} testID="notify-settings-on" />
         </>
       ) : (
@@ -79,7 +82,7 @@ export function NotificationSettings() {
             <>
               <Toggle
                 label="Reminders from Pip"
-                detail="One a day at most, for today’s rack. Pip goes quiet if you take a break."
+                detail={`One a day at most, ${FEATURES.dailyRack ? 'for today’s rack' : 'for a lesson or a game'}. Pip goes quiet if you take a break.`}
                 value={reminders.on}
                 onChange={(on) => changeReminders({ ...reminders, on })}
                 testID="notify-reminders"

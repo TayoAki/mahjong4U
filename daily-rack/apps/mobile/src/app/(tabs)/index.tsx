@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLayout } from '../../lib/layout.ts';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { spokenLabel } from '@daily-rack/core';
+import { FEATURES, spokenLabel } from '@daily-rack/core';
 import { api, type Daily, type NightSummary, type TableSummary } from '../../lib/api.ts';
 import { formatWhen } from '../../lib/dates.ts';
 import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storage.ts';
@@ -15,6 +15,8 @@ import { useLessonProgress } from '../../lessons/progress.ts';
 import { colors, fonts } from '../../theme.ts';
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+/** A friendly-looking hand for the Today hero while the daily rack is switched off. */
+const SAMPLE_RACK = ['FLOWER_1', 'FLOWER_2', 'BAMBOO_2', 'DRAGON_WHITE', 'BAMBOO_2', 'BAMBOO_6', 'CHARACTER_2', 'CHARACTER_2', 'CHARACTER_2', 'DOT_6', 'DOT_6', 'DOT_6', 'JOKER'];
 
 export default function TodayScreen() {
   const router = useRouter();
@@ -43,6 +45,7 @@ export default function TodayScreen() {
         setNight(upcoming[0] ?? r.nights.find((n) => n.status === 'polling') ?? null);
       })
       .catch(() => undefined);
+    if (!FEATURES.dailyRack) return;
     api
       .daily()
       .then(async (d) => {
@@ -67,15 +70,15 @@ export default function TodayScreen() {
       </Screen>
     );
   }
-  if (!daily) return <Loading label="Dealing today's rack" />;
+  if (FEATURES.dailyRack && !daily) return <Loading label="Dealing today's rack" />;
 
-  const streak = daily.progress?.streak ?? 0;
-  const puzzle = daily.puzzle;
+  const streak = daily?.progress?.streak ?? 0;
+  const puzzle = daily?.puzzle;
   // On a wide screen the rack sits in the left of two columns.
   const rackSpace = layout.wide ? (layout.wideColumn - 56 - 22) / 2 : layout.contentWidth;
   const tileWidth = Math.min(44, Math.floor((rackSpace - 28 - 12 * 2) / 13));
-  const action = daily.attemptId ? 'See your result' : hasDraft ? 'Resume your rack' : "Play today's rack";
-  const go = () => (daily.attemptId ? router.push(`/result/${daily.attemptId}`) : router.push('/rack'));
+  const action = daily?.attemptId ? 'See your result' : hasDraft ? 'Resume your rack' : "Play today's rack";
+  const go = () => (daily?.attemptId ? router.push(`/result/${daily.attemptId}`) : router.push('/rack'));
 
   return (
     <Screen wide>
@@ -83,7 +86,23 @@ export default function TodayScreen() {
       <Columns
         left={
           <>
-            {puzzle ? (
+            {!daily ? (
+              <>
+                <View>
+                  <Eyebrow>Welcome to the table</Eyebrow>
+                  <Display size={40}>Pull up a chair</Display>
+                  <Body>Play the computer, a quick match, or a game with friends.</Body>
+                </View>
+                <View style={styles.hero}>
+                  <View style={styles.rack} accessible={false} importantForAccessibility="no-hide-descendants">
+                    {SAMPLE_RACK.map((face, i) => (
+                      <Tile key={i} face={face} width={tileWidth} flat />
+                    ))}
+                  </View>
+                  <Button title="Play a game" icon="arrow" onPress={() => router.push('/play')} testID="today-primary" />
+                </View>
+              </>
+            ) : puzzle ? (
               <>
                 <View>
                   <Eyebrow>Today's drop</Eyebrow>
@@ -159,7 +178,7 @@ export default function TodayScreen() {
               </View>
             )}
 
-            {daily.progress && (
+            {daily?.progress && (
               <Card>
                 <Text style={styles.cardTitle}>This week's rhythm</Text>
                 <View style={styles.week}>
@@ -181,7 +200,7 @@ export default function TodayScreen() {
               </Card>
             )}
 
-            <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />
+            {daily && <LinkCard icon="play" title="Play a game" body="Sit down at a table with friends or the computer." onPress={() => router.push('/play')} />}
             <LinkCard icon="calendar" title="Plan a game night" body="Find a date that works for your group." onPress={() => router.push('/nights')} />
           </>
         }

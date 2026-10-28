@@ -2,7 +2,7 @@
 
 An American mahjong app with two halves:
 
-- **The daily rack.** Everyone gets the same 13-tile deal each day. You pick a section, pass three tiles, compare your pass with one strong pass and with how everyone else passed, then export your answer as a 9:16 clip for Reels or TikTok.
+- **The daily rack.** Everyone gets the same 13-tile deal each day. You pick a section, pass three tiles, compare your pass with one strong pass and with how everyone else passed, then export your answer as a 9:16 clip for Reels or TikTok. **Switched off for now**, with the clips; see [Feature switches](#feature-switches).
 - **Sit down to a game.** Full four-seat American mahjong (Charleston, courtesy pass, calling discards, jokers and joker swaps, Mahjong and payments) against computer players or with friends, live or turn-based. Friends add each other by code, chat, and plan in-person **Game Nights** with time votes, RSVPs and a calendar file, with an online table as the fallback when the group can't meet.
 - **Play people online.** A quick match or a ranked game with strangers, live, one hand each. Computer players fill empty seats if nobody else turns up in time. Ranked play moves an Elo-style rating, and there are leaderboards for rating and for this week's points. Strangers chat in quick phrases only.
 - **Voice chat** at private tables with friends (WebRTC, directly between devices).
@@ -75,7 +75,7 @@ Push needs an Expo project: run `npx eas-cli@latest init` in `apps/mobile` (it w
 
 New players should never meet a paywall before they can play, so the free tier is generous:
 
-- **Free:** today's rack with streaks and clips, every lesson, unlimited games on the house card, games with friends, chat, Game Night and voice chat, quick matches, and 3 hands a day on the 2026 card against the computer.
+- **Free:** every lesson, unlimited games on the house card, games with friends, chat, Game Night and voice chat, quick matches, and 3 hands a day on the 2026 card against the computer.
 - **Plus:** the 2026 card as much as you like, hosting friends on it (they play free), and ranked games with ratings and the leaderboard. Suggested prices: $5.99 a month or $39.99 a year with a 7-day free trial on the yearly plan.
 
 The rules live in `packages/core/src/plans.ts`. The server enforces them (a 402 `plus_required` with the feature), and the app opens the Plus screen with Pip, the real store prices, "Always free", restore, the auto-renew fine print and a "Maybe later" that's always there. A free trial gets a local reminder two days before it ends. The web build explains that Plus comes with the phone apps.
@@ -89,6 +89,17 @@ To start selling:
 2. RevenueCat: add the App Store Connect API key and In-App Purchase key to the iOS app, and a Play service account to the Android app.
 3. RevenueCat: create a secret API key and set it on the server as `REVENUECAT_SECRET_KEY`.
 4. Host a privacy policy and terms, and set `PRIVACY_URL` and `TERMS_URL` (iOS falls back to Apple's standard terms). Both stores want these linked next to a subscription.
+
+## Feature switches
+
+`packages/core/src/features.ts` switches whole features off without deleting them. Both are off right now:
+
+| Switch | What it hides |
+| --- | --- |
+| `dailyRack` | Today's rack and its result, the streak and "racks solved" on the You tab, the rack practice in Learn, and shared rack links. First open lands on Today, which leads with a game and Pip's lessons. Pip's daily reminder becomes the next lesson or a game, with no streak saver. Old `/rack`, `/result/…` and `/r/…` links open Today. |
+| `clips` | "Make my clip" on a result (a Done button takes its place) and the clip screen. Clips need the daily rack too. |
+
+The server keeps the daily rack API, share links and content, and reports the switches at `/v1/config` so the E2E run checks whichever state is live. To bring a feature back, set its switch to `true` and deploy; for the phone apps that also means a new build.
 
 ## iPad and big screens
 
@@ -211,7 +222,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 npx expo start
 | `npm run seed:demo -- [revisionId] [count]` | Add labelled demo answers so the split can be seen in development |
 | `node scripts/make-sounds.mjs` | Rebuild the table sounds in `apps/mobile/assets/sounds` (synthesized, deterministic) |
 | `npm run reports` | Review player reports: list, dismiss, remove a message, suspend or unsuspend; `npm run reports feedback` lists Contact us messages; `npm run reports -- bugs` lists problem reports and `bug <id>` shows one with its screenshot (needs `ADMIN_TOKEN`, and `API_URL` for a remote server) |
-| `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
+| `npm run e2e` | Drive the web build in headless Chromium on phone viewports: the daily rack with a real MP4 export, a full hand against the computer, two guests becoming friends and chatting, the same two playing a live hand together, a Game Night from invite to calendar file, and the safety tools (rules, filter, report, block, unblock). Start the server on a fresh database with `BOT_DELAY_MS=120` first. With the daily rack or clips switched off, it checks they stay hidden instead. Set `E2E_SKIP_CLIP=1` to skip the video export, and `E2E_ADMIN_TOKEN` to the server's `ADMIN_TOKEN` to check the moderator view too. |
 
 ## Adding a daily rack
 
@@ -224,4 +235,4 @@ A published revision can never be edited in place: the server refuses to start i
 
 ## Card rights
 
-The app never shows or copies the National Mah Jongg League card. Daily racks name sections in general terms, and games use the original house card. Players who want the League's annual card should check hands against their own copy. Get a lawyer's review before launch.
+Public, ranked and offline games use the original house card, and daily racks name sections in general terms. The 2026 card (`content/cards/card-2026.json`) was added at the owner's request and is sold as part of Plus; the National Mah Jongg League's terms ask for written consent before its card content is used in software (see `content/cards/README.md`). Get a lawyer's review before launch.

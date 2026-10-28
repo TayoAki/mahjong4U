@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { formatRate, spokenLabel } from '@daily-rack/core';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { FEATURES, formatRate, spokenLabel } from '@daily-rack/core';
 import { ApiError, api, type ResultResponse } from '../../lib/api.ts';
 import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
 import { track } from '../../lib/analytics.ts';
@@ -14,7 +14,7 @@ import { Badge, Body, Button, Card, Display, ErrorPanel, Heading, Icon, Loading,
 import { Tile } from '../../components/Tile.tsx';
 import { colors, fonts } from '../../theme.ts';
 
-export default function ResultScreen() {
+function ResultScreen() {
   const { attemptId = '' } = useLocalSearchParams<{ attemptId: string }>();
   const router = useRouter();
   const [result, setResult] = useState<ResultResponse | null>(null);
@@ -67,7 +67,11 @@ export default function ResultScreen() {
     <Screen
       footer={
         <>
-          <Button title="Make my clip" icon="arrow" onPress={() => router.push(`/clip/${result.attempt.id}`)} testID="make-clip" />
+          {FEATURES.clips ? (
+            <Button title="Make my clip" icon="arrow" onPress={() => router.push(`/clip/${result.attempt.id}`)} testID="make-clip" />
+          ) : (
+            <Button title="Done" icon="check" onPress={home} testID="result-done" />
+          )}
           {!result.attempt.isDaily && <Button title="Play today's rack" variant="secondary" onPress={home} />}
         </>
       }
@@ -201,3 +205,8 @@ const styles = StyleSheet.create({
   rate: { width: 48, textAlign: 'right', fontSize: 17, fontWeight: '700', color: colors.ink },
   streak: { fontFamily: fonts.serif, fontSize: 22, color: colors.primary },
 });
+
+/** Switched off for now (FEATURES.dailyRack): old links land on Today. */
+export default function ResultRoute() {
+  return FEATURES.dailyRack ? <ResultScreen /> : <Redirect href="/" />;
+}

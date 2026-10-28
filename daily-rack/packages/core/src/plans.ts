@@ -1,3 +1,5 @@
+import { FEATURES } from './features.ts';
+
 // What's free and what comes with Daily Rack Plus, in one place for the server (which
 // enforces it) and the app (which explains it). Learning, the daily rack and playing with
 // friends stay free: new players should never hit a paywall before they can play.
@@ -21,14 +23,14 @@ export function isPremiumCard(cardId: string | null | undefined): boolean {
 }
 
 /** What a player gets free, and what Plus adds, as the paywall shows it. */
-export const FREE_FEATURES = [
-  'Today’s rack every day, with your streak and clips',
+export const FREE_FEATURES: readonly string[] = [
+  ...(FEATURES.dailyRack ? [`Today’s rack every day, with your streak${FEATURES.clips ? ' and clips' : ''}`] : []),
   'Every lesson with Pip',
   'Unlimited games on the house card',
   'Games with friends, chat, Game Night and voice chat',
   'Quick matches',
   `${PLUS.freeCardHandsPerDay} hands a day on the 2026 card`,
-] as const;
+];
 
 export const PLUS_FEATURES = [
   'Play the 2026 card as much as you like',

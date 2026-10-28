@@ -1,5 +1,6 @@
 // End-to-end check of the Expo web build on phone-sized viewports:
 //   1. Daily Rack: first open -> rack -> result -> clip -> real MP4 export -> shared link.
+//      With the daily rack or clips switched off (core FEATURES), checks they stay hidden.
 //   2. Arranging the rack by dragging a tile, then a full hand against three computer
 //      players, Charleston to Mahjong.
 //   3. Two guests become friends by code and chat.
@@ -22,6 +23,8 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const BASE = process.env.BASE_URL ?? 'http://localhost:8787';
 const OUT = resolve(process.env.E2E_OUT ?? join(import.meta.dirname, '../e2e-artifacts'));
 const SKIP_CLIP = process.env.E2E_SKIP_CLIP === '1';
+// Features switched off for now (core FEATURES) are checked as hidden instead.
+const { features = { dailyRack: true, clips: true } } = await (await fetch(`${BASE}/v1/config`)).json();
 mkdirSync(OUT, { recursive: true });
 
 const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
@@ -103,93 +106,111 @@ async function autoplay(page, { timeout = 300_000, shots = {} } = {}) {
 const browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
 const pageErrors = [];
 const watch = (page, who) => page.on('pageerror', (e) => pageErrors.push(`${who}: ${e.message}`));
+/** The main player's page, for a screenshot if the run stops early. */
+let mainPage = null;
 
 try {
   // ------------------------------------------------------------------ 1. Daily Rack
   const ann = await browser.newContext({ ...phone, acceptDownloads: true, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] });
   const page = await ann.newPage();
+  mainPage = page;
   watch(page, 'ann');
   await page.goto(BASE);
-  await page.waitForURL('**/rack');
-  check('first open goes straight to the rack', page.url().endsWith('/rack'));
-  await page.getByText('Quick question').waitFor();
-  await shot(page, '01-first-open-preferences');
-  await page.getByRole('button', { name: "I'm learning" }).click();
-  await page.getByRole('button', { name: 'Weekly' }).click();
-  await page.getByRole('button', { name: 'Deal my rack' }).click();
-  await page.getByText('Quick question').waitFor({ state: 'hidden' });
-
-  const submit = page.getByTestId('submit-pass');
-  check('submit is disabled before choosing', (await submit.getAttribute('aria-disabled')) === 'true');
-  await page.getByRole('radiogroup', { name: 'Section to aim for' }).getByRole('button').first().click();
-  // Pass the first three tiles that can be passed (jokers and flowers-to-keep are refused).
-  for (let picked = 0; picked < 3; picked++) {
-    const buttons = page.getByLabel('Your deal').getByRole('button');
-    for (let i = 0; i < (await buttons.count()); i++) {
-      const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
-      if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
-      await buttons.nth(i).click();
-      break;
+  let link = null;
+  if (!features.dailyRack) {
+    await page.getByTestId('today-primary').waitFor();
+    check('first open lands on Today, with no daily rack', new URL(page.url()).pathname === '/' && (await page.getByText('Pull up a chair').isVisible()));
+    await shot(page, '01-today-first-open');
+    let allHome = true;
+    for (const path of ['/rack', '/result/some-attempt', '/clip/some-attempt', '/r/some-link']) {
+      await page.goto(`${BASE}${path}`);
+      allHome &&= await page.waitForURL((u) => u.pathname === '/', { timeout: 10_000 }).then(() => true, () => false);
     }
-  }
-  check('three tiles land in the pass tray', await page.getByText('3 of 3 selected').isVisible());
-  // A fourth tile is refused with an explanation instead of silently replacing one.
-  {
-    const buttons = page.getByLabel('Your deal').getByRole('button');
-    for (let i = 0; i < (await buttons.count()); i++) {
-      const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
-      if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
-      await buttons.nth(i).click();
-      break;
+    check('old rack, result, clip and shared links go to Today', allHome);
+  } else {
+    await page.waitForURL('**/rack');
+    check('first open goes straight to the rack', page.url().endsWith('/rack'));
+    await page.getByText('Quick question').waitFor();
+    await shot(page, '01-first-open-preferences');
+    await page.getByRole('button', { name: "I'm learning" }).click();
+    await page.getByRole('button', { name: 'Weekly' }).click();
+    await page.getByRole('button', { name: 'Deal my rack' }).click();
+    await page.getByText('Quick question').waitFor({ state: 'hidden' });
+
+    const submit = page.getByTestId('submit-pass');
+    check('submit is disabled before choosing', (await submit.getAttribute('aria-disabled')) === 'true');
+    await page.getByRole('radiogroup', { name: 'Section to aim for' }).getByRole('button').first().click();
+    // Pass the first three tiles that can be passed (jokers and flowers-to-keep are refused).
+    for (let picked = 0; picked < 3; picked++) {
+      const buttons = page.getByLabel('Your deal').getByRole('button');
+      for (let i = 0; i < (await buttons.count()); i++) {
+        const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
+        if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
+        await buttons.nth(i).click();
+        break;
+      }
     }
-    check('a fourth tile is refused', await page.getByText(/Choose 3 tiles\. Tap one in your pass to swap it out\./).isVisible());
-    check('deal keeps 13 tiles across rack and tray', (await page.getByLabel('Your deal').getByRole('button', { name: /^(?!Sort)/ }).count()) === 13);
+    check('three tiles land in the pass tray', await page.getByText('3 of 3 selected').isVisible());
+    // A fourth tile is refused with an explanation instead of silently replacing one.
+    {
+      const buttons = page.getByLabel('Your deal').getByRole('button');
+      for (let i = 0; i < (await buttons.count()); i++) {
+        const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
+        if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
+        await buttons.nth(i).click();
+        break;
+      }
+      check('a fourth tile is refused', await page.getByText(/Choose 3 tiles\. Tap one in your pass to swap it out\./).isVisible());
+      check('deal keeps 13 tiles across rack and tray', (await page.getByLabel('Your deal').getByRole('button', { name: /^(?!Sort)/ }).count()) === 13);
+    }
+    await shot(page, '02-rack-selected');
+    await page.reload();
+    await page.getByText('3 of 3 selected').waitFor({ timeout: 8000 }).catch(() => undefined);
+    check('draft survives reload', await page.getByText('3 of 3 selected').isVisible());
+    await submit.click();
+    await page.waitForURL('**/result/**');
+    await page.getByText('More players are weighing in.').or(page.getByText('The community split')).first().waitFor();
+    check('result screen shows the comparison', await page.getByText('Your pass').first().isVisible());
+    await shot(page, '03-result');
+    const attemptId = page.url().split('/').pop();
+
+    if (!features.clips) {
+      check('no clip button on the result', (await page.getByTestId('make-clip').count()) === 0 && (await page.getByTestId('result-done').isVisible()));
+    } else if (!SKIP_CLIP) {
+      await page.getByTestId('make-clip').click();
+      await page.waitForURL('**/clip/**');
+      await page.locator('canvas').first().waitFor();
+      await page.waitForTimeout(800);
+      await shot(page, '04-clip-studio');
+      const [download] = await Promise.all([page.waitForEvent('download', { timeout: 240_000 }), page.getByTestId('save-video').click()]);
+      const videoPath = join(OUT, 'daily-rack-clip.mp4');
+      await download.saveAs(videoPath);
+      const probe = JSON.parse(
+        execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate:format=duration', '-of', 'json', videoPath]).toString(),
+      );
+      const video = probe.streams.find((s) => s.codec_type === 'video');
+      check('clip exports a 1080x1920 MP4', video?.width === 1080 && video?.height === 1920, `${video?.codec_name} ${video?.width}x${video?.height}, ${Number(probe.format.duration).toFixed(1)} s`);
+      check('clip file is real', statSync(videoPath).size > 100_000, `${(statSync(videoPath).size / 1e6).toFixed(2)} MB`);
+
+      // Voiceover: record a few seconds with the fake microphone, export again, expect an audio track.
+      await page.getByRole('button', { name: /Add voiceover/ }).click();
+      await page.getByRole('button', { name: 'Record' }).click();
+      await page.waitForTimeout(3000);
+      await page.getByRole('button', { name: /^Stop/ }).click();
+      await page.getByRole('button', { name: 'Delete voiceover' }).waitFor();
+      const [voiceDownload] = await Promise.all([page.waitForEvent('download', { timeout: 240_000 }), page.getByTestId('save-video').click()]);
+      const voicePath = join(OUT, 'daily-rack-clip-voice.mp4');
+      await voiceDownload.saveAs(voicePath);
+      const voiceProbe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,sample_rate,duration', '-of', 'json', voicePath]).toString());
+      const audio = voiceProbe.streams.find((s) => s.codec_type === 'audio');
+      check('voiceover export carries an audio track', Boolean(audio), audio ? `${audio.codec_name} ${audio.sample_rate} Hz, ${Number(audio.duration).toFixed(1)} s` : 'none');
+    }
+
+    link = await page.evaluate(async (id) => {
+      const res = await fetch('/v1/share-links', { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ attemptId: id, publishPass: true }) });
+      return res.json();
+    }, attemptId);
   }
-  await shot(page, '02-rack-selected');
-  await page.reload();
-  await page.getByText('3 of 3 selected').waitFor({ timeout: 8000 }).catch(() => undefined);
-  check('draft survives reload', await page.getByText('3 of 3 selected').isVisible());
-  await submit.click();
-  await page.waitForURL('**/result/**');
-  await page.getByText('More players are weighing in.').or(page.getByText('The community split')).first().waitFor();
-  check('result screen shows the comparison', await page.getByText('Your pass').first().isVisible());
-  await shot(page, '03-result');
-  const attemptId = page.url().split('/').pop();
-
-  if (!SKIP_CLIP) {
-    await page.getByTestId('make-clip').click();
-    await page.waitForURL('**/clip/**');
-    await page.locator('canvas').first().waitFor();
-    await page.waitForTimeout(800);
-    await shot(page, '04-clip-studio');
-    const [download] = await Promise.all([page.waitForEvent('download', { timeout: 240_000 }), page.getByTestId('save-video').click()]);
-    const videoPath = join(OUT, 'daily-rack-clip.mp4');
-    await download.saveAs(videoPath);
-    const probe = JSON.parse(
-      execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate:format=duration', '-of', 'json', videoPath]).toString(),
-    );
-    const video = probe.streams.find((s) => s.codec_type === 'video');
-    check('clip exports a 1080x1920 MP4', video?.width === 1080 && video?.height === 1920, `${video?.codec_name} ${video?.width}x${video?.height}, ${Number(probe.format.duration).toFixed(1)} s`);
-    check('clip file is real', statSync(videoPath).size > 100_000, `${(statSync(videoPath).size / 1e6).toFixed(2)} MB`);
-
-    // Voiceover: record a few seconds with the fake microphone, export again, expect an audio track.
-    await page.getByRole('button', { name: /Add voiceover/ }).click();
-    await page.getByRole('button', { name: 'Record' }).click();
-    await page.waitForTimeout(3000);
-    await page.getByRole('button', { name: /^Stop/ }).click();
-    await page.getByRole('button', { name: 'Delete voiceover' }).waitFor();
-    const [voiceDownload] = await Promise.all([page.waitForEvent('download', { timeout: 240_000 }), page.getByTestId('save-video').click()]);
-    const voicePath = join(OUT, 'daily-rack-clip-voice.mp4');
-    await voiceDownload.saveAs(voicePath);
-    const voiceProbe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,sample_rate,duration', '-of', 'json', voicePath]).toString());
-    const audio = voiceProbe.streams.find((s) => s.codec_type === 'audio');
-    check('voiceover export carries an audio track', Boolean(audio), audio ? `${audio.codec_name} ${audio.sample_rate} Hz, ${Number(audio.duration).toFixed(1)} s` : 'none');
-  }
-
-  const link = await page.evaluate(async (id) => {
-    const res = await fetch('/v1/share-links', { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ attemptId: id, publishPass: true }) });
-    return res.json();
-  }, attemptId);
 
   // ------------------------------------------------------------------ 2. A hand against the computer
   await page.goto(`${BASE}/play`);
@@ -442,12 +463,14 @@ try {
   check('players can unblock from the You tab', await beaPage.getByText('You haven’t blocked anyone.').isVisible());
 
   // Shared rack link still works for a brand-new guest.
-  const carl = await browser.newContext(phone);
-  const carlPage = await carl.newPage();
-  watch(carlPage, 'carl');
-  await carlPage.goto(`${BASE}${link.path}`);
-  await carlPage.getByText('Someone shared this exact rack with you.').waitFor();
-  check('shared rack link opens the exact rack', true);
+  if (link) {
+    const carl = await browser.newContext(phone);
+    const carlPage = await carl.newPage();
+    watch(carlPage, 'carl');
+    await carlPage.goto(`${BASE}${link.path}`);
+    await carlPage.getByText('Someone shared this exact rack with you.').waitFor();
+    check('shared rack link opens the exact rack', true);
+  }
 
   // ------------------------------------------------------------------ 7. Online play and learning
   const api = (p, method, path, body) =>
@@ -520,6 +543,8 @@ try {
   check('ranked games open the Plus screen for free players', rankedLabel.includes('Plus') && plusOpened && (await page.getByText('Ranked games, ratings and the leaderboard come with Plus').count()) > 0);
   check('the Plus screen lists what stays free and says where to subscribe', (await page.getByText('Always free').count()) > 0 && (await page.getByText('Plus is available in the Daily Rack app for iPhone and Android.').count()) > 0);
   await page.getByTestId('plus-later').click();
+  // "Maybe later" goes back in history; let it land before navigating again.
+  await page.waitForURL((u) => u.pathname !== '/plus', { timeout: 10_000 }).catch(() => undefined);
 
   // The 2026 card: a free player can deal a hand on it against the computer and read it.
   await page.goto(`${BASE}/table/new`);
@@ -584,6 +609,7 @@ try {
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 5).join(' | '));
 } catch (error) {
   check('run completed', false, String(error).slice(0, 500));
+  if (mainPage) await shot(mainPage, 'zz-stopped-here').catch(() => undefined);
 } finally {
   await browser.close();
 }

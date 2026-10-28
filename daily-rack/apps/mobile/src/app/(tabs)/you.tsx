@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { FEATURES } from '@daily-rack/core';
 import { api, getConfig, type Profile, type Progress } from '../../lib/api.ts';
 import { updatePrefs, usePrefs } from '../../lib/prefs.ts';
 import { useReportProblem } from '../../lib/report-problem.tsx';
@@ -38,10 +39,13 @@ export default function YouScreen() {
 
   useEffect(() => setName(profile?.name ?? ''), [profile?.name]);
   const load = useCallback(() => {
-    api
-      .progress()
-      .then(setProgress)
-      .catch((e: Error) => setError(e.message));
+    // Streaks and racks solved come from the daily rack.
+    if (FEATURES.dailyRack) {
+      api
+        .progress()
+        .then(setProgress)
+        .catch((e: Error) => setError(e.message));
+    }
     api
       .blocks()
       .then((r) => setBlocked(r.blocked))

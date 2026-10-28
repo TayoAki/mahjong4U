@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
+import { FEATURES } from '@daily-rack/core';
 import { api, type Daily } from '../lib/api.ts';
 import { FIRST_OPEN_KEY, PREFS_ASKED_KEY, PREFS_KEY, readJson, readPrefs, writeJson, type Preferences } from '../lib/storage.ts';
 import { RackPlay } from '../components/RackPlay.tsx';
 import { Body, Button, Chip, Display, ErrorPanel, IconButton, Loading, Screen, Sheet, TopBar } from '../components/ui.tsx';
 
-export default function RackScreen() {
+function RackScreen() {
   const router = useRouter();
   const [daily, setDaily] = useState<Daily | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,9 +77,9 @@ function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void
       <Body>1. Pick the section of the card you would aim for with this rack.</Body>
       <Body>2. Choose the three tiles you would pass in the first Charleston.</Body>
       <Body>3. See one strong pass with the reasoning, and how everyone else passed.</Body>
-      <Body>4. Turn your answer into a vertical clip to share.</Body>
+      {FEATURES.clips && <Body>4. Turn your answer into a vertical clip to share.</Body>}
       <Body small muted>
-        Jokers can never be passed. Everyone gets the same rack each day, and your first answer is the one that counts. Check hands against your own card: this app never reproduces it.
+        Jokers can never be passed. Everyone gets the same rack each day, and your first answer is the one that counts. Check hands against your own card.
       </Body>
       <Button title="Got it" onPress={onClose} />
     </Sheet>
@@ -126,4 +127,9 @@ function PreferencesSheet({ visible, onDone, onFullGame }: { visible: boolean; o
       />
     </Sheet>
   );
+}
+
+/** Switched off for now (FEATURES.dailyRack): old links and reminders land on Today. */
+export default function RackRoute() {
+  return FEATURES.dailyRack ? <RackScreen /> : <Redirect href="/" />;
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { FEATURES } from '@daily-rack/core';
 import { ApiError, api, type SharedRack } from '../../lib/api.ts';
 import { track } from '../../lib/analytics.ts';
 import { RackPlay } from '../../components/RackPlay.tsx';
 import { Button, ErrorPanel, Loading, Notice, Screen, TopBar } from '../../components/ui.tsx';
 
 /** Exact-rack entry from a shared clip or link. */
-export default function SharedRackScreen() {
+function SharedRackScreen() {
   const { token = '' } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
   const [rack, setRack] = useState<SharedRack | null>(null);
@@ -43,4 +44,9 @@ export default function SharedRackScreen() {
       )}
     </Screen>
   );
+}
+
+/** Switched off for now (FEATURES.dailyRack): shared rack links land on Today. */
+export default function SharedRackRoute() {
+  return FEATURES.dailyRack ? <SharedRackScreen /> : <Redirect href="/" />;
 }

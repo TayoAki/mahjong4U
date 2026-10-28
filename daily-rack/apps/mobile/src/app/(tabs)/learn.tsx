@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLayout } from '../../lib/layout.ts';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { FEATURES } from '@daily-rack/core';
 import { api, type Daily } from '../../lib/api.ts';
 import { useSession } from '../../lib/session.tsx';
 import { track } from '../../lib/analytics.ts';
@@ -38,7 +39,9 @@ const UNITS: Unit[] = [
     title: 'Before play begins',
     blurb: 'The deal, the Charleston and the courtesy pass.',
     lessons: ['deal', 'charleston', 'courtesy'],
-    practice: { id: 'practice-rack', title: 'Pass three tiles', detail: 'Today’s rack is a Charleston pass. About a minute.', icon: 'flame', go: 'rack' },
+    practice: FEATURES.dailyRack
+      ? { id: 'practice-rack', title: 'Pass three tiles', detail: 'Today’s rack is a Charleston pass. About a minute.', icon: 'flame', go: 'rack' }
+      : undefined,
   },
   {
     title: 'Your turn',
@@ -145,6 +148,7 @@ export default function LearnScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!FEATURES.dailyRack) return;
       api
         .daily()
         .then(setDaily)
@@ -184,7 +188,7 @@ export default function LearnScreen() {
       ? `Hi${first ? ` ${first}` : ''}! I’m Pip. Mahjong means “sparrow,” so I’m the right bird to teach you. Let’s start with the tiles!`
       : next
         ? `Welcome back${first ? `, ${first}` : ''}! Next up: “${next.title}.” It takes about ${next.minutes} minutes.`
-        : 'You’ve learned the whole game! Keep your skills sharp with today’s rack and a game or two.';
+        : `You’ve learned the whole game! Keep your skills sharp with ${FEATURES.dailyRack ? 'today’s rack and ' : ''}a game or two.`;
 
   let index = 0;
   return (
