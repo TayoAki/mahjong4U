@@ -8,16 +8,27 @@
 //   0, 00 ...            white dragon used as zero
 //   2a, 444b, 6666c      number groups in suit a/b/c
 //   x y z u v (+ suit)   variable ranks X, X+1, X+2, X+3, X+4 in a run, e.g. xxxa yyyya
+//   p q (+ suit)         any numbers, different from each other, e.g. pppppa qqqqqa
 // Suit letters a, b, c always stand for three different suits.
+//
+// A token written with more than one symbol is several groups printed together, the way a
+// card prints singles: 2026a is 2a 0 2a 6a, 113579a is 11a 3a 5a 7a 9a, NEWS is N E W S.
+// A rule token limits a variable to some numbers: x=13579 (odd), x=2468 (even), x=26.
+// " | " separates different ways to make the same hand; the card shows the first one.
 
 export type SuitVar = 'a' | 'b' | 'c';
+/** Free number variables: any number, each different from the others. */
+export type FreeVar = 'p' | 'q';
+/** Variables a rule token can limit: the start of a run (x) and the free numbers. */
+export type NumberVar = 'x' | FreeVar;
 export type TileSpec =
   | { k: 'flower' }
   | { k: 'wind'; w: 'NORTH' | 'EAST' | 'SOUTH' | 'WEST' }
   | { k: 'dragon'; s: SuitVar }
   | { k: 'soap' }
   | { k: 'num'; rank: number; s: SuitVar }
-  | { k: 'var'; offset: number; s: SuitVar };
+  | { k: 'var'; offset: number; s: SuitVar }
+  | { k: 'free'; v: FreeVar; s: SuitVar };
 
 export interface GroupSpec {
   tile: TileSpec;
@@ -25,11 +36,24 @@ export interface GroupSpec {
   token: string;
 }
 
+/** One way to make a hand: its groups, and the numbers its variables may take. */
+export interface HandWay {
+  /** This way as written, e.g. "NNN xxxxa xxxxb SSS x=13579". */
+  pattern: string;
+  groups: GroupSpec[];
+  /** Allowed numbers for a variable, when a rule token limits it. */
+  numbers: Partial<Record<NumberVar, number[]>>;
+}
+
 export interface CardHand {
   id: string;
   section: string;
+  /** The pattern as written: one or more ways separated by " | ". The card shows the first. */
   pattern: string;
+  /** The groups of the first way (the one the card shows). */
   groups: GroupSpec[];
+  /** Every way the hand can be made. Most hands have exactly one. */
+  ways: HandWay[];
   concealed: boolean;
   value: number;
   note?: string;
@@ -45,13 +69,19 @@ export interface Card {
 
 const WIND_OF: Record<string, 'NORTH' | 'EAST' | 'SOUTH' | 'WEST'> = { N: 'NORTH', E: 'EAST', S: 'SOUTH', W: 'WEST' };
 const VAR_OFFSET: Record<string, number> = { x: 0, y: 1, z: 2, u: 3, v: 4 };
+const FREE_VARS: readonly string[] = ['p', 'q'];
 
+function isSuitVar(ch: string | undefined): ch is SuitVar {
+  return ch === 'a' || ch === 'b' || ch === 'c';
+}
+
+/** Parses one group: a single symbol repeated once per tile, plus a suit letter if it takes one. */
 export function parseToken(token: string): GroupSpec {
   const fail = () => {
     throw new Error(`bad pattern token "${token}"`);
   };
   const suffix = token.at(-1);
-  const hasSuit = suffix === 'a' || suffix === 'b' || suffix === 'c';
+  const hasSuit = isSuitVar(suffix);
   const body = hasSuit ? token.slice(0, -1) : token;
   const symbol = body[0];
   if (!symbol || [...body].some((ch) => ch !== symbol)) fail();
@@ -64,16 +94,120 @@ export function parseToken(token: string): GroupSpec {
   else if (symbol === '0' && !hasSuit) tile = { k: 'soap' };
   else if (/[1-9]/.test(symbol!) && hasSuit) tile = { k: 'num', rank: Number(symbol), s };
   else if (VAR_OFFSET[symbol!] !== undefined && hasSuit) tile = { k: 'var', offset: VAR_OFFSET[symbol!]!, s };
+  else if (FREE_VARS.includes(symbol!) && hasSuit) tile = { k: 'free', v: symbol as FreeVar, s };
   if (!tile || n < 1 || n > 6) fail();
   return { tile: tile!, n, token };
 }
 
+/** Symbols that never take a suit letter. The white dragon may still sit inside a suited token (2026a). */
+function suitless(symbol: string): boolean {
+  return symbol === 'F' || symbol === '0' || WIND_OF[symbol] !== undefined;
+}
+
+/**
+ * Parses a token that may print several groups together: each run of one symbol is a group,
+ * and the suit letter at the end applies to every group that takes a suit. "2026a" is
+ * 2a 0 2a 6a, "113579a" is 11a 3a 5a 7a 9a, "1Da" is 1a Da, "NEWS" is N E W S.
+ */
+export function parseGroups(token: string): GroupSpec[] {
+  const suffix = token.at(-1);
+  const hasSuit = isSuitVar(suffix);
+  const body = hasSuit ? token.slice(0, -1) : token;
+  const runs = body.match(/(.)\1*/g) ?? [];
+  if (runs.length <= 1) return [parseToken(token)];
+  return runs.map((run) => {
+    const symbol = run[0]!;
+    // Flowers and winds can't share a token with suited groups; a suitless token can't hold suited ones.
+    if (hasSuit && suitless(symbol) && symbol !== '0') throw new Error(`bad pattern token "${token}"`);
+    const part = hasSuit && !suitless(symbol) ? run + suffix : run;
+    try {
+      return parseToken(part);
+    } catch {
+      throw new Error(`bad pattern token "${token}"`);
+    }
+  });
+}
+
+/** Parses one way to make a hand: groups, plus rule tokens such as x=13579. */
+function parseWay(source: string): HandWay {
+  const groups: GroupSpec[] = [];
+  const numbers: Partial<Record<NumberVar, number[]>> = {};
+  for (const token of source.split(/\s+/).filter(Boolean)) {
+    if (token.includes('=')) {
+      const rule = /^([xpq])=([1-9]+)$/.exec(token);
+      if (!rule) throw new Error(`bad number rule "${token}" (write it like x=13579)`);
+      const v = rule[1] as NumberVar;
+      if (numbers[v]) throw new Error(`bad pattern "${source}": two rules for ${v}`);
+      numbers[v] = [...new Set([...rule[2]!].map(Number))].sort((a, b) => a - b);
+      continue;
+    }
+    groups.push(...parseGroups(token));
+  }
+  if (groups.length === 0) throw new Error(`bad pattern "${source}": no groups`);
+  for (const v of Object.keys(numbers) as NumberVar[]) {
+    const used = groups.some((g) => (v === 'x' ? g.tile.k === 'var' : g.tile.k === 'free' && g.tile.v === v));
+    if (!used) throw new Error(`bad pattern "${source}": the rule for ${v} names a variable the pattern doesn't use`);
+  }
+  return { pattern: source, groups, numbers };
+}
+
+/** Splits a pattern into its ways (separated by " | ") and parses each. Throws on anything malformed. */
+export function parsePattern(pattern: string): HandWay[] {
+  const parts = pattern.split('|').map((p) => p.trim());
+  if (parts.some((p) => p === '')) throw new Error(`bad pattern "${pattern}": empty way`);
+  return parts.map(parseWay);
+}
+
+export interface PatternPiece {
+  /** What to print, e.g. "2026", "DDD", "NEWS". */
+  text: string;
+  /** The suit letter that colours it, or null for flowers, winds and other suitless groups. */
+  suit: SuitVar | null;
+}
+
+/**
+ * How a pattern reads on a printed card: the first way, token by token, with rule tokens
+ * left out and variables shown as example numbers. A run starts at the lowest number its
+ * rule allows (x=2468 shows 2222), so "1 2 3" mean any consecutive numbers unless a rule
+ * says otherwise; free numbers show as the lowest numbers they may take.
+ */
+export function patternPieces(pattern: string): PatternPiece[] {
+  const way = parseWay(pattern.split('|')[0]!.trim());
+  const starts = runStarts(way);
+  const x = starts[0] ?? 1;
+  const shown = new Map<string, number>();
+  for (const v of freeVarsOf(way)) {
+    const n = (way.numbers[v] ?? NUMBERS).find((k) => ![...shown.values()].includes(k)) ?? 1;
+    shown.set(v, n);
+  }
+  return way.pattern
+    .split(/\s+/)
+    .filter((token) => token && !token.includes('='))
+    .map((token) => {
+      const suit = isSuitVar(token.at(-1)) ? (token.at(-1) as SuitVar) : null;
+      const body = suit ? token.slice(0, -1) : token;
+      const text = [...body]
+        .map((ch) => (VAR_OFFSET[ch] !== undefined ? String(x + VAR_OFFSET[ch]!) : shown.has(ch) ? String(shown.get(ch)) : ch))
+        .join('');
+      return { text, suit };
+    });
+}
+
+/** patternPieces as plain text, e.g. "FFF 2468 FFF 2222" for "FFF 2468a FFF xxxxb x=2468". */
+export function patternText(pattern: string): string {
+  return patternPieces(pattern)
+    .map((p) => p.text)
+    .join(' ');
+}
+
 function hand(id: string, section: string, pattern: string, value: number, options: { concealed?: boolean; note?: string } = {}): CardHand {
+  const ways = parsePattern(pattern);
   return {
     id,
     section,
     pattern,
-    groups: pattern.split(/\s+/).map(parseToken),
+    groups: ways[0]!.groups,
+    ways,
     concealed: options.concealed ?? false,
     value,
     note: options.note,
@@ -159,48 +293,87 @@ function permutations<T>(items: readonly T[], k: number): T[][] {
   return items.flatMap((item, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)], k - 1).map((rest) => [item, ...rest]));
 }
 
-export function concretize(hand: CardHand): ConcreteHand[] {
-  const vars = [...new Set(hand.groups.flatMap((g) => ('s' in g.tile ? [g.tile.s] : [])))].sort() as SuitVar[];
-  const maxOffset = Math.max(-1, ...hand.groups.map((g) => (g.tile.k === 'var' ? g.tile.offset : -1)));
-  const xs = maxOffset < 0 ? [0] : Array.from({ length: 9 - maxOffset }, (_, i) => i + 1);
+const NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** The run starts a way allows: every X whose whole run stays within 1-9, limited by an x= rule. */
+function runStarts(way: HandWay): number[] {
+  const maxOffset = Math.max(-1, ...way.groups.map((g) => (g.tile.k === 'var' ? g.tile.offset : -1)));
+  if (maxOffset < 0) return [];
+  return NUMBERS.filter((x) => x + maxOffset <= 9 && (!way.numbers.x || way.numbers.x.includes(x)));
+}
+
+function freeVarsOf(way: HandWay): FreeVar[] {
+  return [...new Set(way.groups.flatMap((g) => (g.tile.k === 'free' ? [g.tile.v] : [])))].sort();
+}
+
+/** Every way to give the free variables different numbers, each within its rule. */
+function freeAssignments(vars: readonly FreeVar[], numbers: HandWay['numbers'], taken: readonly number[] = []): Map<FreeVar, number>[] {
+  if (vars.length === 0) return [new Map()];
+  const [first, ...rest] = vars as [FreeVar, ...FreeVar[]];
+  return (numbers[first] ?? NUMBERS)
+    .filter((n) => !taken.includes(n))
+    .flatMap((n) => freeAssignments(rest, numbers, [...taken, n]).map((m) => new Map([[first, n], ...m])));
+}
+
+/** The concrete hands of one way. `prefix` tells ways apart in labels when a hand has several. */
+function concretizeWay(hand: CardHand, way: HandWay, prefix: string | null): ConcreteHand[] {
+  const vars = [...new Set(way.groups.flatMap((g) => ('s' in g.tile ? [g.tile.s] : [])))].sort() as SuitVar[];
+  const hasRun = way.groups.some((g) => g.tile.k === 'var');
+  const xs = hasRun ? runStarts(way) : [0];
+  const frees = freeAssignments(freeVarsOf(way), way.numbers);
   const out: ConcreteHand[] = [];
   for (const perm of permutations(SUITS, vars.length)) {
     const suitOf = new Map(vars.map((v, i) => [v, perm[i]!]));
     for (const x of xs) {
-      const groups = hand.groups.map((g): ConcreteGroup => {
-        const t = g.tile;
-        let face: string;
-        switch (t.k) {
-          case 'flower':
-            face = 'FLOWER';
-            break;
-          case 'wind':
-            face = `WIND_${t.w}`;
-            break;
-          case 'dragon':
-            face = DRAGON_OF[suitOf.get(t.s)!];
-            break;
-          case 'soap':
-            face = 'DRAGON_WHITE';
-            break;
-          case 'num':
-            face = `${suitOf.get(t.s)}_${t.rank}`;
-            break;
-          case 'var':
-            face = `${suitOf.get(t.s)}_${x + t.offset}`;
-            break;
-        }
-        return { face, n: g.n, jokerable: g.n >= 3 };
-      });
-      const parts = vars.map((v) => `${v}=${suitOf.get(v)}`);
-      if (maxOffset >= 0) parts.push(`X=${x}`);
-      out.push({ hand, groups, label: parts.join(' ') });
+      for (const free of frees) {
+        const groups = way.groups.map((g): ConcreteGroup => {
+          const t = g.tile;
+          let face: string;
+          switch (t.k) {
+            case 'flower':
+              face = 'FLOWER';
+              break;
+            case 'wind':
+              face = `WIND_${t.w}`;
+              break;
+            case 'dragon':
+              face = DRAGON_OF[suitOf.get(t.s)!];
+              break;
+            case 'soap':
+              face = 'DRAGON_WHITE';
+              break;
+            case 'num':
+              face = `${suitOf.get(t.s)}_${t.rank}`;
+              break;
+            case 'var':
+              face = `${suitOf.get(t.s)}_${x + t.offset}`;
+              break;
+            case 'free':
+              face = `${suitOf.get(t.s)}_${free.get(t.v)}`;
+              break;
+          }
+          return { face, n: g.n, jokerable: g.n >= 3 };
+        });
+        const parts = vars.map((v) => `${v}=${suitOf.get(v)}`);
+        if (prefix) parts.unshift(prefix);
+        if (hasRun) parts.push(`X=${x}`);
+        for (const [v, n] of free) parts.push(`${v.toUpperCase()}=${n}`);
+        out.push({ hand, groups, label: parts.join(' ') });
+      }
     }
   }
-  return dedupe(out);
+  return out;
 }
 
-/** Hands that use fewer suit letters than suits produce identical concrete hands; keep one. */
+export function concretize(hand: CardHand): ConcreteHand[] {
+  const several = hand.ways.length > 1;
+  return dedupe(hand.ways.flatMap((way, i) => concretizeWay(hand, way, several ? `#${i + 1}` : null)));
+}
+
+/**
+ * Hands that use fewer suit letters than suits, and ways that repeat another way, produce
+ * identical concrete hands; keep the first.
+ */
 function dedupe(hands: ConcreteHand[]): ConcreteHand[] {
   const seen = new Set<string>();
   return hands.filter((h) => {
@@ -231,10 +404,13 @@ export function validateCard(card: Card): string[] {
     if (ids.has(h.id)) errors.push(`${h.id}: duplicate id`);
     ids.add(h.id);
     if (!sections.has(h.section)) errors.push(`${h.id}: unknown section ${h.section}`);
-    const total = h.groups.reduce((n, g) => n + g.n, 0);
-    if (total !== 14) errors.push(`${h.id}: ${total} tiles, expected 14`);
+    h.ways.forEach((way, i) => {
+      const where = h.ways.length > 1 ? ` (way ${i + 1})` : '';
+      const total = way.groups.reduce((n, g) => n + g.n, 0);
+      if (total !== 14) errors.push(`${h.id}${where}: ${total} tiles, expected 14`);
+      if (concretizeWay(h, way, null).length === 0) errors.push(`${h.id}${where}: no concrete hands`);
+    });
     const variants = concretize(h);
-    if (variants.length === 0) errors.push(`${h.id}: no concrete hands`);
     for (const c of variants) {
       const natOnly = new Map<string, number>();
       const all = new Map<string, number>();

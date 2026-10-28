@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLayout } from '../lib/layout.ts';
 import { spokenLabel } from '@daily-rack/core';
-import { HOUSE_CARD } from '@daily-rack/core/mahjong';
+import { HOUSE_CARD, patternPieces } from '@daily-rack/core/mahjong';
 import { Tile, TileButton } from '../components/Tile.tsx';
 import { Body, Button, Card, Display, Eyebrow, Icon, Row, Screen, TopBar } from '../components/ui.tsx';
 import { Pattern } from '../game/CardView.tsx';
@@ -62,10 +62,8 @@ function describeGroups(groups: Face[][]): string {
 
 /** "F F, 2 2 2 2, 4 4" so a screen reader doesn't read 2222 as a number. */
 function spokenPattern(pattern: string): string {
-  const digits: Record<string, string> = { x: '1', y: '2', z: '3', u: '4', v: '5' };
-  return pattern
-    .split(' ')
-    .map((token) => [...token.replace(/[abc]$/, '').replace(/[xyzuv]/g, (ch) => digits[ch]!)].join(' '))
+  return patternPieces(pattern)
+    .map((piece) => [...piece.text].join(' '))
     .join(', ');
 }
 
