@@ -11,6 +11,7 @@ import { HowToPlay } from '../../game/HowToPlay.tsx';
 import { OnlineCard } from '../../game/OnlineCard.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
 import { PlusCard } from '../../components/PlusCard.tsx';
+import { Pip } from '../../components/Pip.tsx';
 import { LEVEL_LABEL } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
 
@@ -116,6 +117,19 @@ export default function PlayScreen() {
               </Row>
               <Button title="Deal me in" icon="arrow" onPress={playComputer} loading={busy === 'quick'} testID="quick-play" />
               <Button title="No connection? Play offline" variant="light" compact onPress={() => router.push('/offline')} testID="play-offline" />
+            </Card>
+
+            <Card style={{ gap: 12 }} testID="play-practice">
+              <Row gap={12}>
+                <Pip mood="wave" size={56} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Heading>Practice round with Pip</Heading>
+                  <Body small muted>
+                    An untimed hand where Pip coaches every pass, discard and call. Take back any move.
+                  </Body>
+                </View>
+              </Row>
+              <Button title="Start a practice round" variant="secondary" onPress={() => router.push('/practice')} testID="open-practice" />
             </Card>
 
             <OnlineCard rating={rating} />

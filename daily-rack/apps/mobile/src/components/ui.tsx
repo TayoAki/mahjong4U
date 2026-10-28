@@ -340,7 +340,8 @@ export type IconName =
   | 'flag'
   | 'block'
   | 'sound'
-  | 'mute';
+  | 'mute'
+  | 'undo';
 
 const ICONS: Record<IconName, ReactNode> = {
   back: <Path d="M15 5l-7 7 7 7" />,
@@ -387,6 +388,7 @@ const ICONS: Record<IconName, ReactNode> = {
   ),
   sound: <Path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11" />,
   mute: <Path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5" />,
+  undo: <Path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />,
 };
 
 export function Icon({ name, size = 24, color = colors.ink }: { name: IconName; size?: number; color?: string }) {

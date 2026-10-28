@@ -23,7 +23,7 @@ interface Practice {
   title: string;
   detail: string;
   icon: IconName;
-  go: 'rack' | 'easy' | 'steady';
+  go: 'rack' | 'round' | 'steady';
 }
 
 interface Unit {
@@ -47,7 +47,7 @@ const UNITS: Unit[] = [
     title: 'Your turn',
     blurb: 'Drawing, discarding, calling, and the magic of jokers.',
     lessons: ['calling', 'jokers', 'exposed'],
-    practice: { id: 'practice-easy', title: 'A gentle practice game', detail: 'Easy computer players. Take all the time you like.', icon: 'play', go: 'easy' },
+    practice: { id: 'practice-round', title: 'Practice round with Pip', detail: 'One untimed hand. Pip helps with every pass, discard and call.', icon: 'play', go: 'round' },
   },
   {
     title: 'Playing to win',
@@ -166,12 +166,15 @@ export default function LearnScreen() {
   const practise = async (p: Practice) => {
     track('learn_practice', { kind: p.go });
     if (p.go === 'rack') return router.push(daily?.attemptId ? `/result/${daily.attemptId}` : '/rack');
+    // The practice round runs on the phone, so it works offline too.
+    if (p.go === 'round') return router.push('/practice');
     if (offline) return router.push('/offline');
     setStarting(p.id);
     setError(null);
     try {
-      const level = p.go === 'easy' ? 'easy' : 'normal';
-      const created = await api.createTable({ mode: 'turn', seats: [{ type: 'bot', level }, { type: 'bot', level }, { type: 'bot', level }] });
+      // Your first full game: Steady computer players, at a real table.
+      const bot = { type: 'bot', level: 'normal' } as const;
+      const created = await api.createTable({ mode: 'turn', seats: [bot, bot, bot] });
       router.push(`/table/${created.table.id}`);
     } catch (e) {
       setError((e as Error).message);
