@@ -99,6 +99,8 @@ function describe(save: OfflineSave, event: GameEvent, me: string): LogEntry {
         return `${who} swapped ${shortLabel(faceOf(event.tile))} for a joker.`;
       case 'mahjong':
         return `${who} declared Mahjong!`;
+      case 'dead-hand':
+        return `${who}'s hand is dead: ${event.reason.text}.`;
       case 'wall-game':
         return 'Wall game: nobody won this hand.';
     }

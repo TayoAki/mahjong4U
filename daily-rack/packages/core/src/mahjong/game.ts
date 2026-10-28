@@ -1,4 +1,5 @@
 import type { Card } from './card.ts';
+import { deadHandReason, type DeadReason } from './dead.ts';
 import { exposureOptions, findWin, type Exposure } from './match.ts';
 import { isJoker, keyOf, shuffledWall } from './set.ts';
 
@@ -65,6 +66,12 @@ export interface GameState {
   phase: Phase;
   turns: number;
   result: GameResult | null;
+  /**
+   * Seats whose hand is dead, with the reason; null while a seat can still win. A dead seat
+   * sits out the rest of the hand but still pays the winner. Missing in games saved before
+   * dead hands existed, so read it through isDead / deadReason.
+   */
+  dead?: (DeadReason | null)[];
 }
 
 export type Action =
@@ -87,6 +94,7 @@ export type GameEvent =
   | { type: 'call'; seat: Seat; tile: number; size: number }
   | { type: 'exchange'; seat: Seat; target: Seat; tile: number }
   | { type: 'mahjong'; seat: Seat; from: Seat | null }
+  | { type: 'dead-hand'; seat: Seat; reason: DeadReason }
   | { type: 'wall-game' };
 
 export class GameError extends Error {
@@ -118,6 +126,7 @@ export function newGame(card: Card, options: GameOptions): GameState {
     phase: { kind: 'charleston', round: 1, pass: 0, selections: [null, null, null, null] },
     turns: 0,
     result: null,
+    dead: [null, null, null, null],
   };
   if (state.options.skipCharleston) state.phase = { kind: 'turn', seat: 0, drawn: null };
   return state;
@@ -148,7 +157,16 @@ export function publicPhaseKey(phase: PublicPhase): string {
   return phase.kind === 'claim' ? `claim:${phase.tile}` : phase.kind;
 }
 
-/** Seats that must act before the game can move on. */
+/** Why this seat's hand is dead, or null while it can still win. */
+export function deadReason(state: GameState, seat: Seat): DeadReason | null {
+  return state.dead?.[seat] ?? null;
+}
+
+export function isDead(state: GameState, seat: Seat): boolean {
+  return deadReason(state, seat) !== null;
+}
+
+/** Seats that must act before the game can move on. Dead seats never do. */
 export function pendingSeats(state: GameState): Seat[] {
   const p = state.phase;
   switch (p.kind) {
@@ -160,9 +178,9 @@ export function pendingSeats(state: GameState): Seat[] {
     case 'courtesy-count':
       return SEATS.filter((s) => p.counts[s] === null);
     case 'turn':
-      return [p.seat];
+      return isDead(state, p.seat) ? [] : [p.seat];
     case 'claim':
-      return SEATS.filter((s) => p.responses[s] === null);
+      return SEATS.filter((s) => p.responses[s] === null && !isDead(state, s));
     case 'ended':
       return [];
   }
@@ -175,6 +193,7 @@ export function applyAction(card: Card, input: GameState, seat: Seat, action: Ac
   const phase = state.phase;
   const me = state.players[seat]!;
   const wrongTime = () => new GameError('not_now', 'That move is not available right now.');
+  if (isDead(state, seat)) throw new GameError('dead_hand', 'Your hand is dead, so you sit out the rest of this hand.');
 
   switch (action.type) {
     case 'charleston-pass': {
@@ -254,6 +273,8 @@ export function applyAction(card: Card, input: GameState, seat: Seat, action: Ac
       takeFrom(me.hand, action.tile);
       me.hand.push(joker);
       events.push({ type: 'exchange', seat, target: action.target, tile: action.tile });
+      // The natural is face up now, which can leave someone (even this seat) with a dead hand.
+      afterPublicChange(card, state, seat, events);
       break;
     }
     case 'declare-mahjong': {
@@ -266,13 +287,11 @@ export function applyAction(card: Card, input: GameState, seat: Seat, action: Ac
     case 'claim': {
       if (phase.kind !== 'claim' || phase.responses[seat] !== null) throw wrongTime();
       const response = action.response;
+      const options = claimOptions(card, state, seat, phase.tile);
       if (response.type === 'expose') {
-        const sizes = exposureOptions(card, me.hand, me.exposures, keyOf(phase.tile));
-        if (!sizes.includes(response.size)) throw new GameError('bad_call', 'You cannot expose that group with this tile.');
+        if (!options.sizes.includes(response.size)) throw new GameError('bad_call', 'You cannot expose that group with this tile.');
       } else if (response.type === 'mahjong') {
-        if (!findWin(card, [...me.hand, phase.tile], me.exposures)) {
-          throw new GameError('not_mahjong', 'That tile does not complete a hand on the card.');
-        }
+        if (!options.canMahjong) throw new GameError('not_mahjong', 'That tile does not complete a hand on the card.');
       }
       phase.responses[seat] = response;
       if (phase.responses.every((r) => r !== null)) resolveClaims(card, state, events);
@@ -312,17 +331,38 @@ function startPlay(state: GameState, events: GameEvent[]) {
   events.push({ type: 'play-started' });
 }
 
+export interface ClaimOptions {
+  /** The tile completes a hand on the card, so the seat may call it for Mahjong. */
+  canMahjong: boolean;
+  /** Sizes of group the seat could expose with the tile. */
+  sizes: number[];
+}
+
+/**
+ * What a seat could do with a discard, judged from its current hand. The engine asks a seat
+ * about a discard only when this offers something; jokers and dead hands never can.
+ */
+export function claimOptions(card: Card, state: GameState, seat: Seat, tile: number): ClaimOptions {
+  if (isDead(state, seat)) return { canMahjong: false, sizes: [] };
+  const p = state.players[seat]!;
+  return claimOptionsFor(card, p.hand, p.exposures, tile);
+}
+
+/** claimOptions for a given hand and exposures (shared with explainClaim, so they never disagree). */
+export function claimOptionsFor(card: Card, hand: readonly number[], exposures: readonly Exposure[], tile: number): ClaimOptions {
+  if (isJoker(tile)) return { canMahjong: false, sizes: [] };
+  return { canMahjong: findWin(card, [...hand, tile], exposures) !== null, sizes: exposureOptions(card, hand, exposures, keyOf(tile)) };
+}
+
 /** After a discard, ask only the seats that have a legal call; everyone else passes automatically. */
 function openClaims(card: Card, state: GameState, from: Seat, tile: number, events: GameEvent[]) {
-  if (isJoker(tile)) return nextTurn(state, from, events);
+  if (isJoker(tile)) return nextTurn(card, state, from, events);
   const responses = SEATS.map((s): ClaimResponse | null => {
     if (s === from) return { type: 'pass' };
-    const p = state.players[s]!;
-    const canWin = findWin(card, [...p.hand, tile], p.exposures) !== null;
-    const sizes = exposureOptions(card, p.hand, p.exposures, keyOf(tile));
-    return canWin || sizes.length > 0 ? null : { type: 'pass' };
+    const { canMahjong, sizes } = claimOptions(card, state, s, tile);
+    return canMahjong || sizes.length > 0 ? null : { type: 'pass' };
   });
-  if (responses.every((r) => r !== null)) return nextTurn(state, from, events);
+  if (responses.every((r) => r !== null)) return nextTurn(card, state, from, events);
   state.phase = { kind: 'claim', tile, from, responses };
 }
 
@@ -353,15 +393,52 @@ function resolveClaims(card: Card, state: GameState, events: GameEvent[]) {
     p.exposures.push({ key, tiles: [phase.tile, ...used] });
     events.push({ type: 'call', seat: caller, tile: phase.tile, size });
     state.phase = { kind: 'turn', seat: caller, drawn: null };
+    afterPublicChange(card, state, caller, events);
     return;
   }
-  nextTurn(state, phase.from, events);
+  nextTurn(card, state, phase.from, events);
 }
 
-function nextTurn(state: GameState, from: Seat, events: GameEvent[]) {
-  const seat = ((from + 1) % 4) as Seat;
-  const tile = state.wall.pop();
-  if (tile === undefined) {
+/**
+ * Marks every hand that has just become dead; dead lasts for the rest of the hand. Runs only
+ * when no discard is waiting to be called, so everything on the floor is used up.
+ */
+function updateDead(card: Card, state: GameState, events: GameEvent[]) {
+  const dead = (state.dead ??= [null, null, null, null]);
+  for (const s of SEATS) {
+    if (dead[s]) continue;
+    const reason = deadHandReason(card, state, s, null);
+    if (!reason) continue;
+    dead[s] = reason;
+    events.push({ type: 'dead-hand', seat: s, reason });
+  }
+}
+
+/** Something new is face up during `seat`'s turn. If that leaves the seat dead, play moves on. */
+function afterPublicChange(card: Card, state: GameState, seat: Seat, events: GameEvent[]) {
+  updateDead(card, state, events);
+  if (isDead(state, seat)) nextTurn(card, state, seat, events);
+}
+
+/** The next seat after `from` whose hand is still live (`from` itself if it's the last), or null. */
+function nextLiveSeat(state: GameState, from: Seat): Seat | null {
+  for (let k = 1; k <= 4; k++) {
+    const seat = ((from + k) % 4) as Seat;
+    if (!isDead(state, seat)) return seat;
+  }
+  return null;
+}
+
+/**
+ * Play moves on from `from` (its discard window has closed, or its hand just died): the
+ * next live seat draws, skipping dead hands.
+ */
+function nextTurn(card: Card, state: GameState, from: Seat, events: GameEvent[]) {
+  updateDead(card, state, events);
+  const seat = nextLiveSeat(state, from);
+  const tile = seat === null ? undefined : state.wall.pop();
+  // A wall game when nothing is left to draw, or nobody is left who could win.
+  if (seat === null || tile === undefined) {
     state.phase = { kind: 'ended' };
     state.result = { kind: 'wall', winner: null, from: null, handId: null, pattern: null, assignment: null, value: 0, jokerless: false, payments: [0, 0, 0, 0] };
     events.push({ type: 'wall-game' });
@@ -423,7 +500,8 @@ export interface PlayerView {
   phase: PublicPhase;
   hand: number[];
   drawn: number | null;
-  players: { seat: Seat; handCount: number; exposures: Exposure[] }[];
+  /** Every seat's public information. `dead` is why a seat's hand is dead (it's public), or null. */
+  players: { seat: Seat; handCount: number; exposures: Exposure[]; dead: DeadReason | null }[];
   discards: { tile: number; seat: Seat }[];
   wallCount: number;
   prompt: Prompt | null;
@@ -456,7 +534,12 @@ export function playerView(card: Card, state: GameState, seat: Seat): PlayerView
     phase: publicPhase,
     hand: [...me.hand],
     drawn: p.kind === 'turn' && p.seat === seat ? p.drawn : null,
-    players: SEATS.map((s) => ({ seat: s, handCount: state.players[s]!.hand.length, exposures: structuredClone(state.players[s]!.exposures) })),
+    players: SEATS.map((s) => ({
+      seat: s,
+      handCount: state.players[s]!.hand.length,
+      exposures: structuredClone(state.players[s]!.exposures),
+      dead: structuredClone(deadReason(state, s)),
+    })),
     discards: [...state.discards],
     wallCount: state.wall.length,
     prompt: waiting.includes(seat) ? promptFor(card, state, seat) : null,
@@ -468,6 +551,8 @@ export function playerView(card: Card, state: GameState, seat: Seat): PlayerView
 export function promptFor(card: Card, state: GameState, seat: Seat): Prompt | null {
   const p = state.phase;
   const me = state.players[seat]!;
+  // A dead hand sits out the rest of the hand: no turns, no calls.
+  if (isDead(state, seat)) return null;
   switch (p.kind) {
     case 'charleston':
       return { type: 'charleston-pass', direction: currentDirection(p)!, round: p.round, count: 3 };
@@ -489,14 +574,10 @@ export function promptFor(card: Card, state: GameState, seat: Seat): Prompt | nu
       }
       return { type: 'turn', canMahjong: findWin(card, me.hand, me.exposures) !== null, exchanges };
     }
-    case 'claim':
-      return {
-        type: 'claim',
-        tile: p.tile,
-        from: p.from,
-        sizes: exposureOptions(card, me.hand, me.exposures, keyOf(p.tile)),
-        canMahjong: findWin(card, [...me.hand, p.tile], me.exposures) !== null,
-      };
+    case 'claim': {
+      const { sizes, canMahjong } = claimOptions(card, state, seat, p.tile);
+      return { type: 'claim', tile: p.tile, from: p.from, sizes, canMahjong };
+    }
     case 'ended':
       return null;
   }

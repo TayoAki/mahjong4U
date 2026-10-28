@@ -10,13 +10,17 @@ import {
   cardToSpec,
   registerCard,
   concretize,
+  deadHandReason,
+  explainClaim,
   exposureOptions,
   SEATS,
   findWin,
+  isDead,
   isJoker,
   keyOf,
   newGame,
   phaseKey,
+  promptFor,
   publicPhaseKey,
   parseToken,
   passTarget,
@@ -26,6 +30,8 @@ import {
   runBots,
   validateCard,
   type BotLevel,
+  type DeadReason,
+  type GameEvent,
   type GameState,
   type Seat,
 } from './index.ts';
@@ -363,4 +369,513 @@ describe('cards as data', () => {
     const short = cardFromSpec({ ...spec, hands: [{ id: 'x', section: 'evens', pattern: 'FF 2222a', value: 25 }] });
     expect(validateCard(short).join()).toMatch(/expected 14/);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Dead hands and "why can't I call this?"
+
+const FAKE_DEAD: DeadReason = { code: 'no-hand', faces: [], text: 'test' };
+
+/** Plays one move and returns the new state with the events it produced. */
+function play(state: GameState, seat: Seat, action: Parameters<typeof applyAction>[3], onCard = card) {
+  return applyAction(onCard, state, seat, action);
+}
+
+/**
+ * South (seat 1) has exposed kongs of North and East, so the only hand left for it is
+ * NNNN EEEE WWWW SS, and it holds three Wests. East holds the last South and a West.
+ * West (seat 2) wins with the 5 Crak on top of the wall.
+ */
+function windsTable(southsOut: number) {
+  const pick = picker();
+  const souths = pick('WIND_SOUTH', 4);
+  const wests = pick('WIND_WEST', 4);
+  const east = [souths[3]!, wests[3]!, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 4)];
+  const south = [...wests.slice(0, 3), ...pick('DOT_9', 1), ...pick('DOT_8', 1)];
+  const west = [...pick('FLOWER', 2), ...pick('DOT_5', 4), ...pick('BAMBOO_5', 4), ...pick('CHARACTER_5', 3)];
+  const north = [...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 4), ...pick('DOT_1', 4), ...pick('CHARACTER_9', 1)];
+  const state = playState([east, south, west, north], [...pick('DOT_6', 2), ...pick('CHARACTER_5', 1)]);
+  state.players[1]!.exposures = [
+    { key: 'WIND_NORTH', tiles: pick('WIND_NORTH', 4) },
+    { key: 'WIND_EAST', tiles: pick('WIND_EAST', 4) },
+  ];
+  state.discards = souths.slice(0, southsOut).map((tile, i) => ({ tile, seat: (i % 2 === 0 ? 2 : 3) as Seat }));
+  return { state, lastSouth: souths[3]!, west: wests[3]! };
+}
+
+/**
+ * South has exposed a kong of 9 Dot and a pung of 7 Dot (only FFFF 1a 3a 5a 777a 9999a
+ * fits) and holds everything but the single 1 Dot. Three 1 Dots are already out; East
+ * holds the last one.
+ */
+function lastOneTable() {
+  const pick = picker();
+  const ones = pick('DOT_1', 4);
+  const east = [ones[3]!, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 4), ...pick('WIND_WEST', 1)];
+  const south = [...pick('FLOWER', 4), ...pick('DOT_3', 1), ...pick('DOT_5', 1)];
+  const west = [...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 4), ...pick('CHARACTER_9', 4), ...pick('WIND_NORTH', 1)];
+  const north = [...pick('BAMBOO_4', 4), ...pick('BAMBOO_6', 4), ...pick('CHARACTER_8', 4), ...pick('WIND_SOUTH', 1)];
+  const state = playState([east, south, west, north], pick('DOT_6', 2));
+  state.players[1]!.exposures = [
+    { key: 'DOT_9', tiles: pick('DOT_9', 4) },
+    { key: 'DOT_7', tiles: pick('DOT_7', 3) },
+  ];
+  state.discards = [
+    { tile: ones[0]!, seat: 2 },
+    { tile: ones[1]!, seat: 3 },
+    { tile: ones[2]!, seat: 0 },
+  ];
+  return { state, lastOne: ones[3]! };
+}
+
+describe('dead hands', () => {
+  it('calls a hand dead when its exposures fit no hand on the card', () => {
+    const pick = picker();
+    const state = playState([[], [], [], []]);
+    state.players[1]!.exposures = [{ key: 'DOT_1', tiles: pick('DOT_1', 3) }];
+    expect(deadHandReason(card, state, 1)).toBeNull();
+    state.players[1]!.exposures.push({ key: 'WIND_EAST', tiles: pick('WIND_EAST', 3) });
+    expect(deadHandReason(card, state, 1)).toEqual({
+      code: 'no-hand',
+      faces: ['DOT_1', 'WIND_EAST'],
+      text: "the exposed pung of 1 Dot and pung of East Winds don't fit any hand on the card",
+    });
+  });
+
+  it('rules out concealed hands once a seat has exposed', () => {
+    const tiny = cardFromSpec({
+      id: 'dead-test-card',
+      name: 'Test',
+      description: 'Test',
+      sections: [{ id: 's', label: 'S' }],
+      hands: [
+        { id: 'open', section: 's', pattern: 'FF 2222a 44a 66a 8888a', value: 25 },
+        { id: 'secret', section: 's', pattern: 'NNN EEE WWW SSS FF', value: 50, concealed: true },
+      ],
+    });
+    const pick = picker();
+    const state = { ...playState([[], [], [], []]), cardId: tiny.id };
+    state.players[2]!.exposures = [{ key: 'WIND_NORTH', tiles: pick('WIND_NORTH', 3) }];
+    expect(deadHandReason(tiny, state, 2)).toMatchObject({ code: 'no-hand', text: "the exposed pung of North Winds doesn't fit any hand on the card" });
+  });
+
+  it('calls a hand dead when every hand left needs a pair or single that is used up', () => {
+    const pick = picker();
+    const state = playState([[], [], [], []]);
+    // FFF 555b 5555c fit only FFF xxa xxxb xxxxc DDc: a pair of 5 Dot and a pair of Red Dragons.
+    state.players[3]!.exposures = [
+      { key: 'FLOWER', tiles: pick('FLOWER', 3) },
+      { key: 'BAMBOO_5', tiles: pick('BAMBOO_5', 3) },
+      { key: 'CHARACTER_5', tiles: pick('CHARACTER_5', 4) },
+    ];
+    const reds = pick('DRAGON_RED', 4);
+    // Red Dragons hidden in someone's rack are not public, so they prove nothing.
+    state.players[0]!.hand = [...reds];
+    expect(deadHandReason(card, state, 3)).toBeNull();
+    state.players[0]!.hand = [];
+    state.discards = reds.slice(0, 2).map((tile) => ({ tile, seat: 0 as Seat }));
+    expect(deadHandReason(card, state, 3)).toBeNull();
+    state.discards.push({ tile: reds[2]!, seat: 1 });
+    expect(deadHandReason(card, state, 3)?.text).toBe('every hand that fits these exposures needs a pair of Red Dragons, and three of the four are already out');
+    state.discards.push({ tile: reds[3]!, seat: 2 });
+    expect(deadHandReason(card, state, 3)).toEqual({
+      code: 'tiles-gone',
+      faces: ['DRAGON_RED'],
+      text: 'every hand that fits these exposures needs a pair of Red Dragons, and all four are already out',
+    });
+  });
+
+  it('names every used-up tile when different hands need different ones', () => {
+    const tiny = cardFromSpec({
+      id: 'dead-test-card-2',
+      name: 'Test',
+      description: 'Test',
+      sections: [{ id: 's', label: 'S' }],
+      hands: [
+        { id: 'w1', section: 's', pattern: 'NNNN EEEE WWWW SS', value: 25 },
+        { id: 'w2', section: 's', pattern: 'NNNN EEEE SSSS WW', value: 25 },
+      ],
+    });
+    const pick = picker();
+    const state = { ...playState([[], [], [], []]), cardId: tiny.id };
+    state.players[1]!.exposures = [
+      { key: 'WIND_NORTH', tiles: pick('WIND_NORTH', 4) },
+      { key: 'WIND_EAST', tiles: pick('WIND_EAST', 4) },
+    ];
+    state.discards = [...pick('WIND_WEST', 4), ...pick('WIND_SOUTH', 2)].map((tile) => ({ tile, seat: 0 as Seat }));
+    expect(deadHandReason(tiny, state, 1)).toBeNull();
+    state.discards.push({ tile: pick('WIND_SOUTH', 1)[0]!, seat: 2 });
+    expect(deadHandReason(tiny, state, 1)).toEqual({
+      code: 'tiles-gone',
+      faces: ['WIND_SOUTH', 'WIND_WEST'],
+      text: 'every hand that fits these exposures needs a pair of South Winds or West Winds, and too many of each are already out',
+    });
+    state.discards.push({ tile: pick('WIND_SOUTH', 1)[0]!, seat: 3 });
+    expect(deadHandReason(tiny, state, 1)?.text).toBe('every hand that fits these exposures needs a pair of South Winds or West Winds, and all of those are already out');
+  });
+
+  it('does not count a discard that can still be called: the last copy can win', () => {
+    const { state, lastOne } = lastOneTable();
+    expect(deadHandReason(card, state, 1)).toBeNull();
+    const { state: offered, events } = play(state, 0, { type: 'discard', tile: lastOne });
+    expect(offered.phase).toMatchObject({ kind: 'claim', tile: lastOne });
+    expect(events.map((e) => e.type)).toEqual(['discard']);
+    expect(deadHandReason(card, offered, 1)).toBeNull();
+    expect(deadHandReason(card, offered, 1, null)?.text).toBe('every hand that fits these exposures needs a single 1 Dot, and all four are already out');
+
+    const won = play(offered, 1, { type: 'claim', response: { type: 'mahjong' } }).state;
+    expect(won.result).toMatchObject({ kind: 'mahjong', winner: 1, from: 0, handId: 'od4' });
+
+    // Passing it up closes the window, and with it the hand.
+    const passed = play(offered, 1, { type: 'claim', response: { type: 'pass' } });
+    expect(passed.events.map((e) => e.type)).toEqual(['dead-hand', 'draw']);
+    expect(passed.events[0]).toMatchObject({ type: 'dead-hand', seat: 1, reason: { code: 'tiles-gone', faces: ['DOT_1'] } });
+    expect(passed.state.phase).toMatchObject({ kind: 'turn', seat: 2 });
+  });
+
+  it('skips a dead seat in turn order and still makes it pay the winner', () => {
+    const { state, lastSouth } = windsTable(3);
+    const { state: after, events } = play(state, 0, { type: 'discard', tile: lastSouth });
+    expect(events).toEqual<GameEvent[]>([
+      { type: 'discard', seat: 0, tile: lastSouth },
+      {
+        type: 'dead-hand',
+        seat: 1,
+        reason: { code: 'tiles-gone', faces: ['WIND_SOUTH'], text: 'every hand that fits these exposures needs a pair of South Winds, and all four are already out' },
+      },
+      { type: 'draw', seat: 2 },
+    ]);
+    expect(isDead(after, 1)).toBe(true);
+    expect(after.phase).toMatchObject({ kind: 'turn', seat: 2 });
+    expect(pendingSeats(after)).toEqual([2]);
+    expect(promptFor(card, after, 1)).toBeNull();
+    expect(() => play(after, 1, { type: 'declare-mahjong' })).toThrow(/dead/);
+    // Dead status is public: every seat sees it.
+    for (const s of SEATS) expect(playerView(card, after, s).players[1]!.dead).toEqual(after.dead![1]);
+    expect(playerView(card, after, 0).players.map((p) => p.dead === null)).toEqual([true, false, true, true]);
+
+    // West drew the tile it needed: everyone pays double for a self-drawn win, dead or not.
+    const won = play(after, 2, { type: 'declare-mahjong' }).state;
+    expect(won.result).toMatchObject({ kind: 'mahjong', winner: 2, handId: 'ln1', jokerless: true });
+    expect(won.result!.payments).toEqual([-100, -100, 300, -100]);
+  });
+
+  it('never asks a dead seat to call a discard it could otherwise take', () => {
+    const live = windsTable(1);
+    const offered = play(live.state, 0, { type: 'discard', tile: live.west }).state;
+    expect(offered.phase.kind).toBe('claim');
+    expect(pendingSeats(offered)).toEqual([1]);
+
+    const dead = windsTable(1);
+    dead.state.dead = [null, FAKE_DEAD, null, null];
+    const { state: after, events } = play(dead.state, 0, { type: 'discard', tile: dead.west });
+    expect(events.map((e) => e.type)).toEqual(['discard', 'draw']);
+    expect(after.phase).toMatchObject({ kind: 'turn', seat: 2 });
+    expect(explainClaim(card, after, 1)).toMatchObject({
+      canCall: false,
+      code: 'dead-hand',
+      text: 'Your hand is dead: test. You sit out the rest of this hand (no drawing, discarding or calling), but you still pay the winner like everyone else.',
+    });
+  });
+
+  it('passes the turn on when a call leaves the caller dead', () => {
+    const pick = picker();
+    const norths = pick('WIND_NORTH', 4);
+    const souths = pick('WIND_SOUTH', 3);
+    const east = [norths[3]!, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 4), ...pick('DOT_2', 1)];
+    const south = [...norths.slice(0, 3), ...pick('WIND_EAST', 4), ...pick('WIND_WEST', 3), ...pick('DOT_9', 3)];
+    const west = [...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 4), ...pick('CHARACTER_9', 4), ...pick('DOT_4', 1)];
+    const north = [...pick('BAMBOO_4', 4), ...pick('BAMBOO_6', 4), ...pick('CHARACTER_8', 4), ...pick('DOT_3', 1)];
+    const state = playState([east, south, west, north], pick('DOT_6', 2));
+    state.discards = souths.map((tile, i) => ({ tile, seat: (2 + (i % 2)) as Seat }));
+    const offered = play(state, 0, { type: 'discard', tile: norths[3]! }).state;
+    expect(pendingSeats(offered)).toEqual([1]);
+    // A kong of North leaves only NNNN EEEE WWWW SS, and three Souths are out.
+    const { state: after, events } = play(offered, 1, { type: 'claim', response: { type: 'expose', size: 4 } });
+    expect(events.map((e) => e.type)).toEqual(['call', 'dead-hand', 'draw']);
+    expect(events[1]).toMatchObject({ seat: 1, reason: { text: 'every hand that fits these exposures needs a pair of South Winds, and three of the four are already out' } });
+    expect(after.phase).toMatchObject({ kind: 'turn', seat: 2 });
+    expect(after.players[1]!.hand.length + after.players[1]!.exposures[0]!.tiles.length).toBe(14);
+  });
+
+  it('lets a lone live seat play on, and ends in a wall game once every hand is dead', () => {
+    const lone = windsTable(3);
+    lone.state.dead = [null, FAKE_DEAD, FAKE_DEAD, FAKE_DEAD];
+    let state = play(lone.state, 0, { type: 'discard', tile: lone.west }).state;
+    expect(state.phase).toMatchObject({ kind: 'turn', seat: 0 });
+    expect(state.players[0]!.hand).toHaveLength(14);
+    state = play(state, 0, { type: 'discard', tile: state.players[0]!.hand[0]! }).state;
+    expect(state.phase).toMatchObject({ kind: 'turn', seat: 0 });
+
+    // East and South both need NNNN EEEE WWWW SS; the third South goes out.
+    const pick = picker();
+    const souths = pick('WIND_SOUTH', 4);
+    const allDead = playState(
+      [
+        [souths[2]!, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 1)],
+        [...pick('DOT_9', 4), ...pick('DOT_8', 1)],
+        [souths[3]!, ...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 4), ...pick('DOT_4', 4)],
+        [...pick('BAMBOO_4', 4), ...pick('BAMBOO_6', 4), ...pick('CHARACTER_8', 4), ...pick('DOT_3', 1)],
+      ],
+      pick('DOT_6', 2),
+    );
+    allDead.players[0]!.exposures = [{ key: 'WIND_WEST', tiles: pick('WIND_WEST', 4) }];
+    allDead.players[1]!.exposures = [
+      { key: 'WIND_NORTH', tiles: pick('WIND_NORTH', 4) },
+      { key: 'WIND_EAST', tiles: pick('WIND_EAST', 4) },
+    ];
+    allDead.discards = [
+      { tile: souths[0]!, seat: 2 },
+      { tile: souths[1]!, seat: 3 },
+    ];
+    allDead.dead = [null, null, FAKE_DEAD, FAKE_DEAD];
+    expect(deadHandReason(card, allDead, 0)).toBeNull();
+    const { state: ended, events } = play(allDead, 0, { type: 'discard', tile: souths[2]! });
+    expect(events.map((e) => [e.type, 'seat' in e ? e.seat : null])).toEqual([
+      ['discard', 0],
+      ['dead-hand', 0],
+      ['dead-hand', 1],
+      ['wall-game', null],
+    ]);
+    expect(ended.result).toMatchObject({ kind: 'wall', winner: null, payments: [0, 0, 0, 0] });
+    expect(pendingSeats(ended)).toEqual([]);
+  });
+
+  it('starts everyone live and copes with games saved before dead hands existed', () => {
+    const fresh = newGame(card, { seed: 5 });
+    expect(fresh.dead).toEqual([null, null, null, null]);
+    expect(playerView(card, fresh, 0).players.map((p) => p.dead)).toEqual([null, null, null, null]);
+    const { state: legacy, lastSouth } = windsTable(3);
+    delete legacy.dead;
+    expect(pendingSeats(legacy)).toEqual([0]);
+    const after = play(legacy, 0, { type: 'discard', tile: lastSouth }).state;
+    expect(after.dead).toEqual([null, expect.objectContaining({ code: 'tiles-gone' }), null, null]);
+  });
+});
+
+/**
+ * South has exposed kongs of North and East (only NNNN EEEE WWWW SS fits) and holds one
+ * West and one South. East is about to discard; South draws a West next.
+ */
+function explainTable() {
+  const pick = picker();
+  const older = pick('DOT_4', 1)[0]!;
+  const [west, south, crak, joker] = [pick('WIND_WEST', 1)[0]!, pick('WIND_SOUTH', 1)[0]!, pick('CHARACTER_1', 1)[0]!, pick('JOKER', 1)[0]!];
+  const east = [west, south, crak, joker, ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 4), ...pick('DOT_2', 2)];
+  const southSeat = [...pick('WIND_WEST', 1), ...pick('WIND_SOUTH', 1), ...pick('DOT_9', 1), ...pick('BAMBOO_7', 1), ...pick('CHARACTER_3', 1)];
+  const westSeat = [...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 4), ...pick('DOT_1', 4), ...pick('CHARACTER_9', 1)];
+  const north = [...pick('BAMBOO_4', 4), ...pick('BAMBOO_6', 4), ...pick('DOT_3', 4), ...pick('CHARACTER_8', 1)];
+  const state = playState([east, southSeat, westSeat, north], [...pick('DOT_7', 2), ...pick('WIND_WEST', 1)]);
+  state.players[1]!.exposures = [
+    { key: 'WIND_NORTH', tiles: pick('WIND_NORTH', 4) },
+    { key: 'WIND_EAST', tiles: pick('WIND_EAST', 4) },
+  ];
+  state.discards = [{ tile: older, seat: 3 }];
+  return { state, older, west, south, crak, joker };
+}
+
+/** East discards a 5 Dot; West holds two and North holds one plus a joker. */
+function fivesTable() {
+  const pick = picker();
+  const fives = pick('DOT_5', 4);
+  const east = [fives[0]!, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_2', 4), ...pick('BAMBOO_2', 4), ...pick('WIND_WEST', 1)];
+  const south = [...pick('DOT_1', 4), ...pick('DOT_3', 4), ...pick('DOT_9', 4), ...pick('WIND_NORTH', 1)];
+  const west = [fives[1]!, fives[2]!, ...pick('WIND_EAST', 1), ...pick('BAMBOO_1', 4), ...pick('BAMBOO_9', 4), ...pick('CHARACTER_9', 2)];
+  const north = [fives[3]!, ...pick('JOKER', 1), ...pick('BAMBOO_3', 4), ...pick('BAMBOO_4', 4), ...pick('CHARACTER_8', 3)];
+  const state = playState([east, south, west, north], pick('DOT_6', 3));
+  return { state: play(state, 0, { type: 'discard', tile: fives[0]! }).state, five: fives[0]! };
+}
+
+describe('why can I (not) call this?', () => {
+  it('says when there is nothing to call', () => {
+    expect(explainClaim(card, newGame(card, { seed: 1 }), 2)).toMatchObject({ canCall: false, code: 'nothing-to-call', tile: null });
+  });
+
+  it('explains jokers, your own discard and discards whose moment has passed', () => {
+    const t = explainTable();
+    expect(explainClaim(card, t.state, 2)).toMatchObject({ canCall: false, code: 'too-late', tile: t.older });
+
+    const jokerOut = play(t.state, 0, { type: 'discard', tile: t.joker }).state;
+    expect(explainClaim(card, jokerOut, 2)).toMatchObject({ canCall: false, code: 'joker', text: expect.stringMatching(/^Jokers can never be called/) });
+
+    const after = play(t.state, 0, { type: 'discard', tile: t.west }).state;
+    expect(explainClaim(card, after, 0)).toMatchObject({ canCall: false, code: 'own-discard', tile: t.west });
+    expect(explainClaim(card, after, 2, t.older)).toMatchObject({
+      canCall: false,
+      code: 'too-late',
+      text: 'You can only call the most recent discard, and only before the next player draws. The chance to call the 4 Dot has passed.',
+    });
+  });
+
+  it('explains a group you cannot fill, judged on the hand you had when the tile was thrown', () => {
+    const t = explainTable();
+    const after = play(t.state, 0, { type: 'discard', tile: t.west }).state;
+    // South has drawn a second West since, but it held only one when the West was thrown.
+    expect(after.phase).toMatchObject({ kind: 'turn', seat: 1 });
+    expect(after.players[1]!.hand.filter((x) => keyOf(x) === 'WIND_WEST')).toHaveLength(2);
+    expect(explainClaim(card, after, 1)).toEqual({
+      canCall: false,
+      code: 'not-enough-tiles',
+      tile: t.west,
+      canMahjong: false,
+      sizes: [],
+      text: "To call the West Wind, you lay it face up together with matching tiles from your hand. The smallest group it fits in a hand you can still make is a kong (4 of a kind), so you'd need three West Winds or jokers already in your hand, and you have one.",
+    });
+    expect(explainClaim(card, after, 2)).toMatchObject({
+      code: 'not-enough-tiles',
+      text: expect.stringMatching(/a pung \(3 of a kind\), so you'd need two West Winds or jokers already in your hand, and you have none\.$/),
+    });
+  });
+
+  it('explains pairs and singles, and tiles that fit nothing left', () => {
+    const t = explainTable();
+    const southOut = play(t.state, 0, { type: 'discard', tile: t.south }).state;
+    expect(explainClaim(card, southOut, 1)).toMatchObject({
+      canCall: false,
+      code: 'pair-or-single',
+      text: 'In every hand you can still make, the South Wind would only be part of a pair or a single. You can only call a discard to finish a group of three or more matching tiles (a pung, kong, quint or sextet) that you lay face up, or when it gives you Mahjong.',
+    });
+    const crakOut = play(t.state, 0, { type: 'discard', tile: t.crak }).state;
+    expect(explainClaim(card, crakOut, 1)).toMatchObject({
+      canCall: false,
+      code: 'no-fit',
+      text: "The 1 Crak doesn't fit any hand you can still make with the groups you've already exposed.",
+    });
+  });
+
+  it('explains that concealed hands only take a discard for Mahjong', () => {
+    const tiny = cardFromSpec({
+      id: 'explain-test-card',
+      name: 'Test',
+      description: 'Test',
+      sections: [{ id: 's', label: 'S' }],
+      hands: [
+        { id: 'open', section: 's', pattern: 'FF 2222a 44a 66a 8888a', value: 25 },
+        { id: 'secret', section: 's', pattern: 'NN EE WW SS DDa DDb DDc', value: 50, concealed: true },
+      ],
+    });
+    const pick = picker();
+    const red = pick('DRAGON_RED', 1)[0]!;
+    const hands = [
+      [red, ...pick('CHARACTER_1', 4), ...pick('CHARACTER_3', 4), ...pick('BAMBOO_1', 4), ...pick('BAMBOO_3', 1)],
+      [...pick('DOT_1', 4), ...pick('DOT_3', 4), ...pick('DOT_5', 4), ...pick('DOT_7', 1)],
+      [...pick('DRAGON_RED', 1), ...pick('WIND_NORTH', 2), ...pick('BAMBOO_5', 4), ...pick('BAMBOO_7', 4), ...pick('BAMBOO_9', 2)],
+      [...pick('CHARACTER_5', 4), ...pick('CHARACTER_7', 4), ...pick('CHARACTER_9', 4), ...pick('DOT_9', 1)],
+    ];
+    const state = { ...playState(hands, pick('DOT_6', 2)), cardId: tiny.id };
+    const after = play(state, 0, { type: 'discard', tile: red }, tiny).state;
+    expect(explainClaim(tiny, after, 2)).toMatchObject({
+      canCall: false,
+      code: 'concealed-only',
+      text: "Every hand you could still make with the Red Dragon is concealed (marked C on the card). A concealed hand has to be built from tiles you pick yourself, so you can only call a discard for it when it gives you Mahjong, and this one doesn't yet.",
+    });
+  });
+
+  it('says yes to a call that finishes a group, and keeps track of who has answered', () => {
+    const { state, five } = fivesTable();
+    expect(pendingSeats(state)).toEqual([2, 3]);
+    expect(explainClaim(card, state, 2)).toEqual({
+      canCall: true,
+      code: 'can-expose',
+      tile: five,
+      canMahjong: false,
+      sizes: [3],
+      text: "Yes, you can call the 5 Dot to make a pung (3 of a kind) and lay that group face up. You then discard a tile, and you'll need to finish a hand that uses that group.",
+    });
+    expect(explainClaim(card, state, 3)).toMatchObject({ canCall: true, code: 'can-expose', sizes: [3] });
+    expect(explainClaim(card, state, 1)).toMatchObject({ canCall: false, code: 'not-enough-tiles' });
+
+    const westPassed = play(state, 2, { type: 'claim', response: { type: 'pass' } }).state;
+    expect(explainClaim(card, westPassed, 2)).toMatchObject({ canCall: false, code: 'too-late', text: "You've already answered on the 5 Dot, and that choice can't be changed now." });
+    expect(explainClaim(card, westPassed, 3)).toMatchObject({ canCall: true });
+
+    const called = play(westPassed, 3, { type: 'claim', response: { type: 'expose', size: 3 } }).state;
+    expect(explainClaim(card, called, 2, five)).toMatchObject({ canCall: false, code: 'too-late', text: "Another player already called the 5 Dot, so it isn't in the discards any more." });
+
+    const allPassed = play(westPassed, 3, { type: 'claim', response: { type: 'pass' } }).state;
+    expect(allPassed.phase).toMatchObject({ kind: 'turn', seat: 1 });
+    expect(explainClaim(card, allPassed, 2)).toMatchObject({
+      canCall: false,
+      code: 'too-late',
+      text: "The chance to call the 5 Dot has passed: a discard can only be called right after it's thrown, before the next player draws.",
+    });
+  });
+
+  it('says yes to a Mahjong call, and explains a dead hand', () => {
+    const { state, lastOne } = lastOneTable();
+    const offered = play(state, 0, { type: 'discard', tile: lastOne }).state;
+    expect(explainClaim(card, offered, 1)).toMatchObject({
+      canCall: true,
+      code: 'mahjong',
+      canMahjong: true,
+      text: 'Yes! The 1 Dot completes your hand, so you can call it and declare Mahjong.',
+    });
+    const passed = play(offered, 1, { type: 'claim', response: { type: 'pass' } }).state;
+    expect(explainClaim(card, passed, 1)).toMatchObject({
+      canCall: false,
+      code: 'dead-hand',
+      text: 'Your hand is dead: every hand that fits these exposures needs a single 1 Dot, and all four are already out. You sit out the rest of this hand (no drawing, discarding or calling), but you still pay the winner like everyone else.',
+    });
+  });
+
+  it('never disagrees with the engine about who may call', () => {
+    let prompts = 0;
+    for (let i = 0; i < 3; i++) {
+      let state = newGame(card, { seed: 500 + i, skipCharleston: true });
+      const random = rng(i);
+      while (state.phase.kind !== 'ended') {
+        const pending = pendingSeats(state);
+        for (const s of SEATS) {
+          const why = explainClaim(card, state, s);
+          const prompted = state.phase.kind === 'claim' && pending.includes(s);
+          expect(why.canCall).toBe(prompted);
+          if (prompted) {
+            prompts += 1;
+            expect(promptFor(card, state, s)).toMatchObject({ sizes: why.sizes, canMahjong: why.canMahjong });
+            expect(['mahjong', 'can-expose']).toContain(why.code);
+          }
+        }
+        const seat = pending[0]!;
+        state = applyAction(card, state, seat, botAction(card, state, seat, 'normal', random)).state;
+      }
+    }
+    expect(prompts).toBeGreaterThan(5);
+  });
+});
+
+describe('computer players and dead hands', () => {
+  it('finish games normally: dead seats sit out, still pay, and nothing breaks', () => {
+    let wins = 0;
+    let deadHands = 0;
+    const games = [...Array.from({ length: 16 }, (_, i) => i), 38];
+    for (const i of games) {
+      let state = newGame(card, { seed: 300 + i });
+      const random = rng(i);
+      const dead = new Set<Seat>();
+      for (let step = 0; state.phase.kind !== 'ended'; step++) {
+        expect(step).toBeLessThan(2000);
+        const seat = pendingSeats(state)[0]!;
+        expect(dead.has(seat)).toBe(false);
+        const { state: next, events } = applyAction(card, state, seat, botAction(card, state, seat, 'normal', random));
+        for (const e of events) {
+          // Nobody draws, discards, calls, swaps or wins after their hand is dead.
+          if ('seat' in e && e.type !== 'dead-hand') expect(dead.has(e.seat)).toBe(false);
+          if (e.type === 'dead-hand') {
+            dead.add(e.seat);
+            deadHands += 1;
+            expect(e.reason.text).not.toMatch(/undefined|\?/);
+          }
+        }
+        state = next;
+      }
+      assertConserved(state);
+      expect(state.result!.payments.reduce((a, b) => a + b, 0)).toBe(0);
+      if (state.result!.kind === 'mahjong') {
+        wins += 1;
+        for (const s of dead) expect(state.result!.payments[s]).toBeLessThan(0);
+      }
+    }
+    expect(deadHands).toBeGreaterThanOrEqual(3);
+    expect(wins).toBeGreaterThanOrEqual(Math.ceil(games.length * 0.7));
+  }, 30_000);
 });

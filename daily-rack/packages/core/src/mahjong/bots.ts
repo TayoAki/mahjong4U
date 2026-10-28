@@ -1,4 +1,5 @@
 import type { Card } from './card.ts';
+import { deadReasonFrom, visibleCounts } from './dead.ts';
 import { applyAction, pendingSeats, promptFor, type Action, type GameState, type Seat } from './game.ts';
 import { analyze, bestDistance, type Exposure } from './match.ts';
 import { isJoker, keyOf } from './set.ts';
@@ -91,6 +92,8 @@ export function botAction(card: Card, state: GameState, seat: Seat, level: BotLe
       let bestAfter = before;
       for (const size of prompt.sizes) {
         const { hand, exposures } = withExposure(me.hand, me.exposures, prompt.tile, size);
+        // Never make a call that would leave the hand dead for everyone to see.
+        if (wouldBeDead(card, state, me.hand, hand, exposures)) continue;
         const after = bestDistance(card, hand, exposures);
         if (after < bestAfter) {
           bestAfter = after;
@@ -115,6 +118,19 @@ function withExposure(hand: readonly number[], exposures: readonly Exposure[], t
     }
   }
   return { hand: rest, exposures: [...exposures, { key, tiles: [tile, ...used] }] };
+}
+
+/** Whether exposing tiles from `before` (leaving `after` concealed) would make the hand dead. */
+function wouldBeDead(card: Card, state: GameState, before: readonly number[], after: readonly number[], exposures: readonly Exposure[]): boolean {
+  // The called tile is face up either way; the naturals laid down with it become visible too.
+  const seen = visibleCounts(state, null);
+  const rest = [...after];
+  for (const t of before) {
+    const i = rest.indexOf(t);
+    if (i !== -1) rest.splice(i, 1);
+    else if (!isJoker(t)) seen.set(keyOf(t), (seen.get(keyOf(t)) ?? 0) + 1);
+  }
+  return deadReasonFrom(card, exposures, seen) !== null;
 }
 
 /** Copies of each face this seat cannot see: not in its hand, any exposure or the discards. */
