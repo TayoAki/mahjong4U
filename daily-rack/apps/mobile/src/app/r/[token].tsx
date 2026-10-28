@@ -6,7 +6,7 @@ import { track } from '../../lib/analytics.ts';
 import { RackPlay } from '../../components/RackPlay.tsx';
 import { Button, ErrorPanel, Loading, Notice, Screen, TopBar } from '../../components/ui.tsx';
 
-/** Exact-rack entry from a shared clip or link. */
+/** Exact-rack entry from a shared result or link. */
 function SharedRackScreen() {
   const { token = '' } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
@@ -26,22 +26,29 @@ function SharedRackScreen() {
   };
   useEffect(load, [token]);
 
+  const header = <TopBar title={rack?.isTodaysRack ? "Today's rack" : 'Shared rack'} onBack={() => router.replace('/')} />;
+  if (rack) {
+    return (
+      <RackPlay
+        puzzle={rack.puzzle}
+        shareToken={token}
+        source="shared-link"
+        header={header}
+        top={<Notice>Someone shared this exact rack with you.{rack.posterPassPublished ? ' Answer it to see their pass next to yours.' : ''}</Notice>}
+        onSubmitted={(id) => router.replace(`/result/${id}`)}
+      />
+    );
+  }
   return (
     <Screen>
-      <TopBar title={rack?.isTodaysRack ? "Today's rack" : 'Shared rack'} onBack={() => router.replace('/')} />
+      {header}
       {error && (
         <>
           <ErrorPanel message={error.message} onRetry={error.gone ? undefined : load} />
           <Button title="Play today's rack instead" onPress={() => router.replace('/rack')} />
         </>
       )}
-      {!error && !rack && <Loading label="Opening the shared rack" />}
-      {rack && (
-        <>
-          <Notice>Someone shared this exact rack with you.{rack.posterPassPublished ? ' Answer it to see their pass next to yours.' : ''}</Notice>
-          <RackPlay puzzle={rack.puzzle} shareToken={token} source="shared-link" onSubmitted={(id) => router.replace(`/result/${id}`)} />
-        </>
-      )}
+      {!error && <Loading label="Opening the shared rack" />}
     </Screen>
   );
 }

@@ -20,6 +20,25 @@ export async function shareLink({ title, message, url }: { title: string; messag
   return result.action === Share.dismissedAction ? 'dismissed' : 'shared';
 }
 
+/** Shares a line of text with a link after it; where there's no share sheet, copies both. */
+export async function shareText({ title, text, url }: { title: string; text: string; url: string }): Promise<'shared' | 'copied' | 'dismissed'> {
+  if (Platform.OS === 'web') {
+    const nav = globalThis.navigator as Navigator | undefined;
+    if (nav?.share) {
+      try {
+        await nav.share({ title, text, url });
+        return 'shared';
+      } catch {
+        // Fall through to copying when the sheet is closed or blocked.
+      }
+    }
+    await Clipboard.setStringAsync(`${text}\n${url}`);
+    return 'copied';
+  }
+  const result = await Share.share(Platform.OS === 'ios' ? { message: text, url, title } : { message: `${text}\n${url}`, title });
+  return result.action === Share.dismissedAction ? 'dismissed' : 'shared';
+}
+
 export async function copyText(text: string): Promise<void> {
   await Clipboard.setStringAsync(text);
 }

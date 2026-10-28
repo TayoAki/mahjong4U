@@ -3,9 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLayout } from '../../lib/layout.ts';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FEATURES, spokenLabel } from '@daily-rack/core';
+import { DAILY_TURNS } from '@daily-rack/core/mahjong';
 import { api, type Daily, type NightSummary, type TableSummary } from '../../lib/api.ts';
 import { formatWhen } from '../../lib/dates.ts';
-import { FIRST_OPEN_KEY, draftKey, readJson, type Draft } from '../../lib/storage.ts';
+import { discardsKey, draftKey, readJson, type DiscardsSave, type Draft } from '../../lib/storage.ts';
 import { Badge, Body, Button, Card, Columns, Display, ErrorPanel, Eyebrow, Icon, Loading, Screen, type IconName } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
@@ -23,6 +24,7 @@ export default function TodayScreen() {
   const layout = useLayout();
   const [daily, setDaily] = useState<Daily | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
+  const [discards, setDiscards] = useState<DiscardsSave | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<TableSummary[]>([]);
   const [night, setNight] = useState<NightSummary | null>(null);
@@ -49,17 +51,16 @@ export default function TodayScreen() {
     api
       .daily()
       .then(async (d) => {
-        // First open goes straight to the rack; Today is the returning player's home.
-        const firstOpenDone = await readJson<boolean>(FIRST_OPEN_KEY, false);
-        if (!firstOpenDone && d.puzzle && !d.attemptId) {
-          router.replace('/rack');
-          return;
+        // Everyone lands here, new players included: the rack sits next to Pip's lessons.
+        if (d.puzzle) {
+          setHasDraft(((await readJson<Draft | null>(draftKey(d.puzzle.revisionId), null))?.selected.length ?? 0) > 0);
+          const saved = await readJson<DiscardsSave | null>(discardsKey(d.puzzle.revisionId), null);
+          setDiscards(Array.isArray(saved?.picks) && Array.isArray(saved.best) ? saved : null);
         }
-        if (d.puzzle) setHasDraft(((await readJson<Draft | null>(draftKey(d.puzzle.revisionId), null))?.selected.length ?? 0) > 0);
         setDaily(d);
       })
       .catch((e: Error) => setError(e.message));
-  }, [router]);
+  }, []);
   useFocusEffect(load);
 
   if (error) {
@@ -77,8 +78,9 @@ export default function TodayScreen() {
   // On a wide screen the rack sits in the left of two columns.
   const rackSpace = layout.wide ? (layout.wideColumn - 56 - 22) / 2 : layout.contentWidth;
   const tileWidth = Math.min(44, Math.floor((rackSpace - 28 - 12 * 2) / 13));
-  const action = daily?.attemptId ? 'See your result' : hasDraft ? 'Resume your rack' : "Play today's rack";
-  const go = () => (daily?.attemptId ? router.push(`/result/${daily.attemptId}`) : router.push('/rack'));
+  const played = discards?.picks.length ?? 0;
+  const action = daily?.attemptId ? (played === 0 ? 'Play it on: three discards' : played < DAILY_TURNS ? 'Finish your discards' : 'See your result') : hasDraft ? 'Resume your rack' : "Play today's rack";
+  const go = () => (daily?.attemptId ? router.push(`/result/${daily.attemptId}${played < DAILY_TURNS ? '?play=discards' : ''}`) : router.push('/rack'));
 
   return (
     <Screen wide>
@@ -105,16 +107,23 @@ export default function TodayScreen() {
             ) : puzzle ? (
               <>
                 <View>
-                  <Eyebrow>Today's drop</Eyebrow>
+                  <Eyebrow>Today's rack</Eyebrow>
                   <Display size={40}>{puzzle.title}</Display>
-                  <Body>One rack. Three tiles. Your call.</Body>
+                  <Body>The first Charleston is about to pass. Pick three, then play on for three discards.</Body>
                 </View>
-                <View style={styles.hero}>
+                <View style={styles.hero} testID="today-rack">
                   <View style={styles.rack} accessible accessibilityLabel={`Today's deal: ${puzzle.tiles.map((t) => spokenLabel(t.faceCode)).join(', ')}`}>
                     {puzzle.tiles.map((t) => (
                       <Tile key={t.instanceId} face={t.faceCode} width={tileWidth} flat />
                     ))}
                   </View>
+                  {daily?.attemptId && discards && played > 0 && (
+                    <Text style={styles.heroNote} testID="today-discards">
+                      {played < DAILY_TURNS
+                        ? `${played} of ${DAILY_TURNS} discards played. Your hand is waiting.`
+                        : `Discards ${discards.best.map((b) => (b ? '🟩' : '⬜')).join('')}  ${discards.best.filter(Boolean).length} of ${DAILY_TURNS} best`}
+                    </Text>
+                  )}
                   <Button title={action} icon="arrow" onPress={go} testID="today-primary" />
                 </View>
               </>
@@ -231,6 +240,7 @@ const styles = StyleSheet.create({
   streak: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.pink, borderRadius: 999, paddingHorizontal: 14, minHeight: 40 },
   streakText: { color: colors.primary, fontWeight: '700', fontSize: 15 },
   hero: { backgroundColor: colors.felt, borderRadius: 24, paddingVertical: 26, paddingHorizontal: 14, gap: 22 },
+  heroNote: { color: colors.feltText, fontSize: 15, fontWeight: '600', textAlign: 'center' },
   rack: { flexDirection: 'row', justifyContent: 'center', gap: 2, backgroundColor: '#B07E4A', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 6, borderBottomWidth: 6, borderBottomColor: '#8A5D30' },
   cardTitle: { fontFamily: fonts.serif, fontSize: 22, color: colors.ink },
   week: { flexDirection: 'row', gap: 6 },

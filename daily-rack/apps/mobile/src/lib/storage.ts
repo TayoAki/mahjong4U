@@ -43,6 +43,14 @@ export interface Draft {
 
 export const draftKey = (revisionId: string) => `dr:draft:${revisionId}`;
 
+/** The day's three discards after the rack: your throws, and which were among the best. */
+export interface DiscardsSave {
+  picks: number[];
+  best: boolean[];
+}
+
+export const discardsKey = (revisionId: string) => `dr:discards:${revisionId}`;
+
 export interface Preferences {
   card: 'this-year' | 'learning' | null;
   frequency: 'new' | 'weekly' | 'teach' | null;
@@ -56,7 +64,6 @@ export interface Preferences {
 
 export const PREFS_KEY = 'dr:prefs';
 export const FIRST_OPEN_KEY = 'dr:first-open-done';
-export const PREFS_ASKED_KEY = 'dr:prefs-asked';
 
 export const DEFAULT_PREFS: Preferences = { card: null, frequency: null, captionStyle: 'blue', showHints: true, sounds: true, largeTiles: false };
 

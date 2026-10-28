@@ -1,35 +1,46 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLayout } from '../lib/layout.ts';
-import { PASS_SIZE, isPassable, sortBySuit, spokenLabel, type PublicPuzzle } from '@daily-rack/core';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { PASS_SIZE, isPassable, spokenLabel, type PublicPuzzle } from '@daily-rack/core';
+import { DAILY_SEAT, dealTiles, passTarget } from '@daily-rack/core/mahjong';
 import { ApiError, api } from '../lib/api.ts';
 import { draftKey, newKey, readJson, remove, writeJson, type Draft } from '../lib/storage.ts';
 import { track } from '../lib/analytics.ts';
-import { Body, Button, Chip, Display, ErrorPanel, Icon, Notice } from './ui.tsx';
+import { playSound } from '../lib/sounds.ts';
+import { Button, Chip, ErrorPanel, Notice, Row } from './ui.tsx';
 import { TileButton } from './Tile.tsx';
+import { Rack, type RackItem } from '../game/Rack.tsx';
+import { useAfterFirstRender } from './Arrive.tsx';
+import { DailyBoard, Status, TableFrame, barStyles, charlestonPhase, dailyView, feel, playerName, useDailyRack, useDailyTable } from '../daily/DailyTable.tsx';
 import { colors } from '../theme.ts';
 
-/** Section chips, the 13-tile deal and the three-slot pass tray. Tap-only; no dragging needed. */
+/**
+ * Today's rack as the moment the first Charleston starts: the table, the three other
+ * players waiting on you, and your thirteen tiles on your rack. Pick what you're aiming
+ * for, tap three tiles (drag to arrange them, as at a game) and pass right.
+ */
 export function RackPlay({
   puzzle,
   shareToken,
   source,
+  header,
+  top,
   onSubmitted,
 }: {
   puzzle: PublicPuzzle;
   shareToken?: string;
-  source: 'today' | 'first-open' | 'shared-link';
+  source: 'today' | 'shared-link';
+  header: ReactNode;
+  /** Shown above the table on a phone, beside it on a big screen. */
+  top?: ReactNode;
   onSubmitted: (attemptId: string) => void;
 }) {
   const key = draftKey(puzzle.revisionId);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [sorted, setSorted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [trayError, setTrayError] = useState<string | null>(null);
-  const { contentWidth } = useLayout();
-  // Five to a row; on a tablet the tiles grow, but not past a comfortable size.
-  const tileWidth = Math.min(84, Math.floor((contentWidth - 28 - 4 * 8) / 5));
+  const [notice, setNotice] = useState<string | null>(null);
+  const sizes = useDailyTable();
+  const ready = useAfterFirstRender();
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -44,45 +55,61 @@ export function RackPlay({
     if (loaded.current && draft) void writeJson(key, draft);
   }, [key, draft]);
 
-  const byId = useMemo(() => new Map(puzzle.tiles.map((t) => [t.instanceId, t])), [puzzle.tiles]);
+  // The puzzle's tiles as engine tiles, so the rack and table can show them like a game's.
+  const ids = useMemo(() => dealTiles(puzzle.tiles), [puzzle.tiles]);
+  const byTile = useMemo(() => new Map(puzzle.tiles.map((t) => [ids.get(t.instanceId)!, t])), [puzzle.tiles, ids]);
+  const deal = useMemo(() => [...byTile.keys()], [byTile]);
+  const rack = useDailyRack(puzzle.revisionId, deal);
   if (!draft) return null;
-  const selected = draft.selected.filter((id) => byId.has(id));
-  const remaining = (sorted ? sortBySuit(puzzle.tiles) : puzzle.tiles).filter((t) => !selected.includes(t.instanceId));
+
+  const selected = draft.selected.filter((id) => ids.has(id));
+  const chosen = selected.map((id) => ids.get(id)!);
   const section = puzzle.sections.find((s) => s.id === draft.sectionId) ?? null;
   const canSubmit = section !== null && selected.length === PASS_SIZE && !submitting;
   const say = (text: string) => AccessibilityInfo.announceForAccessibility(text);
   // A changed answer gets a fresh request key; retrying the same answer keeps its key.
   const update = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch, idempotencyKey: newKey() } : d));
+  const right = playerName(passTarget(DAILY_SEAT, 'right'));
+  const nameOf = (tile: number) => byTile.get(tile)?.spokenLabel ?? spokenLabel(byTile.get(tile)?.faceCode ?? '');
 
-  const choose = (id: string) => {
-    const tile = byId.get(id);
-    if (!tile) return;
-    if (!isPassable(tile.faceCode)) {
-      setTrayError('Jokers can never be passed.');
+  const unchoose = (tile: number) => {
+    const id = byTile.get(tile)?.instanceId;
+    if (!id) return;
+    setNotice(null);
+    update({ selected: selected.filter((s) => s !== id) });
+    say(`${nameOf(tile)} returned to your rack.`);
+  };
+
+  const toggle = (tile: number) => {
+    const t = byTile.get(tile);
+    if (!t || submitting) return;
+    if (selected.includes(t.instanceId)) {
+      unchoose(tile);
+      return;
+    }
+    if (!isPassable(t.faceCode)) {
+      setNotice('Jokers can’t be passed. Choose another tile.');
       say('Jokers can never be passed.');
       return;
     }
     if (selected.length >= PASS_SIZE) {
-      setTrayError('Choose 3 tiles. Tap one in your pass to swap it out.');
+      setNotice('Choose 3 tiles. Tap one in your pass to swap it out.');
       say('Your pass is full. Tap a tile in your pass to swap it out.');
       return;
     }
-    setTrayError(null);
-    update({ selected: [...selected, id] });
-    say(`${spokenLabel(tile.faceCode)}, selected, pass slot ${selected.length + 1} of 3.`);
-  };
-
-  const unchoose = (id: string) => {
-    setTrayError(null);
-    update({ selected: selected.filter((s) => s !== id) });
-    const tile = byId.get(id);
-    if (tile) say(`${spokenLabel(tile.faceCode)} returned to your rack.`);
+    setNotice(null);
+    feel('pick');
+    playSound('tap');
+    update({ selected: [...selected, t.instanceId] });
+    say(`${nameOf(tile)}, selected, pass slot ${selected.length + 1} of 3.`);
   };
 
   const submit = async () => {
     if (!section || selected.length !== PASS_SIZE) return;
     setSubmitting(true);
     setError(null);
+    feel('place');
+    playSound('pass');
     try {
       const res = await api.submit({ revisionId: puzzle.revisionId, sectionId: section.id, tileInstanceIds: selected, idempotencyKey: draft.idempotencyKey, shareToken });
       await remove(key);
@@ -98,103 +125,97 @@ export function RackPlay({
     }
   };
 
-  const reason = !section ? 'Pick a section first.' : selected.length < PASS_SIZE ? `Choose ${PASS_SIZE - selected.length} more tile${PASS_SIZE - selected.length === 1 ? '' : 's'}.` : 'Your first answer is the one that counts.';
+  const items: RackItem[] = rack.tiles.map((tile) => {
+    const passable = isPassable(byTile.get(tile)?.faceCode ?? '');
+    const picked = chosen.includes(tile);
+    return {
+      tile,
+      label: `${nameOf(tile)}${picked ? ', chosen to pass' : ''}${passable ? '' : ', cannot be passed'}`,
+      selected: picked,
+      highlight: false,
+      badge: passable ? undefined : 'Keep',
+    };
+  });
 
-  return (
-    <View style={{ gap: 18 }}>
-      <View>
-        <Display center>{puzzle.question}</Display>
-        <Body center style={{ marginTop: 4 }}>
-          {puzzle.prompt}
-        </Body>
-      </View>
-      {!puzzle.review.teacherReviewed && <Notice tone="warn">Practice rack: this suggestion has not been reviewed by a teacher yet.</Notice>}
+  const left = PASS_SIZE - selected.length;
+  // The three you're passing, small beside the Pass button.
+  const slot = Math.max(30, Math.round(sizes.tileWidth * 0.6));
+  const reason = left > 0 ? `Choose ${left} more tile${left === 1 ? '' : 's'} to pass.` : !section ? 'Pick what you’re aiming for, then pass.' : 'Your first answer is the one that counts.';
 
+  const bar = (
+    <View style={{ gap: 8 }}>
+      <Status testID="rack-status" detail={left > 0 ? undefined : reason}>
+        {left > 0 ? `First Charleston · Pass right · choose ${left}` : `First Charleston · Pass right to ${right}`}
+      </Status>
+      <Text style={styles.ask}>What are you aiming for?</Text>
       <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Section to aim for">
         {puzzle.sections.map((s) => (
-          <Chip key={s.id} label={s.label} selected={draft.sectionId === s.id} onPress={() => update({ sectionId: s.id })} style={{ flexBasis: '30%' }} />
+          <Chip key={s.id} label={s.label} selected={draft.sectionId === s.id} onPress={() => update({ sectionId: s.id })} style={styles.chip} />
         ))}
       </View>
-
-      <View style={styles.felt} accessibilityLabel="Your deal">
-        <View style={styles.feltHead}>
-          <Text style={styles.feltLabel}>YOUR DEAL · {puzzle.tiles.length} TILES</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sort by suit"
-            accessibilityState={{ selected: sorted }}
-            onPress={() => setSorted((v) => !v)}
-            style={[styles.sort, sorted && { backgroundColor: colors.feltText }]}
-          >
-            <Text style={[styles.sortText, sorted && { color: colors.felt }]}>Sort</Text>
-            <Icon name="sort" size={18} color={sorted ? colors.felt : colors.feltText} />
-          </Pressable>
+      <Row gap={10}>
+        <View style={styles.slots} testID="pass-slots">
+          {[0, 1, 2].map((i) => {
+            const tile = chosen[i];
+            return tile !== undefined ? (
+              <TileButton key={tile} face={byTile.get(tile)!.faceCode} width={slot} label={`${nameOf(tile)}, in pass slot ${i + 1} of 3. Tap to return it.`} onPress={() => unchoose(tile)} />
+            ) : (
+              <View key={`slot-${i}`} style={[styles.slot, { width: slot, height: Math.round(slot * 1.3) }]} accessible accessibilityLabel={`Pass slot ${i + 1} of 3, empty`}>
+                <Text style={styles.slotText}>{i + 1}</Text>
+              </View>
+            );
+          })}
         </View>
-        <View style={styles.deal}>
-          {remaining.map((t) => (
-            <TileButton
-              key={t.instanceId}
-              face={t.faceCode}
-              width={tileWidth}
-              label={`${t.spokenLabel ?? spokenLabel(t.faceCode)}${isPassable(t.faceCode) ? '' : ', cannot be passed'}`}
-              badge={isPassable(t.faceCode) ? undefined : 'Keep'}
-              onPress={() => choose(t.instanceId)}
-            />
-          ))}
-        </View>
-        <View style={[styles.tray, trayError ? { borderColor: colors.danger } : null]}>
-          <View style={styles.trayInner}>
-            <View style={styles.trayHead}>
-              <Text style={styles.trayLabel}>YOUR PASS</Text>
-              <Text style={styles.trayCount}>{selected.length} of 3 selected</Text>
-            </View>
-            <View style={styles.slots}>
-              {[0, 1, 2].map((i) => {
-                const tile = selected[i] ? byId.get(selected[i]!) : undefined;
-                return tile ? (
-                  <TileButton
-                    key={tile.instanceId}
-                    face={tile.faceCode}
-                    width={tileWidth * 1.15}
-                    label={`${spokenLabel(tile.faceCode)}, in pass slot ${i + 1} of 3. Tap to return it.`}
-                    onPress={() => unchoose(tile.instanceId)}
-                  />
-                ) : (
-                  <View key={`slot-${i}`} style={[styles.slot, { width: tileWidth * 1.15, height: tileWidth * 1.15 * 1.3 }]}>
-                    <Text style={styles.slotText}>{i + 1}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-        <Text style={styles.feltHint}>{trayError ?? 'Tap a tile to pass it. Tap it again to change your mind.'}</Text>
-      </View>
-
+        <Button style={{ flex: 1 }} title="Pass" icon={submitting ? undefined : 'arrow'} disabled={!canSubmit} loading={submitting} onPress={submit} hint={reason} testID="submit-pass" />
+      </Row>
       {error && <ErrorPanel message={error} onRetry={submit} />}
-      <Button title={submitting ? 'Locking in your pass…' : 'See the split'} icon={submitting ? undefined : 'arrow'} disabled={!canSubmit} loading={submitting} onPress={submit} hint={reason} testID="submit-pass" />
-      <Body small muted center>
-        {reason}
-      </Body>
+      {notice && (
+        <Text style={[barStyles.tip, barStyles.tipWarn]} testID="rack-notice">
+          {notice}
+        </Text>
+      )}
+      <Row style={{ justifyContent: 'space-between' }} gap={4}>
+        <Text style={barStyles.mine} testID="pass-count">
+          You · South · {selected.length} of 3 chosen
+        </Text>
+        <Button variant="text" compact icon="sort" title={rack.label} hint="Changes the order of your tiles" onPress={rack.nextOrder} testID="rack-order" />
+      </Row>
+      {rack.hint && (
+        <Text style={styles.arrangeHint} testID="arrange-hint">
+          Drag tiles to arrange them. Tap three to pass.
+        </Text>
+      )}
+      <View accessibilityLabel="Your deal">
+        <Rack items={items} tileWidth={sizes.tileWidth} tapsDisabled={submitting} animate={ready} onTap={toggle} onArrange={rack.arrange} onLift={() => feel('pick')} />
+      </View>
     </View>
+  );
+
+  return (
+    <TableFrame
+      header={header}
+      top={top}
+      left={!puzzle.review.teacherReviewed && <Notice tone="warn">Practice rack: this suggestion has not been reviewed by a teacher yet.</Notice>}
+      large={sizes.large}
+      board={
+        <DailyBoard
+          view={dailyView({ hand: deal, phase: charlestonPhase(submitting ? [] : [DAILY_SEAT]) })}
+          caption={`${puzzle.title} · ${source === 'shared-link' ? 'A shared rack' : 'Today’s rack'}`}
+          width={sizes.boardWidth}
+          large={sizes.large}
+        />
+      }
+      bar={bar}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  felt: { backgroundColor: colors.felt, borderRadius: 24, padding: 14, gap: 14 },
-  feltHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  feltLabel: { color: colors.feltText, fontSize: 13, fontWeight: '700', letterSpacing: 1.6 },
-  sort: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, minHeight: 40, paddingHorizontal: 12 },
-  sortText: { color: colors.feltText, fontWeight: '600', fontSize: 14 },
-  deal: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, rowGap: 12 },
-  tray: { backgroundColor: colors.wood, borderRadius: 20, padding: 9, borderWidth: 2, borderColor: 'transparent' },
-  trayInner: { backgroundColor: '#FBF6EA', borderRadius: 14, padding: 12, gap: 10 },
-  trayHead: { flexDirection: 'row', justifyContent: 'space-between' },
-  trayLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: colors.ink },
-  trayCount: { fontSize: 14, color: colors.muted },
-  slots: { flexDirection: 'row', justifyContent: 'space-evenly' },
-  slot: { borderRadius: 10, borderWidth: 2, borderStyle: 'dashed', borderColor: '#CDBF9F', backgroundColor: '#F3ECDC', alignItems: 'center', justifyContent: 'center' },
-  slotText: { color: '#A39573', fontWeight: '700' },
-  feltHint: { color: '#D8E3DC', textAlign: 'center', fontSize: 14 },
+  ask: { fontSize: 13, fontWeight: '700', letterSpacing: 0.4, color: colors.ink },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { minHeight: 44, paddingVertical: 4, paddingHorizontal: 8, flexBasis: '30%' },
+  slots: { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  slot: { borderRadius: 6, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#B8C2B9', alignItems: 'center', justifyContent: 'center' },
+  slotText: { color: colors.muted, fontWeight: '700', fontSize: 12 },
+  arrangeHint: { fontSize: 12, color: colors.muted, textAlign: 'center' },
 });

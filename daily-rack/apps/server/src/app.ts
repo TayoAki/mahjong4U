@@ -59,6 +59,7 @@ const CLIENT_EVENTS = new Set([
   'app_first_open',
   'rack_opened',
   'result_viewed',
+  'discards_finished',
   'clip_preview_ready',
   'clip_render_started',
   'clip_render_succeeded',

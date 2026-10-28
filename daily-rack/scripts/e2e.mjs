@@ -1,5 +1,6 @@
 // End-to-end check of the Expo web build on phone-sized viewports:
-//   1. Daily Rack: first open -> rack -> result -> clip -> real MP4 export -> shared link.
+//   1. Daily Rack: first open on Today -> the rack at the table -> the ranked review ->
+//      three daily discards -> the share text -> shared link (and the clip, when clips are on).
 //      With the daily rack or clips switched off (core FEATURES), checks they stay hidden.
 //   2. Arranging the rack by dragging a tile, then a full hand against three computer
 //      players, Charleston to Mahjong.
@@ -16,7 +17,7 @@
 //   Set E2E_ADMIN_TOKEN to the server's ADMIN_TOKEN to also check the moderator view.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -128,55 +129,196 @@ try {
     }
     check('old rack, result, clip and shared links go to Today', allHome);
   } else {
+    // First open lands on Today: the rack is right there, next to Pip's first lesson.
+    await page.getByTestId('today-primary').waitFor();
+    check(
+      'first open lands on Today, with today’s rack on show',
+      new URL(page.url()).pathname === '/' && (await visible(page, 'today-rack')) && ((await page.getByTestId('today-primary').textContent()) ?? '').includes("Play today's rack"),
+    );
+    check('a brand-new player still sees Pip’s “New to mahjong?” card', await page.getByText(/New to mahjong\?/).isVisible());
+    await shot(page, '01-today-first-open');
+    const puzzle = await page.evaluate(async () => (await (await fetch('/v1/daily', { credentials: 'include' })).json()).puzzle);
+    const faces = new Set(puzzle.tiles.map((t) => (t.faceCode.startsWith('FLOWER_') ? 'FLOWER' : t.faceCode)));
+
+    // The rack is the first Charleston at the game table: three players, the wall, your 13 tiles.
+    await tap(page, 'today-primary');
     await page.waitForURL('**/rack');
-    check('first open goes straight to the rack', page.url().endsWith('/rack'));
-    await page.getByText('Quick question').waitFor();
-    await shot(page, '01-first-open-preferences');
-    await page.getByRole('button', { name: "I'm learning" }).click();
-    await page.getByRole('button', { name: 'Weekly' }).click();
-    await page.getByRole('button', { name: 'Deal my rack' }).click();
-    await page.getByText('Quick question').waitFor({ state: 'hidden' });
-
+    await page.getByTestId('daily-board').waitFor();
+    const rackTiles = page.locator('[data-testid^="rack-tile-"]');
+    const rackLabels = async () =>
+      (await rackTiles.evaluateAll((els) => els.map((el) => [Number(el.getAttribute('data-testid').slice('rack-tile-'.length)), el.getAttribute('aria-label')])))
+        .sort((a, b) => a[0] - b[0])
+        .map(([, label]) => label);
+    const text = async (testId) => (await page.getByTestId(testId).textContent({ timeout: 3000 }).catch(() => '')) ?? '';
+    check(
+      'the rack opens at the table, as the first Charleston passes right',
+      (await text('rack-status')).includes('First Charleston · Pass right · choose 3') &&
+        (await page.getByText('99 left').isVisible()) &&
+        (await page.getByText('Rosie').first().isVisible()) &&
+        (await rackTiles.count()) === 13,
+      await text('rack-status'),
+    );
     const submit = page.getByTestId('submit-pass');
-    check('submit is disabled before choosing', (await submit.getAttribute('aria-disabled')) === 'true');
-    await page.getByRole('radiogroup', { name: 'Section to aim for' }).getByRole('button').first().click();
-    // Pass the first three tiles that can be passed (jokers and flowers-to-keep are refused).
-    for (let picked = 0; picked < 3; picked++) {
-      const buttons = page.getByLabel('Your deal').getByRole('button');
-      for (let i = 0; i < (await buttons.count()); i++) {
-        const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
-        if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
-        await buttons.nth(i).click();
-        break;
-      }
+    check('Pass is disabled before choosing', (await submit.getAttribute('aria-disabled')) === 'true');
+    const labels = await rackLabels();
+    const joker = labels.findIndex((l) => l.startsWith('Joker'));
+    if (joker >= 0) {
+      await tap(page, `rack-tile-${joker}`);
+      check('a joker can’t be passed', (await text('rack-notice')).includes('Jokers can’t be passed') && !(await rackLabels())[joker].includes('chosen to pass'));
+    } else {
+      // No joker today: try one on a rack that has one, shared by someone who answered it.
+      const withJoker = readdirSync(join(import.meta.dirname, '../content/puzzles'))
+        .map((f) => JSON.parse(readFileSync(join(import.meta.dirname, '../content/puzzles', f), 'utf8')))
+        .find((p) => p.tiles.some((t) => t.faceCode === 'JOKER'));
+      const sharer = await browser.newContext(phone);
+      const sharerPage = await sharer.newPage();
+      await sharerPage.goto(BASE);
+      await sharerPage.getByTestId('today-primary').waitFor();
+      const sharedPath = await sharerPage.evaluate(async (p) => {
+        const post = async (path, body) => (await fetch(path, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+        const ids = p.tiles.filter((t) => t.faceCode !== 'JOKER').slice(0, 3).map((t) => t.instanceId);
+        const { attemptId } = await post('/v1/attempts', { revisionId: p.revisionId, sectionId: p.sections[0].id, tileInstanceIds: ids, idempotencyKey: crypto.randomUUID() });
+        return (await post('/v1/share-links', { attemptId, publishPass: false })).path;
+      }, withJoker);
+      const guest = await browser.newContext(phone);
+      const guestPage = await guest.newPage();
+      watch(guestPage, 'joker-check');
+      await guestPage.goto(`${BASE}${sharedPath}`);
+      await guestPage.getByTestId('daily-board').waitFor();
+      const shared = guestPage.locator('[data-testid^="rack-tile-"]');
+      const sharedLabels = await shared.evaluateAll((els) => els.map((el) => [el.getAttribute('data-testid'), el.getAttribute('aria-label')]));
+      const [jokerId] = sharedLabels.find(([, l]) => l.startsWith('Joker')) ?? [];
+      await tap(guestPage, jokerId);
+      const refused = ((await guestPage.getByTestId('rack-notice').textContent({ timeout: 3000 }).catch(() => '')) ?? '').includes('Jokers can’t be passed');
+      check('a joker can’t be passed', Boolean(jokerId) && refused && ((await guestPage.getByTestId('pass-count').textContent()) ?? '').includes('0 of 3 chosen'), withJoker.revisionId);
+      await sharer.close();
+      await guest.close();
     }
-    check('three tiles land in the pass tray', await page.getByText('3 of 3 selected').isVisible());
+    const passable = labels.map((l, i) => [l, i]).filter(([l]) => !l.startsWith('Joker')).map(([, i]) => i);
+    for (const i of passable.slice(0, 3)) await tap(page, `rack-tile-${i}`);
+    check('three tapped tiles go into your pass', (await text('pass-count')).includes('3 of 3 chosen') && (await rackLabels()).filter((l) => l.includes('chosen to pass')).length === 3);
+    check('Pass waits for what you’re aiming for', (await submit.getAttribute('aria-disabled')) === 'true');
     // A fourth tile is refused with an explanation instead of silently replacing one.
+    await tap(page, `rack-tile-${passable[3]}`);
+    check('a fourth tile is refused', (await text('rack-notice')).includes('Choose 3 tiles. Tap one in your pass to swap it out.'));
+    check('the rack keeps all 13 tiles', (await rackTiles.count()) === 13);
+    await tap(page, `rack-tile-${passable[0]}`);
+    const returned = (await text('pass-count')).includes('2 of 3 chosen');
+    await tap(page, `rack-tile-${passable[0]}`);
+    check('tapping a chosen tile puts it back', returned && (await text('pass-count')).includes('3 of 3 chosen'));
+    // Drag a tile along the rack, as at a game: the order changes and nothing is chosen.
     {
-      const buttons = page.getByLabel('Your deal').getByRole('button');
-      for (let i = 0; i < (await buttons.count()); i++) {
-        const label = (await buttons.nth(i).getAttribute('aria-label')) ?? '';
-        if (/cannot be passed|pass slot|Sort by suit/.test(label)) continue;
-        await buttons.nth(i).click();
-        break;
-      }
-      check('a fourth tile is refused', await page.getByText(/Choose 3 tiles\. Tap one in your pass to swap it out\./).isVisible());
-      check('deal keeps 13 tiles across rack and tray', (await page.getByLabel('Your deal').getByRole('button', { name: /^(?!Sort)/ }).count()) === 13);
+      const before = await rackLabels();
+      const from = passable[4];
+      const to = Math.min(before.length - 1, from + 3);
+      const a = await page.getByTestId(`rack-tile-${from}`).boundingBox();
+      const b = await page.getByTestId(`rack-tile-${to}`).boundingBox();
+      await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+      await page.mouse.down();
+      for (let step = 1; step <= 12; step++) await page.mouse.move(a.x + a.width / 2 + ((b.x - a.x) * step) / 12, a.y + a.height / 2 + ((b.y - a.y) * step) / 12);
+      await page.waitForTimeout(250);
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+      const after = await rackLabels();
+      const expected = [...before];
+      expected.splice(to, 0, ...expected.splice(from, 1));
+      check('dragging a tile arranges the rack without choosing it', JSON.stringify(after) === JSON.stringify(expected) && (await text('pass-count')).includes('3 of 3 chosen'), `${before[from]}: place ${from + 1} -> ${to + 1}`);
     }
+    const sections = page.getByRole('radiogroup', { name: 'Section to aim for' }).getByRole('button');
+    await sections.first().click();
+    check('Pass is ready with a section and three tiles', (await submit.getAttribute('aria-disabled')) !== 'true' && (await text('rack-status')).includes('Pass right to'));
     await shot(page, '02-rack-selected');
+    const rackBefore = await rackLabels();
     await page.reload();
-    await page.getByText('3 of 3 selected').waitFor({ timeout: 8000 }).catch(() => undefined);
-    check('draft survives reload', await page.getByText('3 of 3 selected').isVisible());
+    await page.getByTestId('pass-count').waitFor();
+    await page.getByText('3 of 3 chosen', { exact: false }).waitFor({ timeout: 8000 }).catch(() => undefined);
+    await page.waitForTimeout(300);
+    // Pass is only ready with the section still picked.
+    check(
+      'your pass, section and rack order survive a reload',
+      JSON.stringify(await rackLabels()) === JSON.stringify(rackBefore) && (await submit.getAttribute('aria-disabled')) !== 'true' && (await text('rack-status')).includes('Pass right to'),
+    );
     await submit.click();
-    await page.waitForURL('**/result/**');
-    await page.getByText('More players are weighing in.').or(page.getByText('The community split')).first().waitFor();
-    check('result screen shows the comparison', await page.getByText('Your pass').first().isVisible());
-    await shot(page, '03-result');
-    const attemptId = page.url().split('/').pop();
 
-    if (!features.clips) {
-      check('no clip button on the result', (await page.getByTestId('make-clip').count()) === 0 && (await page.getByTestId('result-done').isVisible()));
-    } else if (!SKIP_CLIP) {
+    // The review, on the same table: your pass by the strong pass, then every tile ranked.
+    await page.waitForURL('**/result/**');
+    await page.getByTestId('pass-ranking').waitFor();
+    const attemptId = new URL(page.url()).pathname.split('/').pop();
+    check('your pass sits next to the strong pass, with its reasoning, at the table', (await page.getByText('Your pass').first().isVisible()) && (await page.getByText('One strong pass').first().isVisible()) && (await visible(page, 'daily-board')));
+    const passRows = await page
+      .getByTestId('pass-ranking')
+      .locator('[data-testid^="rank-row"]')
+      .evaluateAll((els) => els.map((el) => [el.getAttribute('data-testid'), el.getAttribute('aria-label')]));
+    const best = passRows.filter(([id]) => id === 'rank-row-best');
+    check('“Every tile, ranked” has one row per face in the deal', passRows.length === faces.size, `${passRows.length} rows, ${faces.size} faces`);
+    check(
+      'the best rows are green and your picks are marked',
+      best.length > 0 && best.every(([, l]) => l.includes('one of the best')) && passRows.some(([, l]) => l.includes('your pick')),
+      `${best.length} best, ${passRows.filter(([, l]) => l.includes('your pick')).length} yours`,
+    );
+    check('the review links to the Charleston lesson', await visible(page, 'charleston-lesson'));
+    check('no clip button on the result', (await page.getByTestId('make-clip').count()) === 0);
+    await shot(page, '03-result');
+    await page.getByTestId('pass-ranking').scrollIntoViewIfNeeded();
+    await shot(page, '03b-result-ranked');
+
+    // Daily discards: the same deal played on, the same for everyone.
+    await tap(page, 'play-discards');
+    await page.getByTestId('discards-intro').waitFor();
+    check(
+      'the discards play on from the strong pass, with the draw on your rack',
+      (await text('discards-intro')).includes('Pip passed the strong three') && (await rackTiles.count()) === 14 && (await rackLabels()).some((l) => l.includes('just drawn')),
+    );
+    await shot(page, '03c-discards-turn');
+    const turns = [];
+    for (let turn = 0; turn < 3; turn++) {
+      await page.getByTestId('action-discard').waitFor();
+      const now = await rackLabels();
+      const drawn = now.findIndex((l) => l.includes('just drawn') && !l.startsWith('Joker'));
+      await tap(page, `rack-tile-${drawn >= 0 ? drawn : now.findIndex((l) => !l.startsWith('Joker'))}`);
+      const button = await text('action-discard');
+      await tap(page, 'action-discard');
+      await page.getByTestId('discard-ranking').waitFor();
+      const rows = await page
+        .getByTestId('discard-ranking')
+        .locator('[data-testid^="rank-row"]')
+        .evaluateAll((els) => els.map((el) => [el.getAttribute('data-testid'), el.getAttribute('aria-label')]));
+      turns.push({ button, rows, status: await text('table-status') });
+      if (turn === 0) await shot(page, '03d-discard-ranked');
+      await tap(page, 'next-turn');
+    }
+    check(
+      'after each discard every throw is ranked, best in green, yours marked',
+      turns.length === 3 && turns.every((t) => t.button.startsWith('Discard ') && t.rows.some(([id]) => id === 'rank-row-best') && t.rows.filter(([, l]) => l.includes('your throw')).length === 1),
+      turns.map((t) => t.status).join(' | '),
+    );
+    await page.getByTestId('discards-summary').waitFor();
+    const score = (await text('table-status')).match(/([0-3]) of 3 best/)?.[1];
+    check('the discards score as “x of 3 best”', score !== undefined, await text('table-status'));
+    await shot(page, '03e-discards-score');
+
+    // Share: a line of text and the link, through the share sheet or copied on the web.
+    await tap(page, 'share-result');
+    await page.getByTestId('share-copied').waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const shared = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+    check(
+      'the share text says how the day went, with the link',
+      /^Daily Rack · [A-Z][a-z]{2} \d{1,2} · Pass: .+ · Discards [🟩⬜]{3}\nhttps?:\/\/\S+\/r\/\S+$/u.test(shared) && [...shared.matchAll(/🟩/gu)].length === Number(score),
+      shared.replace('\n', ' '),
+    );
+
+    // The day's discards are kept on the device, for the result and for Today.
+    await page.reload();
+    await page.getByTestId('discards-saved').waitFor({ timeout: 10_000 }).catch(() => undefined);
+    check('the discards are still there on return', (await text('discards-saved')).includes(`${score} of 3`));
+    await page.goto(BASE);
+    await page.getByTestId('today-discards').waitFor({ timeout: 10_000 }).catch(() => undefined);
+    check('Today shows the day’s discards', (await text('today-discards')).includes(`${score} of 3 best`));
+    await shot(page, '03f-today-after');
+
+    // The clip comes back with its switch, from the result screen.
+    if (features.clips && !SKIP_CLIP) {
+      await page.goto(`${BASE}/result/${attemptId}`);
       await page.getByTestId('make-clip').click();
       await page.waitForURL('**/clip/**');
       await page.locator('canvas').first().waitFor();

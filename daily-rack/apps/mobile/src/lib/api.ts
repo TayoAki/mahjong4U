@@ -113,6 +113,8 @@ export interface SplitResponse {
   threshold: number;
   computedAt: string;
   rows: { tileInstanceId: string; count: number; rate: number }[];
+  /** Per face (all flowers as 'FLOWER'): players who passed at least one tile of it. */
+  groups: { faceKey: string; count: number; rate: number; tileInstanceIds: string[] }[];
 }
 
 export interface ResultResponse {
