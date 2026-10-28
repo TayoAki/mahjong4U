@@ -1,37 +1,33 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { analyze, type CardHand, type ConcreteGroup, type Exposure } from '@daily-rack/core/mahjong';
+import { analyze, patternPieces, patternText, type CardHand, type ConcreteGroup, type Exposure } from '@daily-rack/core/mahjong';
 import { useActiveCard } from '../lib/cards.tsx';
 import { Tile } from '../components/Tile.tsx';
 import { Body, Notice } from '../components/ui.tsx';
 import { SUIT_COLORS, colors } from '../theme.ts';
 import { faceForKey } from './tiles.ts';
 
-// The house card printed the way a paper card is: each group in its suit colour, with
-// consecutive or like numbers shown as 1, 2, 3 and explained in the note.
-
-const VAR_DIGIT: Record<string, string> = { x: '1', y: '2', z: '3', u: '4', v: '5' };
+// A card printed the way a paper card is: each group in its suit colour, with consecutive
+// or like numbers shown as example numbers (1, 2, 3, or the first ones a hand allows) and
+// explained in the note. A hand that can be made several ways shows its first way.
 
 export function Pattern({ pattern, size = 17 }: { pattern: string; size?: number }) {
+  const pieces = useMemo(() => patternPieces(pattern), [pattern]);
   return (
     <Text style={{ fontSize: size, fontWeight: '700', letterSpacing: 0.5 }}>
-      {pattern.split(' ').map((token, i) => {
-        const suit = /[abc]$/.test(token) ? (token.at(-1) as 'a' | 'b' | 'c') : null;
-        const body = (suit ? token.slice(0, -1) : token).replace(/[xyzuv]/g, (ch) => VAR_DIGIT[ch]!);
-        return (
-          <Text key={i} style={{ color: suit ? SUIT_COLORS[suit] : colors.ink }}>
-            {i > 0 ? ' ' : ''}
-            {body}
-          </Text>
-        );
-      })}
+      {pieces.map((piece, i) => (
+        <Text key={i} style={{ color: piece.suit ? SUIT_COLORS[piece.suit] : colors.ink }}>
+          {i > 0 ? ' ' : ''}
+          {piece.text}
+        </Text>
+      ))}
     </Text>
   );
 }
 
 function HandRow({ hand }: { hand: CardHand }) {
   return (
-    <View style={styles.handRow} accessible accessibilityLabel={`${hand.pattern}. ${hand.note ?? ''}. ${hand.concealed ? 'Concealed' : 'Exposed'}, ${hand.value} points`}>
+    <View style={styles.handRow} accessible accessibilityLabel={`${patternText(hand.pattern)}. ${hand.note ?? ''}. ${hand.concealed ? 'Concealed' : 'Exposed'}, ${hand.value} points`}>
       <View style={{ flex: 1, gap: 2 }}>
         <Pattern pattern={hand.pattern} />
         {hand.note ? (
@@ -52,7 +48,7 @@ export function CardView() {
   return (
     <View style={{ gap: 16 }}>
       <Notice>
-        {card.description} F is a flower, D a dragon, 0 the white dragon. Colors mark different suits; 1 2 3 stand for any consecutive (or like) numbers. X = may be exposed, C = concealed.
+        {card.description} F is a flower, D a dragon, 0 the white dragon. Colors mark different suits. The note under a hand says which numbers it takes: printed numbers can stand for any consecutive (or like) numbers. X = may be exposed, C = concealed.
       </Notice>
       {card.sections.map((section) => (
         <View key={section.id} style={{ gap: 4 }}>

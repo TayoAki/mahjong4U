@@ -952,4 +952,17 @@ describe('extra cards', () => {
     expect((await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], cardId: 'nope' })).body.error.code).toBe('unknown_card');
     await playOut(created.body.table.id, [ann]);
   });
+
+  it('loads the cards shipped in content/cards, and a table can play the 2026 card', async () => {
+    const { loaded, errors } = loadCards(join(import.meta.dirname, '../../../content/cards'));
+    expect(errors).toEqual([]);
+    expect(loaded).toContain('card-2026');
+    const ann = await device('Ann');
+    const cards = (await ann.call('GET', '/v1/cards')).body.cards as { id: string; hands: unknown[] }[];
+    expect(cards.find((c) => c.id === 'card-2026')?.hands).toHaveLength(73);
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'bot' }, { type: 'bot' }, { type: 'bot' }], cardId: 'card-2026', settings: { skipCharleston: true } });
+    expect(created.body.table.cardId).toBe('card-2026');
+    const done = await playOut(created.body.table.id, [ann]);
+    expect(done.game.view.result.payments.reduce((a: number, b: number) => a + b, 0)).toBe(0);
+  });
 });
