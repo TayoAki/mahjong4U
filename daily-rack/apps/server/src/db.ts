@@ -291,6 +291,26 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX bug_reports_by_status ON bug_reports (status, created_at);
   `,
+  `
+  -- Push notifications: each phone's Expo push token, and which kinds each player wants.
+  CREATE TABLE push_tokens (
+    token TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX push_tokens_by_player ON push_tokens (principal_id);
+
+  CREATE TABLE notification_settings (
+    principal_id TEXT PRIMARY KEY REFERENCES principals(id) ON DELETE CASCADE,
+    turns INTEGER NOT NULL DEFAULT 1,
+    invites INTEGER NOT NULL DEFAULT 1,
+    messages INTEGER NOT NULL DEFAULT 1,
+    nights INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

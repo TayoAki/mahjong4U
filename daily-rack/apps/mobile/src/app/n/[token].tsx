@@ -7,11 +7,13 @@ import { useSafety } from '../../lib/safety.tsx';
 import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Loading, Row, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
 
 /** Game night invite link: a preview, then one tap to join and vote. */
 export default function NightInviteScreen() {
   const { token = '' } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
+  const { ask } = useNotifications();
   const { guard } = useSafety();
   const [invite, setInvite] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function NightInviteScreen() {
         return;
       }
       router.replace(`/night/${night.id}`);
+      setTimeout(() => ask('night'), 1500);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);

@@ -10,6 +10,8 @@ import { clearAll } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, Notice, Row, Screen, Segmented, Sheet } from '../../components/ui.tsx';
 import { CardView } from '../../game/CardView.tsx';
 import { LinkCard } from '../../components/LinkCard.tsx';
+import { NotificationSettings } from '../../components/NotificationSettings.tsx';
+import { cancelLocal, forgetPushToken } from '../../lib/notifications';
 import { LESSONS } from '../../lessons/content.ts';
 import { resetLessonProgress, useLessonProgress } from '../../lessons/progress.ts';
 import { colors, fonts } from '../../theme.ts';
@@ -62,6 +64,9 @@ export default function YouScreen() {
   const deleteEverything = async () => {
     setDeleting(true);
     try {
+      // Stop pushes and Pip's reminders before the data goes.
+      await forgetPushToken();
+      await cancelLocal('dr-');
       await api.deleteMe();
       await clearAll();
       resetLessonProgress();
@@ -144,6 +149,8 @@ export default function YouScreen() {
         testID="you-lessons"
       />
       <LinkCard icon="flame" title="Your stats" body="Hands, wins, streaks, rating and card progress." onPress={() => router.push('/stats')} testID="you-stats" />
+
+      <NotificationSettings />
 
       <Card style={{ gap: 10 }}>
         <Heading>At the table</Heading>

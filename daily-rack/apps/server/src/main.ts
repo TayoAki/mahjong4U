@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { DEFAULT_ICE_SERVERS, createApp, createServices } from './app.ts';
+import { expoPushSender } from './push.ts';
 import { loadContent, syncRevisions } from './content.ts';
 import { loadCards } from './cards.ts';
 import { openDb } from './db.ts';
@@ -39,6 +40,9 @@ const services = createServices(db, {
   botDelayMs: Number(env.BOT_DELAY_MS ?? 900),
   // How long the first person waiting for a public match waits before computer players fill in.
   matchFillAfterMs: { casual: Number(env.MATCH_FILL_CASUAL_MS ?? 20_000), ranked: Number(env.MATCH_FILL_RANKED_MS ?? 45_000) },
+  // Push notifications go through Expo's push service (PUSH_DISABLED=1 turns them off;
+  // EXPO_ACCESS_TOKEN is only needed if enhanced push security is on for the Expo project).
+  pushSender: env.PUSH_DISABLED === '1' ? null : expoPushSender(env.EXPO_ACCESS_TOKEN || null),
 });
 const app = createApp({ db, content, config, services });
 

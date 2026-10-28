@@ -8,12 +8,14 @@ import { useCardList } from '../../lib/cards.tsx';
 import { Body, Button, Card, Chip, ErrorPanel, Heading, Row, Screen, Segmented, TopBar } from '../../components/ui.tsx';
 import { LEVEL_LABEL, SeatSheet } from '../../game/Lobby.tsx';
 import { colors } from '../../theme.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
 
 const SIDES = ['On your right (South)', 'Across (West)', 'On your left (North)'];
 
 /** Set up a table with friends: mode, who sits where, and the Charleston house rules. */
 export default function NewTableScreen() {
   const router = useRouter();
+  const { ask } = useNotifications();
   const { friend } = useLocalSearchParams<{ friend?: string }>();
   const [friends, setFriends] = useState<FriendsOverview['friends']>([]);
   const [mode, setMode] = useState<'live' | 'turn'>('turn');
@@ -50,6 +52,8 @@ export default function NewTableScreen() {
       const created = await api.createTable({ mode, seats, settings: { secondCharleston, courtesyPass, skipCharleston }, ...(cardId ? { cardId } : {}) });
       track('table_created', { mode, vsComputer: seats.every((s) => s.type === 'bot'), friends: seats.filter((s) => s.type === 'friend').length });
       router.replace(`/table/${created.table.id}`);
+      // Turn-based games and friends' seats are where "your move" pushes earn their keep.
+      if (mode === 'turn' || seats.some((s) => s.type === 'friend')) setTimeout(() => ask('turn-table'), 1200);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);

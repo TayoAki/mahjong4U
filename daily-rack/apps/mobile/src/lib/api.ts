@@ -58,6 +58,14 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
 
 // ------------------------------------------------------------------ types
 
+/** Which kinds of push notification a player wants. */
+export interface NotificationSettings {
+  turns: boolean;
+  invites: boolean;
+  messages: boolean;
+  nights: boolean;
+}
+
 /** "Report a problem": what went wrong, where, the details the app attaches and an optional screenshot. */
 export interface BugReport {
   description: string;
@@ -358,6 +366,10 @@ export const api = {
     request<{ reported: boolean; id: string; blocked: boolean }>('POST', '/v1/reports', body),
   feedback: (message: string) => request<{ sent: boolean }>('POST', '/v1/feedback', { message }),
   bugReport: (report: BugReport) => request<{ sent: boolean; id: string }>('POST', '/v1/bug-reports', report),
+  savePushToken: (token: string, platform: 'ios' | 'android') => request<{ saved: boolean; settings: NotificationSettings }>('PUT', '/v1/me/push-token', { token, platform }),
+  removePushToken: (token: string) => request<{ removed: boolean }>('DELETE', '/v1/me/push-token', { token }),
+  notificationSettings: () => request<{ settings: NotificationSettings; devices: number }>('GET', '/v1/me/notifications'),
+  updateNotificationSettings: (change: Partial<NotificationSettings>) => request<{ settings: NotificationSettings; devices: number }>('PUT', '/v1/me/notifications', change),
   rename: (name: string) => request<Profile>('PUT', '/v1/me/profile', { name }),
   realtimeTicket: () => request<{ ticket: string }>('POST', '/v1/realtime/tickets'),
 

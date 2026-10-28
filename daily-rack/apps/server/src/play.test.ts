@@ -12,6 +12,7 @@ import { createApp, createServices, type Services } from './app.ts';
 import { loadContent, syncRevisions } from './content.ts';
 import { openDb, type Db } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
+import type { ExpoMessage, ExpoTicket } from './push.ts';
 
 const content = loadContent(join(import.meta.dirname, '../../../content'), { devRotate: true });
 const config = { brand: 'Daily Rack', publicBaseUrl: 'https://dailyrack.test', secureCookies: false, splitThreshold: 30, adminToken: 'test-moderator-token' };
@@ -632,6 +633,102 @@ describe('table fixes from the walkthrough', () => {
     expect((await bea.call('POST', '/v1/feedback', { message: 'Love the Charleston!' })).status).toBe(201);
     const inbox = await (await app.request('/v1/admin/feedback', { headers: { 'x-admin-token': 'test-moderator-token' } })).json() as { feedback: { message: string; from: { name: string } }[] };
     expect(inbox.feedback).toMatchObject([{ message: 'Love the Charleston!', from: { name: 'Bea' } }]);
+  });
+});
+
+describe('push notifications', () => {
+  let pushes: ExpoMessage[];
+  let ticket: (m: ExpoMessage) => ExpoTicket;
+  const token = (name: string) => `ExponentPushToken[${name}-device-0001]`;
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const to = (name: string) => pushes.filter((p) => p.to === token(name));
+  beforeEach(() => {
+    services.tables.stopAll();
+    services.matchmaker.stop();
+    pushes = [];
+    ticket = () => ({ status: 'ok', id: 'ticket' });
+    setup({ pushSender: async (messages) => (pushes.push(...messages), messages.map((m) => ticket(m))) });
+  });
+
+  it('saves a phone’s token and the kinds of notification a player wants', async () => {
+    const ann = await device('Ann');
+    expect((await ann.call('PUT', '/v1/me/push-token', { token: 'not-a-token', platform: 'ios' })).status).toBe(400);
+    expect((await ann.call('PUT', '/v1/me/push-token', { token: token('ann'), platform: 'ios' })).status).toBe(200);
+    expect((await ann.call('GET', '/v1/me/notifications')).body).toEqual({ settings: { turns: true, invites: true, messages: true, nights: true }, devices: 1 });
+    expect((await ann.call('PUT', '/v1/me/notifications', { messages: false })).body.settings).toMatchObject({ messages: false, turns: true });
+    expect((await ann.call('PUT', '/v1/me/notifications', { sounds: true })).status).toBe(400);
+    await ann.call('DELETE', '/v1/me/push-token', { token: token('ann') });
+    expect((await ann.call('GET', '/v1/me/notifications')).body.devices).toBe(0);
+  });
+
+  it('tells players about friend requests and messages, but not while the app is in front of them', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await bea.call('PUT', '/v1/me/push-token', { token: token('bea'), platform: 'android' });
+    await ann.call('PUT', '/v1/me/push-token', { token: token('ann'), platform: 'ios' });
+    await ann.call('POST', '/v1/friends/requests', { code: bea.profile.code });
+    expect(to('bea')).toMatchObject([{ title: 'New friend request', body: 'Ann would like to be friends.', data: { url: '/friends', category: 'invites' }, channelId: 'invites' }]);
+    await bea.call('POST', `/v1/friends/${ann.id}/accept`);
+    expect(to('ann')).toMatchObject([{ title: 'You have a new friend' }]);
+
+    const { conversationId } = (await ann.call('POST', '/v1/conversations/direct', { friendId: bea.id })).body;
+    await ann.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'Mahjong tonight?' });
+    await ann.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'Bring snacks' });
+    // One push per conversation a minute, so a burst of messages doesn't buzz the phone over and over.
+    expect(to('bea').filter((p) => p.data.category === 'messages')).toMatchObject([{ title: 'Ann', body: 'Mahjong tonight?', data: { url: `/chat/${conversationId}` } }]);
+
+    // With the app open (a connected socket that hasn't gone to the background), nothing is pushed.
+    const socket = { send: () => undefined, close: () => undefined };
+    services.hub.connect(ann.id, socket);
+    await bea.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'Yes!' });
+    expect(to('ann').filter((p) => p.data.category === 'messages')).toEqual([]);
+    services.hub.setActive(socket, false);
+    await bea.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'See you at 7' });
+    expect(to('ann').filter((p) => p.data.category === 'messages')).toMatchObject([{ body: 'See you at 7' }]);
+
+    // Turning a kind off stops it.
+    await ann.call('PUT', '/v1/me/notifications', { messages: false });
+    services.notifier.forget(ann.id, `chat:${conversationId}`);
+    await bea.call('POST', `/v1/conversations/${conversationId}/messages`, { body: 'Running late' });
+    expect(to('ann').filter((p) => p.data.category === 'messages')).toHaveLength(1);
+  });
+
+  it('nudges each player once when a turn-based table waits on them, and invites friends to a held seat', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await befriend(ann, bea);
+    await bea.call('PUT', '/v1/me/push-token', { token: token('bea'), platform: 'ios' });
+    const created = await ann.call('POST', '/v1/tables', { mode: 'turn', seats: [{ type: 'friend', friendId: bea.id }, { type: 'bot' }, { type: 'bot' }] });
+    const tableId = created.body.table.id;
+    expect(to('bea')).toMatchObject([{ title: 'Table invite', body: 'Ann saved you a seat at a turn-based table.', data: { url: `/table/${tableId}` } }]);
+    await bea.call('POST', `/v1/tables/${tableId}/join`);
+    await ann.call('POST', `/v1/tables/${tableId}/start`);
+    const moves = () => to('bea').filter((p) => p.title === 'Your move');
+    expect(moves()).toMatchObject([{ body: `Time to pass tiles at Table ${created.body.table.code}.`, data: { url: `/table/${tableId}`, category: 'turns' } }]);
+    // Ann passing doesn't nudge Bea again while the table still waits on her.
+    const annView = (await ann.call('GET', `/v1/tables/${tableId}`)).body;
+    const pass = (view: any) => view.game.view.hand.filter((t: number) => t < 144).slice(0, 3);
+    const phase = (view: any) => `charleston:${view.game.view.phase.round}:${view.game.view.phase.direction}`;
+    expect((await ann.call('POST', `/v1/tables/${tableId}/actions`, { version: annView.game.version, phase: phase(annView), action: { type: 'charleston-pass', tiles: pass(annView) } })).status).toBe(200);
+    expect(moves()).toHaveLength(1);
+    // Once Bea plays, the next time the table waits on her she hears about it again.
+    const beaView = (await bea.call('GET', `/v1/tables/${tableId}`)).body;
+    expect((await bea.call('POST', `/v1/tables/${tableId}/actions`, { version: beaView.game.version, phase: phase(beaView), action: { type: 'charleston-pass', tiles: pass(beaView) } })).status).toBe(200);
+    expect(moves()).toHaveLength(2);
+  });
+
+  it('forgets a phone that no longer takes notifications, and tells guests when a Game Night is set', async () => {
+    const ann = await device('Ann');
+    const bea = await device('Bea');
+    await bea.call('PUT', '/v1/me/push-token', { token: token('bea'), platform: 'ios' });
+    const night = (await ann.call('POST', '/v1/nights', { title: 'Thursday mahjong', timeZone: 'America/New_York', slots: ['2030-01-03T00:00:00.000Z'] })).body;
+    await bea.call('POST', `/v1/night-invites/${night.invitePath.split('/').pop()}/join`);
+    await bea.call('PUT', `/v1/nights/${night.id}/me`, { rsvp: 'yes' });
+    ticket = () => ({ status: 'error', message: 'gone', details: { error: 'DeviceNotRegistered' } });
+    await ann.call('POST', `/v1/nights/${night.id}/confirm`, { slotId: night.slots[0].id });
+    expect(to('bea')).toMatchObject([{ title: 'Thursday mahjong is on!', body: 'Wednesday, Jan 2, 7:00 PM. Add it to your calendar so you don’t miss it.'.replace('’', "'") }]);
+    await tick();
+    expect((await bea.call('GET', '/v1/me/notifications')).body.devices).toBe(0);
   });
 });
 

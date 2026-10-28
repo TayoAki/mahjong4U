@@ -9,9 +9,11 @@ import { copyText, shareLink } from '../../lib/share.ts';
 import { track } from '../../lib/analytics.ts';
 import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Eyebrow, Heading, IconButton, Loading, Notice, Row, Screen } from '../../components/ui.tsx';
 import { colors, fonts } from '../../theme.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
 
 export default function FriendsScreen() {
   const router = useRouter();
+  const { ask } = useNotifications();
   const [overview, setOverview] = useState<FriendsOverview | null>(null);
   const [inbox, setInbox] = useState<InboxEntry[]>([]);
   const [code, setCode] = useState('');
@@ -43,6 +45,7 @@ export default function FriendsScreen() {
       const r = await guard(() => api.addFriend(code.trim().toUpperCase()));
       if (!r) return;
       track('friend_added', { result: r.result });
+      if (r.result === 'requested') setTimeout(() => ask('friend'), 1200);
       setMessage(
         r.result === 'accepted'
           ? `You and ${r.friend.name} are now friends.`

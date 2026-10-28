@@ -13,6 +13,7 @@ import { track } from '../../lib/analytics.ts';
 import { ChatPanel } from '../../components/ChatPanel.tsx';
 import { Avatar, Badge, Body, Button, Card, Display, ErrorPanel, Heading, Icon, IconButton, Loading, Notice, Row, Screen, Segmented, Sheet, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
+import { scheduleNightReminder } from '../../lib/reminders.ts';
 
 const WINDS = ['East', 'South', 'West', 'North'];
 const RSVP_LABEL: Record<Rsvp, string> = { pending: 'No answer yet', yes: 'Going', maybe: 'Maybe', no: 'Can’t make it' };
@@ -46,13 +47,17 @@ export default function NightScreen() {
         loaded.current = true;
         setNight(n);
         setError(null);
+        // Pip reminds everyone going, two hours before (cancelled if plans change).
+        const me = n.members.find((m) => m.id === principalId);
+        const when = n.status === 'confirmed' ? (n.slots.find((s) => s.id === n.confirmedSlot)?.startsAt ?? null) : null;
+        void scheduleNightReminder({ id: n.id, title: n.title, when, going: me?.rsvp === 'yes', location: n.location }).catch(() => undefined);
       })
       .catch((e: Error) => {
         // Blocking the host (or being removed) takes you out of the night.
         if (e instanceof ApiError && (e.status === 403 || e.status === 404) && loaded.current) router.replace('/nights');
         else setError(e.message);
       });
-  }, [id]);
+  }, [id, principalId]);
   useEffect(load, [load, version]);
   useRealtimeMessages((m) => {
     if (m.type === 'night' && m.nightId === id) load();

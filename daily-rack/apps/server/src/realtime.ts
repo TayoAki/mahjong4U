@@ -25,6 +25,8 @@ const TICKET_TTL_MS = 60_000;
 
 export class Hub {
   private sockets = new Map<string, Set<Socket>>();
+  /** Connections whose app said it went to the background (phones keep the socket a while). */
+  private background = new WeakSet<Socket>();
   private tickets = new Map<string, { principalId: string; expiresAt: number }>();
 
   issueTicket(principalId: string): string {
@@ -67,6 +69,18 @@ export class Hub {
 
   isOnline(principalId: string): boolean {
     return Boolean(this.sockets.get(principalId)?.size);
+  }
+
+  /** True while the player has the app open in front of them on some device. */
+  isActive(principalId: string): boolean {
+    for (const socket of this.sockets.get(principalId) ?? []) if (!this.background.has(socket)) return true;
+    return false;
+  }
+
+  /** The app says whether it's in front ("active") or in the background. */
+  setActive(socket: Socket, active: boolean): void {
+    if (active) this.background.delete(socket);
+    else this.background.add(socket);
   }
 
   send(principalId: string, message: ServerMessage): void {

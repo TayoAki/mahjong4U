@@ -2,6 +2,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LESSONS } from '../../lessons/content.ts';
 import { LessonPlayer } from '../../lessons/LessonPlayer.tsx';
 import { useLessonProgress } from '../../lessons/progress.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
+import { notePractice } from '../../lib/reminders.ts';
 import { Body, Button, Display, Screen, TopBar } from '../../components/ui.tsx';
 
 // One lesson, start to finish. Finishing it ticks it off on the list.
@@ -9,7 +11,8 @@ import { Body, Button, Display, Screen, TopBar } from '../../components/ui.tsx';
 export default function LessonScreen() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { markDone } = useLessonProgress();
+  const { markDone, done } = useLessonProgress();
+  const { ask, refresh } = useNotifications();
   const index = LESSONS.findIndex((l) => l.id === id);
   const lesson = LESSONS[index];
   const next = LESSONS[index + 1];
@@ -31,7 +34,13 @@ export default function LessonScreen() {
       key={lesson.id}
       lesson={lesson}
       number={index + 1}
-      onComplete={markDone}
+      onComplete={(lessonId) => {
+        const first = done.size === 0;
+        markDone(lessonId);
+        void notePractice().then(refresh);
+        // After a first lesson, Pip offers to keep them going (once the celebration has had a moment).
+        if (first) setTimeout(() => ask('first-lesson'), 2500);
+      }}
       onExit={back}
       // Back to the Play tab rather than stacking another copy of it on top of the lesson.
       onPractice={() => router.dismissTo('/play')}

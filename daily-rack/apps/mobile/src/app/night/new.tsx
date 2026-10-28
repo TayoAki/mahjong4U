@@ -7,6 +7,7 @@ import { track } from '../../lib/analytics.ts';
 import { useSafety } from '../../lib/safety.tsx';
 import { Body, Button, Chip, ErrorPanel, Heading, IconButton, Notice, Screen, TopBar } from '../../components/ui.tsx';
 import { colors } from '../../theme.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
 
 // Any quarter hour from 8 in the morning to 11 at night, up to eight weeks out.
 const HOURS = Array.from({ length: 16 }, (_, i) => 8 + i);
@@ -34,6 +35,7 @@ const timeLabel = (minutes: number) => {
 /** Plan a game night: a name, an optional place, and one to three times to vote on. */
 export default function NewNightScreen() {
   const router = useRouter();
+  const { ask } = useNotifications();
   const { guard } = useSafety();
   const timeZone = useMemo(deviceTimeZone, []);
   const [title, setTitle] = useState('Mahjong night');
@@ -59,6 +61,7 @@ export default function NewNightScreen() {
         return;
       }
       track('night_created', { slots: unique.length });
+      setTimeout(() => ask('night'), 1500);
       router.replace({ pathname: '/night/[id]', params: { id: night.id, created: '1' } });
     } catch (e) {
       setError((e as Error).message);

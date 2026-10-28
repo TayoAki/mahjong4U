@@ -21,6 +21,7 @@ import {
 } from '@daily-rack/core/mahjong';
 import { isBlockedEitherWay } from './blocks.ts';
 import { transaction, type Db } from './db.ts';
+import type { Notifier } from './push.ts';
 import type { Hub } from './realtime.ts';
 import { conversationFor, ensureProfile } from './social.ts';
 import { BOT_RATING, ratingOf, recordAbandon, recordHand } from './stats.ts';
@@ -99,6 +100,8 @@ export interface TableServiceOptions {
   botDelayMs: number;
   /** Seconds a human has at a live table before a computer player moves for them. */
   liveTimeouts: { pass: number; turn: number; claim: number };
+  /** Push notifications for invites and "your move" at turn-based tables. */
+  notifier?: Notifier;
 }
 
 export interface SeatInput {
@@ -151,6 +154,7 @@ export class TableService {
     conversationFor(this.db, 'table', id, this.options.now());
     // Reserved friends hear about the invite straight away.
     for (const s of seats) if (s.reservedFor) this.hub.send(s.reservedFor, { type: 'table', tableId: id, payload: { invited: true } });
+    this.invite(id, seats.flatMap((s) => (s.reservedFor ? [s.reservedFor] : [])));
     if (seats.every((s) => s.principalId || s.bot)) this.start(id, hostId);
     return id;
   }
@@ -291,12 +295,28 @@ export class TableService {
     if (position < 1 || position > 3) throw new TableError(400, 'bad_seat', 'Choose seat 1, 2 or 3.');
     const seats = this.seatsOf(row);
     if (seats[position]!.principalId) throw new TableError(409, 'seat_taken', 'Someone is already sitting there.');
+    const before = seats[position]!.reservedFor;
     seats[position] =
       input.type === 'bot'
         ? { principalId: null, bot: input.level ?? 'normal', reservedFor: null }
         : { principalId: null, bot: null, reservedFor: input.type === 'friend' ? (input.friendId ?? null) : null };
     this.saveSeats(tableId, seats);
     this.broadcast(tableId);
+    const held = seats[position]!.reservedFor;
+    if (held && held !== before) this.invite(tableId, [held]);
+  }
+
+  /** A push to friends the host saved a seat for. */
+  private invite(tableId: string, friendIds: string[]) {
+    if (friendIds.length === 0) return;
+    const row = this.row(tableId);
+    const host = ensureProfile(this.db, row.host_id, this.options.now()).name;
+    this.options.notifier?.notify(friendIds, {
+      category: 'invites',
+      title: 'Table invite',
+      body: `${host} saved you a seat at a ${row.mode === 'live' ? 'live' : 'turn-based'} table.`,
+      url: `/table/${tableId}`,
+    });
   }
 
   close(tableId: string, principalId: string): void {
@@ -365,6 +385,8 @@ export class TableService {
       if (!samePhase) throw new TableError(409, 'stale', 'The table moved on. Here is the latest.');
     }
     const seat = this.engineSeat(position, game.dealer);
+    // They're back, so the next time the table waits on them deserves a nudge again.
+    this.options.notifier?.forget(principalId, `turn:${tableId}`);
     this.apply(row, game, seat, action);
   }
 
@@ -402,7 +424,21 @@ export class TableService {
       }
     });
     this.broadcast(row.id);
+    if (ended && row.mode === 'turn') this.announceEnd(row, game, next);
     this.pump(row.id);
+  }
+
+  /** At a turn-based table, players who aren't looking hear how the hand ended. */
+  private announceEnd(row: TableRow, game: GameRow, state: GameState) {
+    const result = state.result;
+    if (!result || !this.options.notifier) return;
+    const people = this.seatsOf(row).flatMap((s) => (s.principalId ? [s.principalId] : []));
+    if (people.length < 2) return;
+    const body =
+      result.kind === 'wall' || result.winner === null
+        ? `Hand ${game.hand_number} at Table ${row.code} was a wall game.`
+        : `${this.nameAt(row, this.position(result.winner, game.dealer))} won hand ${game.hand_number} at Table ${row.code}.`;
+    this.options.notifier.notify(people, { category: 'turns', title: 'Hand over', body, url: `/table/${row.id}` });
   }
 
   // -------------------------------------------------------------------------
@@ -426,6 +462,7 @@ export class TableService {
       else this.timers.set(tableId, setTimeout(step, this.options.botDelayMs));
       return;
     }
+    if (row.mode === 'turn' && pending.length > 0) this.nudge(row, game.dealer, state, pending);
     if (row.mode !== 'live' || pending.length === 0) return;
     const kind = state.phase.kind;
     const seconds = kind === 'claim' ? this.options.liveTimeouts.claim : kind === 'turn' ? this.options.liveTimeouts.turn : this.options.liveTimeouts.pass;
@@ -437,6 +474,28 @@ export class TableService {
       tableId,
       setTimeout(() => this.timeout(tableId, game.version), seconds * 1000),
     );
+  }
+
+  /** "Your move" pushes at a turn-based table, at most one per player until they play. */
+  private nudge(row: TableRow, dealer: number, state: GameState, pending: Seat[]) {
+    const notifier = this.options.notifier;
+    if (!notifier) return;
+    const seats = this.seatsOf(row);
+    const where = row.kind === 'public' ? 'your game' : `Table ${row.code}`;
+    const phase = state.phase;
+    for (const seat of pending) {
+      const principalId = seats[this.position(seat, dealer)]!.principalId;
+      if (!principalId) continue;
+      const body =
+        phase.kind === 'claim'
+          ? `${this.nameAt(row, this.position(phase.from, dealer))} threw ${shortLabel(faceOf(phase.tile))}. Call it or pass at ${where}.`
+          : phase.kind === 'turn'
+            ? `It's your turn at ${where}.`
+            : phase.kind === 'charleston' || phase.kind === 'courtesy-select'
+              ? `Time to pass tiles at ${where}.`
+              : `${where} is waiting for your answer.`;
+      notifier.notify([principalId], { category: 'turns', title: 'Your move', body, url: `/table/${row.id}`, key: `turn:${row.id}`, throttleMs: 6 * 3_600_000 });
+    }
   }
 
   /** Plays one move for a seat, unless the game has changed since it was scheduled. */

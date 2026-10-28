@@ -1,5 +1,6 @@
 import { isBlockedEitherWay } from './blocks.ts';
 import type { Db } from './db.ts';
+import type { Notifier } from './push.ts';
 import type { Hub } from './realtime.ts';
 import { ratingOf } from './stats.ts';
 import type { TableService } from './tables.ts';
@@ -19,6 +20,8 @@ export interface MatchmakerOptions {
   /** How long the first person in line waits before computer players fill the table. */
   fillAfterMs: Record<QueueMode, number>;
   tickMs: number;
+  /** Tells people who stepped away that their game is ready. */
+  notifier?: Notifier;
 }
 
 interface Waiting {
@@ -94,6 +97,10 @@ export class Matchmaker {
           mode === 'ranked',
         );
         for (const g of group) this.hub.send(g.principalId, { type: 'match', tableId, mode });
+        this.options.notifier?.notify(
+          group.map((g) => g.principalId),
+          { category: 'turns', title: 'Your game is ready', body: `We found your ${mode === 'ranked' ? 'ranked game' : 'quick match'}. Hurry back before a computer plays your turn.`, url: `/table/${tableId}` },
+        );
       }
     }
     if (this.waiting.size === 0) this.stop();

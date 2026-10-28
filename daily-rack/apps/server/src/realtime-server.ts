@@ -20,8 +20,8 @@ export function attachRealtime(server: Server, hub: Hub): WebSocketServer {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       hub.connect(principalId, ws);
-      // Pings keep mobile connections from being dropped by proxies; voice chat setup
-      // messages go to the app.
+      // Pings keep mobile connections from being dropped by proxies; app-state says whether
+      // the app is in front (so push notifications hold off); voice chat setup goes to the app.
       ws.on('message', (data) => {
         let message: Record<string, unknown>;
         try {
@@ -31,6 +31,7 @@ export function attachRealtime(server: Server, hub: Hub): WebSocketServer {
         }
         if (!message || typeof message !== 'object') return;
         if (message.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        else if (message.type === 'app-state') hub.setActive(ws, message.active !== false);
         else hub.onClientMessage?.(principalId, message);
       });
       const drop = () => hub.disconnect(principalId, ws);

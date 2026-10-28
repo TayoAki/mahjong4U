@@ -10,6 +10,7 @@ import { RealtimeProvider } from '../lib/realtime.tsx';
 import { SafetyProvider } from '../lib/safety.tsx';
 import { MatchmakingProvider } from '../lib/matchmaking.tsx';
 import { ReportProblemProvider, ReportProblemSheet } from '../lib/report-problem.tsx';
+import { NotificationsProvider } from '../lib/notification-prompt.tsx';
 import { installProblemCatcher, noteProblem } from '../lib/diagnostics.ts';
 import { Body, Button, Display, ErrorPanel, Loading, Screen } from '../components/ui.tsx';
 import { OfflineGameView } from '../offline/OfflineGameView.tsx';
@@ -27,9 +28,11 @@ export default function RootLayout() {
           <ReportProblemProvider>
             <SessionGate ready={fontsLoaded}>
               <SafetyProvider>
-                <MatchmakingProvider>
-                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
-                </MatchmakingProvider>
+                <NotificationsProvider>
+                  <MatchmakingProvider>
+                    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
+                  </MatchmakingProvider>
+                </NotificationsProvider>
               </SafetyProvider>
             </SessionGate>
           </ReportProblemProvider>

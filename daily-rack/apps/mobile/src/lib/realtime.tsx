@@ -54,6 +54,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         ws.onopen = () => {
           attempt = 0;
           setConnected(true);
+          // Whether the app is in front decides if the server sends push notifications.
+          ws.send(JSON.stringify({ type: 'app-state', active: AppState.currentState === 'active' }));
           pingTimer = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ type: 'ping' })), 25_000);
         };
         ws.onmessage = (event) => {
@@ -86,6 +88,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     connect();
     const sub = AppState.addEventListener('change', (state) => {
+      const ws = socket.current;
+      if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'app-state', active: state === 'active' }));
       if (state === 'active' && !socket.current) {
         attempt = 0;
         connect();

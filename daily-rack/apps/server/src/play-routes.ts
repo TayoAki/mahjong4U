@@ -11,6 +11,7 @@ import { registerSafetyRoutes } from './safety-routes.ts';
 import { QUICK_PHRASES, type Matchmaker } from './matchmaking.ts';
 import { importOffline, leaderboard, statsFor } from './stats.ts';
 import type { VoiceRooms } from './voice.ts';
+import { EXPO_TOKEN, PUSH_CATEGORIES, type Notifier } from './push.ts';
 import {
   MESSAGE_MAX,
   acceptFriend,
@@ -52,6 +53,7 @@ interface Deps {
   tables: TableService;
   matchmaker: Matchmaker;
   voice: VoiceRooms;
+  notifier: Notifier;
   fail: Fail;
   limiter: RateLimiter;
   now: () => Date;
@@ -119,8 +121,15 @@ const OfflineResults = z.object({
 });
 const RespondBody = z.object({ rsvp: z.enum(['yes', 'maybe', 'no']).optional(), votes: z.array(z.string().uuid()).max(3).optional() });
 
+/** "Thursday, Oct 30, 7:00 PM" in the night's own time zone. */
+function nightWhen(night: { slots: { id: string; startsAt: string }[]; confirmedSlot: string | null; timeZone: string }): string {
+  const slot = night.slots.find((s) => s.id === night.confirmedSlot);
+  if (!slot) return 'The time is set';
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: night.timeZone }).format(new Date(slot.startsAt));
+}
+
 export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
-  const { db, config, hub, tables, matchmaker, voice, fail, limiter, now } = deps;
+  const { db, config, hub, tables, matchmaker, voice, notifier, fail, limiter, now } = deps;
 
   const me = (c: Context<Env>) => c.get('principal');
   const body = async <T>(c: Context<Env>, schema: z.ZodType<T>) => {
@@ -140,7 +149,7 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
   };
 
   api.use('/me/profile', async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
-  for (const path of ['/friends', '/friends/*', '/friend-codes/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*', '/matchmaking', '/leaderboards', '/me/stats', '/me/offline-results', '/voice/*']) {
+  for (const path of ['/friends', '/friends/*', '/friend-codes/*', '/inbox', '/conversations/*', '/tables', '/tables/*', '/nights', '/nights/*', '/realtime/*', '/matchmaking', '/leaderboards', '/me/stats', '/me/offline-results', '/voice/*', '/me/push-token', '/me/notifications']) {
     api.use(path, async (c, next) => (me(c) ? next() : fail(c, 401, 'missing_identity', 'Start a session first.')));
   }
 
@@ -176,6 +185,9 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     const result = requestFriend(db, me(c)!.id, input.code, now());
     if (!result) return fail(c, 404, 'code_not_found', 'No player has that friend code.');
     hub.sendMany([me(c)!.id, result.friend.id], { type: 'friends' });
+    const myName = ensureProfile(db, me(c)!.id, now()).name;
+    if (result.result === 'requested') notifier.notify([result.friend.id], { category: 'invites', title: 'New friend request', body: `${myName} would like to be friends.`, url: '/friends' });
+    if (result.result === 'accepted') notifier.notify([result.friend.id], { category: 'invites', title: 'You have a new friend', body: `${myName} is now your friend. Pull up a chair together!`, url: '/friends' });
     return c.json(result);
   });
 
@@ -196,6 +208,12 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     }
     if (!acceptFriend(db, me(c)!.id, c.req.param('id'), now())) return fail(c, 404, 'request_not_found', 'That friend request is no longer waiting.');
     hub.sendMany([me(c)!.id, c.req.param('id')], { type: 'friends' });
+    notifier.notify([c.req.param('id')], {
+      category: 'invites',
+      title: 'You have a new friend',
+      body: `${ensureProfile(db, me(c)!.id, now()).name} accepted your friend request. Pull up a chair together!`,
+      url: '/friends',
+    });
     return c.json({ accepted: true });
   });
 
@@ -247,7 +265,20 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
       const table = db.prepare('SELECT kind FROM tables WHERE id = ?').get(conversation.ref) as { kind: string } | undefined;
       if (table?.kind === 'public' && !QUICK_PHRASES.includes(text)) return fail(c, 400, 'phrases_only', 'At matched games you can send the quick phrases only.');
     }
-    return c.json(postMessage(db, hub, conversation, me(c)!.id, text, now()), 201);
+    const message = postMessage(db, hub, conversation, me(c)!.id, text, now());
+    // Friends' direct messages come through as pushes; table and night chats stay in the app.
+    if (conversation.kind === 'direct') {
+      const others = conversationMembers(db, conversation).filter((id) => id !== me(c)!.id && !isBlockedEitherWay(db, me(c)!.id, id));
+      notifier.notify(others, {
+        category: 'messages',
+        title: ensureProfile(db, me(c)!.id, now()).name,
+        body: text,
+        url: `/chat/${conversation.id}`,
+        key: `chat:${conversation.id}`,
+        throttleMs: 60_000,
+      });
+    }
+    return c.json(message, 201);
   });
 
   api.post('/conversations/:id/read', (c) => {
@@ -255,6 +286,29 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     if (!conversation) return fail(c, 404, 'conversation_not_found', 'That conversation is not available.');
     markRead(db, conversation.id, me(c)!.id, now());
     return c.json({ read: true });
+  });
+
+  // ---------------------------------------------------------------- push notifications
+
+  api.put('/me/push-token', async (c) => {
+    const input = await body(c, z.object({ token: z.string().max(200).regex(EXPO_TOKEN), platform: z.enum(['ios', 'android']) }));
+    if (!input) return fail(c, 400, 'invalid_input', 'That push token was not readable.');
+    notifier.saveToken(me(c)!.id, input.token, input.platform);
+    return c.json({ saved: true, settings: notifier.settings(me(c)!.id) });
+  });
+
+  api.delete('/me/push-token', async (c) => {
+    const input = await body(c, z.object({ token: z.string().max(200) }));
+    if (input) notifier.removeToken(me(c)!.id, input.token);
+    return c.json({ removed: true });
+  });
+
+  api.get('/me/notifications', (c) => c.json({ settings: notifier.settings(me(c)!.id), devices: notifier.devices(me(c)!.id) }));
+
+  api.put('/me/notifications', async (c) => {
+    const input = await body(c, z.object(Object.fromEntries(PUSH_CATEGORIES.map((k) => [k, z.boolean().optional()]))).strict());
+    if (!input) return fail(c, 400, 'invalid_input', 'Choose which notifications you want.');
+    return c.json({ settings: notifier.updateSettings(me(c)!.id, input), devices: notifier.devices(me(c)!.id) });
   });
 
   // ---------------------------------------------------------------- matchmaking, ranking, stats
@@ -409,7 +463,11 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     if (!input) return fail(c, 400, 'invalid_input', 'That response was not readable.');
     try {
       respond(db, hub, c.req.param('id'), me(c)!.id, input, now());
-      return c.json(nightDetail(db, hub, c.req.param('id'), me(c)!.id, now()));
+      const detail = nightDetail(db, hub, c.req.param('id'), me(c)!.id, now());
+      if (input.rsvp === 'yes' && !detail.isHost) {
+        notifier.notify([detail.hostId], { category: 'nights', title: detail.title, body: `${ensureProfile(db, me(c)!.id, now()).name} is coming!`, url: `/night/${detail.id}`, key: `rsvp:${detail.id}:${me(c)!.id}`, throttleMs: 3_600_000 });
+      }
+      return c.json(detail);
     } catch (error) {
       return handle(c, error);
     }
@@ -420,7 +478,12 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
     if (!input) return fail(c, 400, 'invalid_input', 'Pick a time to confirm.');
     try {
       confirmNight(db, hub, c.req.param('id'), me(c)!.id, input.slotId, now());
-      return c.json(nightDetail(db, hub, c.req.param('id'), me(c)!.id, now()));
+      const detail = nightDetail(db, hub, c.req.param('id'), me(c)!.id, now());
+      notifier.notify(
+        detail.members.filter((m) => m.id !== detail.hostId && m.rsvp !== 'no').map((m) => m.id),
+        { category: 'nights', title: `${detail.title} is on!`, body: `${nightWhen(detail)}${detail.location ? ` at ${detail.location}` : ''}. Add it to your calendar so you don't miss it.`, url: `/night/${detail.id}` },
+      );
+      return c.json(detail);
     } catch (error) {
       return handle(c, error);
     }
@@ -428,7 +491,12 @@ export function registerPlayRoutes(api: Hono<Env>, deps: Deps): void {
 
   api.post('/nights/:id/cancel', (c) => {
     try {
+      const before = nightDetail(db, hub, c.req.param('id'), me(c)!.id, now());
       cancelNight(db, hub, c.req.param('id'), me(c)!.id, now());
+      notifier.notify(
+        before.members.filter((m) => m.id !== before.hostId).map((m) => m.id),
+        { category: 'nights', title: `${before.title} is cancelled`, body: 'The host called it off. Maybe a game online instead?', url: `/night/${before.id}` },
+      );
       return c.json({ cancelled: true });
     } catch (error) {
       return handle(c, error);

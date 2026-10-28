@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { spokenLabel } from '@daily-rack/core';
 import { HOUSE_CARD } from '@daily-rack/core/mahjong';
 import { Tile, TileButton } from '../components/Tile.tsx';
 import { Body, Button, Card, Display, Eyebrow, Icon, Row, Screen, TopBar } from '../components/ui.tsx';
 import { Pattern } from '../game/CardView.tsx';
+import { Pip } from '../components/Pip.tsx';
+import { Confetti } from '../components/Confetti.tsx';
+import { celebrateHaptic } from '../lib/celebrate.ts';
 import { colors } from '../theme.ts';
 import type { CheckResult, Face, Lesson, Option, Step, Visual } from './content.ts';
 
@@ -172,14 +175,21 @@ function Visuals({ visual }: { visual: Visual }) {
   );
 }
 
+const RIGHT = ['That’s right!', 'Nailed it!', 'Pip approves!', 'Exactly right!'];
+const WRONG = ['Not quite. Try again.', 'Almost! Give it another go.', 'So close. Have another look.'];
+
 function Feedback({ result }: { result: CheckResult }) {
+  // A different cheer each time, chosen from the message so it stays put on re-render.
+  const pick = (list: string[]) => list[result.message.length % list.length]!;
   return (
     <View style={[styles.feedback, result.ok ? styles.feedbackRight : styles.feedbackWrong]} accessibilityLiveRegion="polite">
-      <Row gap={8}>
-        <Icon name={result.ok ? 'check' : 'bulb'} size={20} color={result.ok ? colors.online : colors.warnInk} />
-        <Text style={[styles.feedbackTitle, { color: result.ok ? colors.online : colors.warnInk }]}>{result.ok ? 'That’s right' : 'Not quite. Try again.'}</Text>
+      <Row gap={10} style={{ alignItems: 'flex-start' }}>
+        <Pip mood={result.ok ? 'cheer' : 'oops'} size={46} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={[styles.feedbackTitle, { color: result.ok ? colors.online : colors.warnInk }]}>{pick(result.ok ? RIGHT : WRONG)}</Text>
+          <Text style={styles.feedbackText}>{result.message}</Text>
+        </View>
       </Row>
-      <Text style={styles.feedbackText}>{result.message}</Text>
     </View>
   );
 }
@@ -365,15 +375,25 @@ function StepProgress({ index, total, check }: { index: number; total: number; c
 
 function Finished({ lesson, number, onExit, onPractice, next, onNext }: { lesson: Lesson; number: number; onExit: () => void; onPractice?: () => void; next?: Lesson; onNext?: () => void }) {
   const practice = lesson.practice === 'table' && onPractice;
+  const [burst, setBurst] = useState(0);
+  useEffect(() => {
+    setBurst(1);
+    celebrateHaptic();
+  }, []);
   return (
     <View style={{ gap: 16, paddingTop: 8 }}>
-      <View style={styles.doneBadge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Icon name="check" size={36} color="#fff" />
+      <Confetti run={burst} />
+      <View style={{ alignItems: 'center' }} testID="lesson-finished">
+        <Pip mood="cheer" size={120} />
       </View>
-      <View style={{ gap: 6 }}>
+      <View style={{ gap: 6, alignItems: 'center' }}>
         <Eyebrow>Lesson {number} done</Eyebrow>
-        <Display size={32}>Nicely done</Display>
-        <Body muted>You finished “{lesson.title}.” It’s ticked off on this device.</Body>
+        <Display size={32} center>
+          Nicely done!
+        </Display>
+        <Body muted center>
+          You finished “{lesson.title}.” Pip is very proud. It’s ticked off on this device.
+        </Body>
       </View>
       {practice ? (
         <Card tone="felt" style={{ gap: 12 }}>
@@ -499,5 +519,4 @@ const styles = StyleSheet.create({
   feltHint: { color: '#D8E3DC', textAlign: 'center', fontSize: 14 },
   feltTitle: { fontSize: 20, fontWeight: '700', color: colors.feltText },
   feltBody: { fontSize: 15, lineHeight: 21, color: 'rgba(244,239,227,0.88)' },
-  doneBadge: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.online, alignItems: 'center', justifyContent: 'center' },
 });

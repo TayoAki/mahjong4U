@@ -65,6 +65,14 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#99028F",
+          "defaultChannel": "turns"
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "Talk with friends at your table in voice chat, and record an optional voiceover for your rack clip.",

@@ -5,6 +5,11 @@ import { formatRate, spokenLabel } from '@daily-rack/core';
 import { ApiError, api, type ResultResponse } from '../../lib/api.ts';
 import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
 import { track } from '../../lib/analytics.ts';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
+import { notePractice } from '../../lib/reminders.ts';
+import { celebrateHaptic } from '../../lib/celebrate.ts';
+import { Confetti } from '../../components/Confetti.tsx';
+import { PipSays, type PipMood } from '../../components/Pip.tsx';
 import { Badge, Body, Button, Card, Display, ErrorPanel, Heading, Icon, Loading, Notice, Screen, TopBar } from '../../components/ui.tsx';
 import { Tile } from '../../components/Tile.tsx';
 import { colors, fonts } from '../../theme.ts';
@@ -14,6 +19,8 @@ export default function ResultScreen() {
   const router = useRouter();
   const [result, setResult] = useState<ResultResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [burst, setBurst] = useState(0);
+  const { ask, refresh } = useNotifications();
 
   const load = () => {
     setError(null);
@@ -23,6 +30,16 @@ export default function ResultScreen() {
         setResult(r);
         void writeJson(FIRST_OPEN_KEY, true);
         track('result_viewed', { attemptId, splitShown: r.split.minimumSampleMet });
+        if (r.attempt.isDaily) {
+          void notePractice().then(refresh);
+          // Celebrate a strong pass or a streak milestone.
+          if (r.alignment === 'matches' || r.alignment === 'alternate' || r.progress.milestone) {
+            setBurst((b) => b + 1);
+            celebrateHaptic();
+          }
+          // After the first rack, Pip offers a reminder for tomorrow's.
+          if (r.progress.racksSolved <= 1) setTimeout(() => ask('first-rack'), 3000);
+        }
       })
       .catch((e: Error) => setError(e instanceof ApiError && e.status === 404 ? 'That result is not available on this device.' : e.message));
   };
@@ -56,10 +73,14 @@ export default function ResultScreen() {
       }
     >
       <TopBar title="Your result" onBack={home} />
+      <Confetti run={burst} />
       <View style={{ alignItems: 'center', gap: 10 }}>
         <Display center>{result.alignmentCopy}</Display>
         <Badge label={result.section.label} />
       </View>
+      <PipSays mood={pipMood(result)} testID="result-pip">
+        {pipLine(result)}
+      </PipSays>
 
       <View style={styles.compare}>
         <PassCard title="Your pass" faces={faces(result.attempt.tileInstanceIds)} />
@@ -135,6 +156,21 @@ export default function ResultScreen() {
       {!result.review.teacherReviewed && <Notice tone="warn">Practice rack: this suggestion has not been reviewed by a teacher yet.</Notice>}
     </Screen>
   );
+}
+
+function pipMood(result: ResultResponse): PipMood {
+  if (result.progress.milestone) return 'proud';
+  return result.alignment === 'matches' || result.alignment === 'alternate' ? 'cheer' : result.alignment === 'close' ? 'happy' : 'think';
+}
+
+/** Pip's take, warm whatever the pass. */
+function pipLine(result: ResultResponse): string {
+  const streak = result.attempt.isDaily ? result.progress.streak : 0;
+  if (result.progress.milestone && streak > 1) return `${streak} days in a row! You're becoming a regular at this table.`;
+  if (result.alignment === 'matches') return streak > 1 ? `Spot on, and day ${streak} of your streak. Lovely play!` : 'Spot on. You read that rack like a pro!';
+  if (result.alignment === 'alternate') return 'A different pass that’s just as strong. Great eye!';
+  if (result.alignment === 'close') return 'Close to the strong pass. You’re getting a feel for it.';
+  return 'A different idea from the strong pass. Have a look at why below. Every rack teaches something!';
 }
 
 function PassCard({ title, faces, note, half }: { title: string; faces: string[]; note?: string; half?: boolean }) {

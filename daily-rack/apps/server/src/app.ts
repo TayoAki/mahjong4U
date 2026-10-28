@@ -18,6 +18,7 @@ import { TableService, type TableServiceOptions } from './tables.ts';
 import { registerPlayRoutes } from './play-routes.ts';
 import { Matchmaker, type MatchmakerOptions } from './matchmaking.ts';
 import { VoiceRooms } from './voice.ts';
+import { Notifier, type PushSender } from './push.ts';
 
 export interface AppConfig {
   brand: string;
@@ -109,24 +110,32 @@ export interface Services {
   tables: TableService;
   matchmaker: Matchmaker;
   voice: VoiceRooms;
+  notifier: Notifier;
 }
 
-export function createServices(db: Db, options: Partial<TableServiceOptions & { matchFillAfterMs: MatchmakerOptions['fillAfterMs']; matchTickMs: number }> = {}): Services {
+export function createServices(
+  db: Db,
+  options: Partial<Omit<TableServiceOptions, 'notifier'> & { matchFillAfterMs: MatchmakerOptions['fillAfterMs']; matchTickMs: number; pushSender: PushSender | null }> = {},
+): Services {
   const hub = new Hub();
+  const now = options.now ?? (() => new Date());
+  // No sender means no pushes (tests, or a server without push set up).
+  const notifier = new Notifier(db, hub, options.pushSender ?? null, now);
   const tables = new TableService(db, hub, {
-    now: options.now ?? (() => new Date()),
+    now,
     botDelayMs: options.botDelayMs ?? 900,
     liveTimeouts: options.liveTimeouts ?? { pass: 90, turn: 60, claim: 12 },
+    notifier,
   });
-  const matchmaker = new Matchmaker(db, hub, tables, { fillAfterMs: options.matchFillAfterMs ?? { casual: 20_000, ranked: 45_000 }, tickMs: options.matchTickMs ?? 1_000 });
+  const matchmaker = new Matchmaker(db, hub, tables, { fillAfterMs: options.matchFillAfterMs ?? { casual: 20_000, ranked: 45_000 }, tickMs: options.matchTickMs ?? 1_000, notifier });
   const voice = new VoiceRooms(db, hub, tables);
   hub.onClientMessage = (principalId, message) => voice.handle(principalId, message);
-  return { hub, tables, matchmaker, voice };
+  return { hub, tables, matchmaker, voice, notifier };
 }
 
 export function createApp({ db, content, config, services }: { db: Db; content: Content; config: AppConfig; services?: Services }) {
   const now = config.now ?? (() => new Date());
-  const { hub, tables, matchmaker, voice } = services ?? createServices(db, { now, botDelayMs: 0 });
+  const { hub, tables, matchmaker, voice, notifier } = services ?? createServices(db, { now, botDelayMs: 0 });
   const app = new Hono<Env>();
   const limiter = new RateLimiter();
 
@@ -411,7 +420,7 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
     return c.json({ accepted });
   });
 
-  registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, fail, limiter, now, clientAddress });
+  registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, notifier, fail, limiter, now, clientAddress });
   app.route('/v1', api);
   return app;
 }

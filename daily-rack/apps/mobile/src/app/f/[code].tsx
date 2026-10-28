@@ -7,11 +7,13 @@ import { useSession } from '../../lib/session.tsx';
 import { track } from '../../lib/analytics.ts';
 import { FIRST_OPEN_KEY, writeJson } from '../../lib/storage.ts';
 import { Avatar, Body, Button, Card, Display, ErrorPanel, Row, Screen, TopBar } from '../../components/ui.tsx';
+import { useNotifications } from '../../lib/notification-prompt.tsx';
 
 /** Friend invite link: /f/CODE sends (or accepts) a friend request after one tap. */
 export default function FriendInviteScreen() {
   const { code = '' } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
+  const { ask } = useNotifications();
   const { profile } = useSession();
   const { guard } = useSafety();
   const [done, setDone] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export default function FriendInviteScreen() {
       const r = await guard(() => api.addFriend(code.toUpperCase()));
       if (!r) return;
       track('friend_added', { result: r.result, via: 'link' });
+      if (r.result === 'requested') setTimeout(() => ask('friend'), 1200);
       setDone(r.result === 'requested' ? `Request sent to ${r.friend.name}.` : `You and ${r.friend.name} are friends.`);
     } catch (e) {
       setError((e as Error).message);
