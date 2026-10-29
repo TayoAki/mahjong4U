@@ -14,7 +14,7 @@ content_type: "how-to"
 author: "Daily Rack"
 date_created: "2026-10-29"
 last_updated: "2026-10-29"
-status: "draft"
+status: "published"
 cta:
   text: "Set up a two-player table"
   href: "/table/new?players=2"
