@@ -22,6 +22,8 @@ import { VoiceRooms } from './voice.ts';
 import { Notifier, type PushSender } from './push.ts';
 import { PlusService, type PlusConfig } from './plus.ts';
 import { registerPlusRoutes } from './plus-routes.ts';
+import { emptyBlog, type Blog } from './blog.ts';
+import { registerBlogRoutes } from './blog-routes.ts';
 
 export interface AppConfig {
   brand: string;
@@ -144,7 +146,7 @@ export function createServices(
   return { hub, tables, matchmaker, voice, notifier };
 }
 
-export function createApp({ db, content, config, services }: { db: Db; content: Content; config: AppConfig; services?: Services }) {
+export function createApp({ db, content, config, services, blog }: { db: Db; content: Content; config: AppConfig; services?: Services; blog?: Blog }) {
   const now = config.now ?? (() => new Date());
   const { hub, tables, matchmaker, voice, notifier } = services ?? createServices(db, { now, botDelayMs: 0 });
   const app = new Hono<Env>();
@@ -439,6 +441,7 @@ export function createApp({ db, content, config, services }: { db: Db; content: 
   registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, notifier, plus, fail, limiter, now, clientAddress });
   registerPlusRoutes(api, { db, plus, config: config.plus ?? {}, fail, limiter });
   app.route('/v1', api);
+  registerBlogRoutes(app, { blog: blog ?? emptyBlog(), config });
   return app;
 }
 
