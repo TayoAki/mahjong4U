@@ -7,6 +7,7 @@ import { DEFAULT_ICE_SERVERS, createApp, createServices } from './app.ts';
 import { expoPushSender } from './push.ts';
 import { loadContent, syncRevisions } from './content.ts';
 import { loadCards } from './cards.ts';
+import { loadBlog } from './blog.ts';
 import { openDb } from './db.ts';
 import { attachRealtime } from './realtime-server.ts';
 
@@ -44,6 +45,8 @@ const contentDir = env.CONTENT_DIR ?? join(root, 'content');
 const content = loadContent(contentDir, { devRotate: env.DEV_ROTATE === '1' });
 const cards = loadCards(join(contentDir, 'cards'));
 for (const problem of cards.errors) console.log(JSON.stringify({ level: 'warn', message: 'card_skipped', problem }));
+const blog = loadBlog(join(contentDir, 'blog'));
+for (const problem of blog.errors) console.log(JSON.stringify({ level: 'warn', message: 'blog_post_skipped', problem }));
 syncRevisions(db, content, new Date());
 
 const services = createServices(db, {
@@ -54,7 +57,7 @@ const services = createServices(db, {
   // EXPO_ACCESS_TOKEN is only needed if enhanced push security is on for the Expo project).
   pushSender: env.PUSH_DISABLED === '1' ? null : expoPushSender(env.EXPO_ACCESS_TOKEN || null),
 });
-const app = createApp({ db, content, config, services });
+const app = createApp({ db, content, config, services, blog });
 
 // Serve the Expo web build, falling back to index.html for client-side routes.
 const webDist = env.WEB_DIST ?? join(root, 'apps/mobile/dist');
@@ -73,6 +76,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
       port: info.port,
       revisions: content.revisions.size,
       cards: cards.loaded,
+      blogPosts: blog.posts.length,
       devRotate: env.DEV_ROTATE === '1',
       webDist: existsSync(webDist),
     }),
