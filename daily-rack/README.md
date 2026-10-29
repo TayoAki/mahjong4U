@@ -142,6 +142,10 @@ Chat makes this an app with user-generated content, so it has what the App Store
 - **Block.** Blocking works both ways: no messages, requests, shared tables or game nights. Unblock on the You tab.
 - **Moderators.** `npm run reports` lists open reports with the exact text; dismiss, remove the message, or suspend the player. An optional webhook posts each new report to Slack or Discord. Reports must be reviewed within 24 hours.
 
+## The Table (blog)
+
+A blog at `/blog` for search traffic, served by the same server as plain HTML with no client JavaScript, so search engines read it directly (the app itself renders in the browser and indexes poorly). Posts are Markdown files with YAML frontmatter in `content/blog/` and load when the server starts, so a new post needs a deploy. Four sections: Two & Three, Learn the Game, Get a Game Going, The Card Year. Every page has a canonical URL, Open Graph and Twitter tags and `Article` plus `BreadcrumbList` JSON-LD; there's an RSS feed (`/blog/rss.xml`), `/sitemap.xml` and `/robots.txt`. A post with `status: draft` opens at its URL with a "Draft: not published" banner and `noindex`, and stays out of the index, feed and sitemap; change it to `published` and deploy to publish. `npm run content:check` validates posts. All styling is one stylesheet of design tokens, so a designer can restyle it without touching the templates; see [`docs/BLOG.md`](docs/BLOG.md). Set `PUBLIC_BASE_URL` to the domain search engines should credit.
+
 ## Report a problem
 
 Players report bugs from the You tab, from the How to play sheet at any table, or from the crash screen. The app attaches the screen they were on, the device, OS and app version, a few settings and the app's recent errors, plus an optional screenshot (taken of the table on phones, or picked from Photos anywhere). Players see everything that's sent first. Read them with `npm run reports -- bugs` and `npm run reports -- bug <id>` (which saves the screenshot); details in [`docs/MODERATION.md`](docs/MODERATION.md#problem-reports).
