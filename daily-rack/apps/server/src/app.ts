@@ -22,6 +22,7 @@ import { VoiceRooms } from './voice.ts';
 import { Notifier, type PushSender } from './push.ts';
 import { PlusService, type PlusConfig } from './plus.ts';
 import { registerPlusRoutes } from './plus-routes.ts';
+import { recordPageView, registerInsightsRoutes } from './insights.ts';
 import { emptyBlog, type Blog } from './blog.ts';
 import { registerBlogRoutes } from './blog-routes.ts';
 
@@ -84,6 +85,9 @@ const CLIENT_EVENTS = new Set([
   'practice_started',
   'practice_finished',
   'lesson_completed',
+  'learn_practice',
+  'plus_opened',
+  'plus_purchased',
 ]);
 
 const AttemptBody = z.object({
@@ -440,8 +444,9 @@ export function createApp({ db, content, config, services, blog }: { db: Db; con
   tables.dealGate = (hostId, cardId, vsComputer) => plus.assertCanDeal(hostId, cardId, vsComputer);
   registerPlayRoutes(api, { db, config, hub, tables, matchmaker, voice, notifier, plus, fail, limiter, now, clientAddress });
   registerPlusRoutes(api, { db, plus, config: config.plus ?? {}, fail, limiter });
+  registerInsightsRoutes(api, { db, now });
   app.route('/v1', api);
-  registerBlogRoutes(app, { blog: blog ?? emptyBlog(), config });
+  registerBlogRoutes(app, { blog: blog ?? emptyBlog(), config, onView: (path, referrer) => recordPageView(db, now(), path, referrer) });
   return app;
 }
 

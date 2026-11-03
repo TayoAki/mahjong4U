@@ -9,6 +9,7 @@
 //   ... node scripts/reports.mjs bug <bugReportId>                                      one problem in full; saves its screenshot
 //   ... node scripts/reports.mjs close-bug <bugReportId>                                mark a problem handled (reopen-bug undoes it)
 //   ... node scripts/reports.mjs plus <playerId> <days|forever|off>                     give Daily Rack Plus by hand (testers, support)
+//   ... node scripts/reports.mjs summary [days]                                         how the app is doing over the last 7 (or N) days
 //
 // remove-content hides the reported message for everyone. suspend also hides everything the
 // player has written and stops them chatting, adding friends or joining game nights.
@@ -48,6 +49,72 @@ const printBug = (b, full) => {
   if (full) for (const [key, value] of Object.entries(b.details)) console.log(`  ${`${key}:`.padEnd(15)} ${Array.isArray(value) ? value.join('\n                  ') : value}`);
 };
 
+const pct = (n, of) => (of > 0 ? `${Math.round((n / of) * 100)}%` : '');
+const row = (label, value, extra = '') => console.log(`  ${label.padEnd(28)}${String(value).padStart(6)}  ${extra}`);
+const dayName = (iso) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+function printSummary(s) {
+  console.log(`\nDaily Rack: the last ${s.period.days} day${s.period.days === 1 ? '' : 's'} (${dayName(s.period.from)} to ${dayName(s.period.to)})`);
+
+  console.log('\nPlayers');
+  row('New', s.players.new);
+  row('Active', s.players.active, 'played, answered a rack or used the app');
+  row('All time', s.players.total);
+
+  console.log('\nFirst lesson to a real table (new players this period, and how far they got)');
+  const started = s.path[0]?.players ?? 0;
+  for (const step of s.path) row(step.step, step.players, pct(step.players, started));
+
+  console.log('\nDaily rack');
+  row('Answers', s.dailyRack.answers, `from ${s.dailyRack.players} player${s.dailyRack.players === 1 ? '' : 's'}`);
+  row('Daily discards finished', s.dailyRack.discardsFinished);
+  row('Results shared', s.dailyRack.shared);
+  row('Shared links opened', s.dailyRack.sharedLinksOpened);
+
+  console.log('\nGames');
+  row('Hands played', s.games.hands, `by ${s.games.players} player${s.games.players === 1 ? '' : 's'}`);
+  row('  at four-player tables', s.games.handsBy.fourPlayer);
+  row('  at two-player tables', s.games.handsBy.twoPlayer);
+  row('  offline', s.games.handsBy.offline);
+  row('Tables: against the computer', s.games.tablesOpened.vsComputer);
+  row('Tables: with other people', s.games.tablesOpened.withPeople);
+  row('Tables: two-player', s.games.tablesOpened.twoPlayer);
+  row('Tables: quick / ranked', `${s.games.tablesOpened.quickMatch} / ${s.games.tablesOpened.ranked}`);
+  row('Practice rounds finished', s.games.practiceRounds);
+
+  console.log('\nFriends and Game Nights');
+  row('New friendships', s.social.friendships);
+  row('Game Nights planned', s.social.nightsPlanned, `${s.social.nightsConfirmed} with a time set`);
+  row('Voice chats joined', s.social.voiceJoins);
+
+  console.log('\nPlus');
+  row('Members', s.plus.members, 'bought or given by hand; PLUS_FOR_EVERYONE isn\'t counted');
+  row('Plus screen opened', s.plus.screenOpened);
+  row('Purchases', s.plus.purchases);
+
+  console.log('\nThe Table (blog)');
+  row('Page views', s.blog.views, 'readers only: crawlers and link previews are left out');
+  for (const p of s.blog.pages) row(`  ${p.path}`, p.views);
+  if (s.blog.from.length > 0) console.log('  Where readers came from:');
+  for (const f of s.blog.from) row(`    ${f.referrer}`, f.views);
+
+  console.log('\nWaiting on you');
+  row('Open problem reports', s.inbox.openProblemReports, s.inbox.openProblemReports ? 'npm run reports -- bugs' : '');
+  row('Open player reports', s.inbox.openPlayerReports, s.inbox.openPlayerReports ? 'npm run reports' : '');
+  row('Contact us messages', s.inbox.messages, s.inbox.messages ? 'npm run reports -- feedback' : '');
+
+  console.log('\nBy day');
+  console.log(`  ${'Day'.padEnd(8)}${'New'.padStart(6)}${'Active'.padStart(8)}${'Racks'.padStart(7)}${'Hands'.padStart(7)}${'Blog'.padStart(7)}`);
+  for (const d of s.byDay) {
+    console.log(`  ${dayName(d.day).padEnd(8)}${String(d.newPlayers).padStart(6)}${String(d.activePlayers).padStart(8)}${String(d.rackAnswers).padStart(7)}${String(d.hands).padStart(7)}${String(d.blogViews).padStart(7)}`);
+  }
+
+  console.log('\nApp events');
+  if (s.events.length === 0) console.log('  None yet.');
+  for (const e of s.events) row(e.name, e.count, `${e.players} player${e.players === 1 ? '' : 's'}`);
+  console.log('');
+}
+
 const [command = 'open', id, action] = process.argv.slice(2);
 if (command === 'open' || command === 'all') {
   const { reports } = await call('GET', `/reports${command === 'all' ? '?status=all' : ''}`);
@@ -61,6 +128,13 @@ if (command === 'open' || command === 'all') {
     else console.log(`  player:   named “${r.reported?.name}” when reported`);
     if (r.note) console.log(`  note:     ${r.note}`);
   }
+} else if (command === 'summary') {
+  const days = id ? Number(id) : 7;
+  if (!Number.isInteger(days) || days < 1) {
+    console.error('Give a number of days, such as 7 or 30.');
+    process.exit(1);
+  }
+  printSummary(await call('GET', `/summary?days=${days}`));
 } else if (command === 'feedback') {
   const { feedback } = await call('GET', '/feedback');
   if (feedback.length === 0) console.log('No messages yet.');
@@ -102,7 +176,7 @@ if (command === 'open' || command === 'all') {
   console.log(unsuspended ? `Player ${id} can chat again.` : `Player ${id} was not suspended.`);
 } else {
   console.error(
-    'Usage: node scripts/reports.mjs [open|all] | feedback | bugs [all] | bug <id> | close-bug <id> | reopen-bug <id> | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId> | plus <playerId> <days|forever|off>',
+    'Usage: node scripts/reports.mjs [open|all] | summary [days] | feedback | bugs [all] | bug <id> | close-bug <id> | reopen-bug <id> | resolve <reportId> dismiss|remove-content|suspend | unsuspend <playerId> | plus <playerId> <days|forever|off>',
   );
   process.exit(1);
 }

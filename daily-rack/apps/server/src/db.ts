@@ -332,6 +332,16 @@ const MIGRATIONS: string[] = [
   -- What a table plays: four seats, or two-player (two seats, two hands each).
   ALTER TABLE tables ADD COLUMN variant TEXT NOT NULL DEFAULT 'four' CHECK (variant IN ('four', 'two-player'));
   `,
+  `
+  -- Blog page views, counted per day, page and referring site. Nothing about the visitor is kept.
+  CREATE TABLE page_views (
+    day TEXT NOT NULL,
+    path TEXT NOT NULL,
+    referrer TEXT NOT NULL,
+    views INTEGER NOT NULL,
+    PRIMARY KEY (day, path, referrer)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { track } from '../lib/analytics.ts';
 import { readJson, remove, writeJson } from '../lib/storage.ts';
 
 // Which lessons are finished, kept on this device only (lessons work offline). Shared
@@ -25,6 +26,7 @@ function load(): Promise<void> {
 export function markLessonDone(id: string): void {
   if (current.has(id)) return;
   current = new Set([...current, id]);
+  track('lesson_completed', { lessonId: id, done: current.size });
   for (const l of listeners) l(current);
   // Write after the first read so a quick finish can't overwrite what was stored.
   void load().then(() => writeJson(LESSONS_DONE_KEY, [...current]));

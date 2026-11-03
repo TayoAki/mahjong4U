@@ -5,6 +5,7 @@ import { ApiError, api, getBearer, setBearer, type MyProfile } from './api.ts';
 import { readJson, writeJson } from './storage.ts';
 import { syncOfflineResults } from '../offline/results.ts';
 import { sendQueuedBugReports } from './bug-reports.ts';
+import { track } from './analytics.ts';
 
 // One guest identity per device, created on first launch. Native keeps its token in the
 // keychain/keystore; the web build relies on the server's HttpOnly cookie. If the server
@@ -62,6 +63,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const token = await storedToken();
         if (token) setBearer(token);
         const session = await api.guestSession();
+        if (session.created) track('app_first_open', { platform: Platform.OS });
         if (session.token && Platform.OS !== 'web') {
           setBearer(session.token);
           await SecureStore.setItemAsync(TOKEN_KEY, session.token).catch(() => undefined);

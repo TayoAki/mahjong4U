@@ -25,7 +25,13 @@ const CACHE = {
   image: 'public, max-age=86400',
 };
 
-export function registerBlogRoutes(app: Hono<Env>, { blog, config }: { blog: Blog; config: AppConfig }): void {
+/** Crawlers, link previews and scripts: their visits aren't counted as readers. */
+const NOT_A_READER = /bot|crawl|spider|slurp|preview|facebookexternalhit|embedly|whatsapp|telegram|discord|slack|headless|lighthouse|monitor|uptime|curl|wget|python|node-fetch|axios|go-http/i;
+
+export function registerBlogRoutes(
+  app: Hono<Env>,
+  { blog, config, onView }: { blog: Blog; config: AppConfig; onView?: (path: string, referrer: string) => void },
+): void {
   const published = publishedPosts(blog);
   const bySlug = new Map(blog.posts.map((post) => [post.slug, post]));
   const ctx = (c: Context): PageContext => ({ base: baseUrl(c, config.publicBaseUrl), css: CSS_PATH });
@@ -34,11 +40,20 @@ export function registerBlogRoutes(app: Hono<Env>, { blog, config }: { blog: Blo
     return c.html(html, status);
   };
   const notFound = (c: Context) => page(c, notFoundPage(ctx(c)), CACHE.missing, 404);
+  // A reader's visit to a published page: the page and the site they came from, nothing more.
+  const counted = (c: Context) => {
+    if (!onView || c.req.method !== 'GET' || NOT_A_READER.test(c.req.header('user-agent') ?? '')) return;
+    if (/prefetch|prerender/i.test(`${c.req.header('sec-purpose') ?? ''} ${c.req.header('purpose') ?? ''}`)) return;
+    onView(c.req.path, referrerOf(c.req.header('referer'), new URL(ctx(c).base).hostname));
+  };
 
   app.get('/robots.txt', (c) => c.body(robotsTxt(ctx(c)), 200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': CACHE.robots }));
   app.get('/sitemap.xml', (c) => c.body(sitemap(ctx(c), published), 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': CACHE.feed }));
 
-  app.get('/blog', (c) => page(c, indexPage(ctx(c), published), CACHE.page));
+  app.get('/blog', (c) => {
+    counted(c);
+    return page(c, indexPage(ctx(c), published), CACHE.page);
+  });
   app.get('/blog/rss.xml', (c) => c.body(rssFeed(ctx(c), published), 200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': CACHE.feed }));
   app.get('/blog/assets/blog.css', (c) => c.body(CSS, 200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': CACHE.stylesheet }));
 
@@ -57,6 +72,7 @@ export function registerBlogRoutes(app: Hono<Env>, { blog, config }: { blog: Blo
   app.get('/blog/section/:section', (c) => {
     const section = c.req.param('section');
     if (!Object.hasOwn(BLOG_SECTIONS, section)) return notFound(c);
+    counted(c);
     return page(c, sectionPage(ctx(c), section as SectionId, published.filter((p) => p.section === section)), CACHE.page);
   });
 
@@ -66,6 +82,7 @@ export function registerBlogRoutes(app: Hono<Env>, { blog, config }: { blog: Blo
     const post = bySlug.get(c.req.param('slug'));
     if (!post) return notFound(c);
     if (post.status === 'draft') c.header('X-Robots-Tag', 'noindex, nofollow');
+    else counted(c);
     return page(c, postPage(ctx(c), post), post.status === 'draft' ? CACHE.draft : CACHE.page);
   });
 
@@ -74,6 +91,17 @@ export function registerBlogRoutes(app: Hono<Env>, { blog, config }: { blog: Blo
     if (path.length > 1 && path.endsWith('/')) return c.redirect(path.replace(/\/+$/, '') || '/blog', 301);
     return notFound(c);
   });
+}
+
+/** The site a reader came from: '(direct)', '(this site)' or a host such as google.com. */
+function referrerOf(header: string | undefined, ownHost: string): string {
+  if (!header) return '(direct)';
+  try {
+    const host = new URL(header).hostname.replace(/^www\./, '');
+    return host === ownHost.replace(/^www\./, '') ? '(this site)' : host;
+  } catch {
+    return '(direct)';
+  }
 }
 
 /** PUBLIC_BASE_URL when it's set; otherwise the address the request came in on. */
