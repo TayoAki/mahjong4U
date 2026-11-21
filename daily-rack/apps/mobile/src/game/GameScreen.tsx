@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import {
   SEATS,
   SEAT_WINDS,
@@ -13,50 +13,29 @@ import {
   type Action,
   type PublicPhase,
   type Seat,
-} from "@daily-rack/core/mahjong";
-import type { TablePayload } from "../lib/api.ts";
-import { updatePrefs, usePrefs } from "../lib/prefs.ts";
-import { useSafety } from "../lib/safety.tsx";
-import {
-  Body,
-  Button,
-  Card,
-  Chip,
-  Columns,
-  ErrorPanel,
-  Heading,
-  IconButton,
-  Notice,
-  Row,
-  Screen,
-  Sheet,
-} from "../components/ui.tsx";
-import { PipSays } from "../components/Pip.tsx";
-import { Confetti } from "../components/Confetti.tsx";
-import { celebrateHaptic } from "../lib/celebrate.ts";
-import { useLayout } from "../lib/layout.ts";
-import { notePractice } from "../lib/reminders.ts";
-import { Tile, TileStyle } from "../components/Tile.tsx";
-import { useAfterFirstRender } from "../components/Arrive.tsx";
-import { playSound, preloadSounds, setSoundsEnabled } from "../lib/sounds.ts";
-import { useActiveCard } from "../lib/cards.tsx";
-import { useTableSounds } from "./useTableSounds.ts";
-import { ClosestHand, HandHints, Pattern } from "./CardView.tsx";
-import { Exposures, TableBoard } from "./TableBoard.tsx";
-import { DiscardPool, OpponentStrip, type PoolMode } from "./PhoneTable.tsx";
-import { Rack, type RackItem } from "./Rack.tsx";
-import { useArrangeHint, useRackOrder } from "./rackOrder.ts";
-import {
-  arrangeTiles,
-  faceOf,
-  groupName,
-  sortTiles,
-  tileName,
-  tileShort,
-  type SortMode,
-} from "./tiles.ts";
-import { formatSeconds, useCountdown } from "./useCountdown.ts";
-import { colors, fonts } from "../theme.ts";
+} from '@daily-rack/core/mahjong';
+import type { TablePayload } from '../lib/api.ts';
+import { updatePrefs, usePrefs } from '../lib/prefs.ts';
+import { useSafety } from '../lib/safety.tsx';
+import { Body, Button, Card, Chip, Columns, ErrorPanel, Heading, IconButton, Notice, Row, Screen, Sheet } from '../components/ui.tsx';
+import { PipSays } from '../components/Pip.tsx';
+import { Confetti } from '../components/Confetti.tsx';
+import { celebrateHaptic } from '../lib/celebrate.ts';
+import { useLayout } from '../lib/layout.ts';
+import { notePractice } from '../lib/reminders.ts';
+import { Tile, TileStyle } from '../components/Tile.tsx';
+import { useAfterFirstRender } from '../components/Arrive.tsx';
+import { playSound, preloadSounds, setSoundsEnabled } from '../lib/sounds.ts';
+import { useActiveCard } from '../lib/cards.tsx';
+import { useTableSounds } from './useTableSounds.ts';
+import { ClosestHand, HandHints, Pattern } from './CardView.tsx';
+import { Exposures, TableBoard } from './TableBoard.tsx';
+import { DiscardPool, OpponentStrip, type PoolMode } from './PhoneTable.tsx';
+import { Rack, type RackItem } from './Rack.tsx';
+import { useArrangeHint, useRackOrder } from './rackOrder.ts';
+import { arrangeTiles, faceOf, groupName, sortTiles, tileName, tileShort, type SortMode } from './tiles.ts';
+import { formatSeconds, useCountdown } from './useCountdown.ts';
+import { colors, fonts } from '../theme.ts';
 
 interface Props {
   data: TablePayload;
@@ -97,19 +76,15 @@ const formatScore = (n: number) => (n > 0 ? `+${n}` : String(n));
 const COMPACT_PAD = 10;
 
 /** A little physical feedback on phones: a tick when picking a tile, a knock when one hits the table. */
-function feel(kind: "pick" | "place" | "nudge") {
-  if (Platform.OS === "web") return;
+function feel(kind: 'pick' | 'place' | 'nudge') {
+  if (Platform.OS === 'web') return;
   const done =
-    kind === "pick"
+    kind === 'pick'
       ? Haptics.selectionAsync()
-      : Haptics.impactAsync(
-          kind === "place"
-            ? Haptics.ImpactFeedbackStyle.Medium
-            : Haptics.ImpactFeedbackStyle.Light,
-        );
+      : Haptics.impactAsync(kind === 'place' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
   done.catch(() => undefined);
 }
-const shortName = (name: string) => name.replace(" (computer)", "");
+const shortName = (name: string) => name.replace(' (computer)', '');
 
 /** Tiles that just arrived from a pass, shown with a "New" badge until you pass or discard. */
 interface Received {
@@ -122,19 +97,7 @@ interface Received {
  * players around the felt with their tiles face down, and your rack pinned at the bottom
  * with whatever you can do right now just above it.
  */
-export function GameScreen({
-  data,
-  header,
-  busy,
-  error,
-  act,
-  nextHand,
-  leave,
-  rematch,
-  resultNote,
-  coach,
-  marked,
-}: Props) {
+export function GameScreen({ data, header, busy, error, act, nextHand, leave, rematch, resultNote, coach, marked }: Props) {
   const game = data.game!;
   const view = game.view;
   const me = view.seat;
@@ -146,13 +109,9 @@ export function GameScreen({
   const layout = useLayout();
   // Tablets in landscape (and desktops): the table on the left, your rack and moves on the right.
   const sideBySide = layout.wide;
-  const sideWidth = sideBySide
-    ? Math.floor(((layout.wideColumn - 56 - 22) * 1) / 2.25)
-    : layout.contentWidth;
-  const boardWidth = sideBySide
-    ? Math.min(layout.wideColumn - 56 - 22 - sideWidth, layout.height - 120)
-    : layout.contentWidth;
-  const [sort, setSort] = useState<SortMode>("suit");
+  const sideWidth = sideBySide ? Math.floor(((layout.wideColumn - 56 - 22) * 1) / 2.25) : layout.contentWidth;
+  const boardWidth = sideBySide ? Math.min(layout.wideColumn - 56 - 22 - sideWidth, layout.height - 120) : layout.contentWidth;
+  const [sort, setSort] = useState<SortMode>('suit');
   const [arranged, setArranged] = useRackOrder(game.id);
   const [arrangeHint, dismissArrangeHint] = useArrangeHint(game.id);
   const [selected, setSelected] = useState<number[]>([]);
@@ -160,9 +119,9 @@ export function GameScreen({
   const [jokerWarned, setJokerWarned] = useState(false);
   const [received, setReceived] = useState<Received | null>(null);
   const [dismissedTimeout, setDismissedTimeout] = useState<string | null>(null);
-  const [poolMode, setPoolMode] = useState<PoolMode>("order");
+  const [poolMode, setPoolMode] = useState<PoolMode>('order');
   const [handsOpen, setHandsOpen] = useState(false);
-  const ended = phase.kind === "ended";
+  const ended = phase.kind === 'ended';
   // Phones get a table built for play: nothing scrolls, and the discards never leave the screen.
   const compact = !sideBySide && !ended;
   const seconds = useCountdown(game.deadline);
@@ -171,93 +130,53 @@ export function GameScreen({
   useEffect(preloadSounds, []);
   useTableSounds(game.id, view, ownDiscard);
 
-  const seatInfo = (seat: number) =>
-    data.table.seats[game.positions[seat] ?? 0]!;
+  const seatInfo = (seat: number) => data.table.seats[game.positions[seat] ?? 0]!;
   const nameOf = (seat: number) => shortName(seatInfo(seat).name);
-  const who = (seat: number) => (seat === me ? "You" : nameOf(seat));
-  const whose = (seat: number) => (seat === me ? "your" : `${nameOf(seat)}’s`);
-  const scoreOf = (seat: number) =>
-    data.table.scores[game.positions[seat] ?? 0] ?? 0;
-  const names = (seats: Seat[]) =>
-    seats
-      .filter((s) => s !== me)
-      .map(nameOf)
-      .join(", ") || "the table";
+  const who = (seat: number) => (seat === me ? 'You' : nameOf(seat));
+  const whose = (seat: number) => (seat === me ? 'your' : `${nameOf(seat)}’s`);
+  const scoreOf = (seat: number) => data.table.scores[game.positions[seat] ?? 0] ?? 0;
+  const names = (seats: Seat[]) => seats.filter((s) => s !== me).map(nameOf).join(', ') || 'the table';
 
-  const need =
-    prompt?.type === "charleston-pass"
-      ? 3
-      : prompt?.type === "courtesy-pass"
-        ? prompt.count
-        : prompt?.type === "turn"
-          ? 1
-          : 0;
-  const passing =
-    prompt?.type === "charleston-pass" || prompt?.type === "courtesy-pass";
-  const promptKey = `${game.id}:${prompt?.type ?? "none"}:${phase.kind === "charleston" ? `${phase.round}${phase.direction}` : ""}:${view.hand.length}`;
+  const need = prompt?.type === 'charleston-pass' ? 3 : prompt?.type === 'courtesy-pass' ? prompt.count : prompt?.type === 'turn' ? 1 : 0;
+  const passing = prompt?.type === 'charleston-pass' || prompt?.type === 'courtesy-pass';
+  const promptKey = `${game.id}:${prompt?.type ?? 'none'}:${phase.kind === 'charleston' ? `${phase.round}${phase.direction}` : ''}:${view.hand.length}`;
   useEffect(() => {
     setSelected([]);
     setNotice(null);
     setJokerWarned(false);
-    if (prompt) feel("nudge");
+    if (prompt) feel('nudge');
   }, [promptKey]);
   const ready = useAfterFirstRender();
 
   // Work out which tiles a pass brought in, by comparing the rack before and after the step.
   const stepKey = `${game.id}:${publicPhaseKey(phase)}`;
-  const previous = useRef<{
-    key: string;
-    gameId: string;
-    hand: number[];
-    phase: PublicPhase;
-  } | null>(null);
+  const previous = useRef<{ key: string; gameId: string; hand: number[]; phase: PublicPhase } | null>(null);
   useEffect(() => {
     const prev = previous.current;
-    previous.current = {
-      key: stepKey,
-      gameId: game.id,
-      hand: view.hand,
-      phase,
-    };
+    previous.current = { key: stepKey, gameId: game.id, hand: view.hand, phase };
     if (!prev || prev.key === stepKey) return;
     if (prev.gameId !== game.id) {
       setReceived(null);
       return;
     }
-    if (
-      prev.phase.kind !== "charleston" &&
-      prev.phase.kind !== "courtesy-select"
-    )
-      return;
+    if (prev.phase.kind !== 'charleston' && prev.phase.kind !== 'courtesy-select') return;
     const before = new Set(prev.hand);
     const tiles = view.hand.filter((t) => !before.has(t));
     if (tiles.length === 0) return;
-    const direction =
-      prev.phase.kind === "charleston" ? prev.phase.direction : "across";
-    setReceived({
-      tiles,
-      from:
-        SEATS.find((s) => s !== me && passTarget(s, direction) === me) ?? null,
-    });
+    const direction = prev.phase.kind === 'charleston' ? prev.phase.direction : 'across';
+    setReceived({ tiles, from: SEATS.find((s) => s !== me && passTarget(s, direction) === me) ?? null });
   }, [stepKey]);
 
   // The newest note that the computer moved for you because your time ran out.
   const timedOut = useMemo(() => {
     const recent = game.log.slice(-6);
-    return (
-      [...recent]
-        .reverse()
-        .find(
-          (e) => e.event.type === "timeout" && e.event.position === data.mySeat,
-        ) ?? null
-    );
+    return [...recent].reverse().find((e) => e.event.type === 'timeout' && e.event.position === data.mySeat) ?? null;
   }, [game.log, data.mySeat]);
 
   // Once you drag a tile the rack is in your own order, until you pick a sort again.
   const own = arranged?.active ? arranged.order : null;
   const hand = useMemo(() => {
-    const drawn =
-      view.drawn !== null && view.hand.includes(view.drawn) ? view.drawn : null;
+    const drawn = view.drawn !== null && view.hand.includes(view.drawn) ? view.drawn : null;
     if (own) return arrangeTiles(own, view.hand, sort, drawn);
     // Like a real rack: sorted, with the tile you just drew at the end.
     const sorted = sortTiles(
@@ -267,43 +186,29 @@ export function GameScreen({
     return drawn === null ? sorted : [...sorted, drawn];
   }, [view.hand, view.drawn, sort, own]);
   // Remember where new tiles landed, so they stay put when the next ones arrive.
-  const handKey = hand.join(",");
+  const handKey = hand.join(',');
   useEffect(() => {
-    if (own && own.join(",") !== handKey)
-      setArranged({ order: hand, active: true });
+    if (own && own.join(',') !== handKey) setArranged({ order: hand, active: true });
   }, [handKey]);
   const myExposures = view.players[me]?.exposures ?? [];
   const myDead = view.players[me]?.dead ?? null;
-  const rackWidth =
-    (sideBySide
-      ? sideWidth - 28
-      : compact
-        ? Math.min(layout.width, layout.column) - COMPACT_PAD * 2
-        : layout.contentWidth) - 16;
+  const rackWidth = (sideBySide ? sideWidth - 28 : compact ? Math.min(layout.width, layout.column) - COMPACT_PAD * 2 : layout.contentWidth) - 16;
   // Large-tile mode stands five tiles to a row instead of seven; tablets get bigger tiles.
   // On a shorter phone three rows of five would push the discards off the screen, so the
   // rack stays at two rows of seven there and large-tile mode enlarges the tile numbers.
   const perRow = prefs.largeTiles && !(compact && layout.height < 900) ? 5 : 7;
   const maxTile = (prefs.largeTiles ? 72 : 52) + (layout.tablet ? 14 : 0);
-  const tileWidth = Math.max(
-    34,
-    Math.min(maxTile, Math.floor((rackWidth - 6 * (perRow - 1)) / perRow)),
-  );
+  const tileWidth = Math.max(34, Math.min(maxTile, Math.floor((rackWidth - 6 * (perRow - 1)) / perRow)));
 
   // "Why can't I call this?" for the latest discard from someone else.
   const lastDiscard = view.discards.at(-1);
   const [why, setWhy] = useState<string | null>(null);
   useEffect(() => setWhy(null), [lastDiscard?.tile, phase.kind]);
-  const canAskWhy =
-    !prompt &&
-    !myDead &&
-    lastDiscard !== undefined &&
-    lastDiscard.seat !== me &&
-    (phase.kind === "claim" || phase.kind === "turn");
+  const canAskWhy = !prompt && !myDead && lastDiscard !== undefined && lastDiscard.seat !== me && (phase.kind === 'claim' || phase.kind === 'turn');
 
   // A Mahjong of your own gets confetti; any finished hand counts as practice for Pip's reminders.
   const [burst, setBurst] = useState(0);
-  const iWon = view.result?.kind === "mahjong" && view.result.winner === me;
+  const iWon = view.result?.kind === 'mahjong' && view.result.winner === me;
   useEffect(() => {
     if (!view.result) return;
     void notePractice();
@@ -314,29 +219,14 @@ export function GameScreen({
   }, [game.id, Boolean(view.result)]);
 
   const send = (action: Action) => {
-    if (
-      action.type === "charleston-pass" ||
-      action.type === "courtesy-pass" ||
-      action.type === "discard"
-    )
-      setReceived(null);
-    feel(
-      action.type === "discard" ||
-        action.type === "claim" ||
-        action.type === "charleston-pass" ||
-        action.type === "courtesy-pass"
-        ? "place"
-        : "pick",
-    );
+    if (action.type === 'charleston-pass' || action.type === 'courtesy-pass' || action.type === 'discard') setReceived(null);
+    feel(action.type === 'discard' || action.type === 'claim' || action.type === 'charleston-pass' || action.type === 'courtesy-pass' ? 'place' : 'pick');
     // Your own tiles sound the moment you let go, without waiting for the server.
-    if (action.type === "discard") {
+    if (action.type === 'discard') {
       ownDiscard.current = action.tile;
-      playSound("place");
-    } else if (
-      action.type === "charleston-pass" ||
-      action.type === "courtesy-pass"
-    ) {
-      playSound("pass");
+      playSound('place');
+    } else if (action.type === 'charleston-pass' || action.type === 'courtesy-pass') {
+      playSound('pass');
     }
     act(action);
   };
@@ -344,47 +234,35 @@ export function GameScreen({
   const arrange = (order: number[]) => {
     setArranged({ order, active: true });
     dismissArrangeHint();
-    feel("nudge");
+    feel('nudge');
   };
 
   // By suit, by number, then back to your own order if you've made one.
   const nextOrder = () => {
     if (own) {
       setArranged({ order: own, active: false });
-      setSort("suit");
-    } else if (sort === "suit") setSort("number");
+      setSort('suit');
+    } else if (sort === 'suit') setSort('number');
     else if (arranged) setArranged({ ...arranged, active: true });
-    else setSort("suit");
+    else setSort('suit');
   };
 
   const toggle = (tile: number) => {
     if (need === 0 || busy) return;
     if (passing && isJoker(tile)) {
-      setNotice("Jokers can’t be passed. Choose another tile.");
+      setNotice('Jokers can’t be passed. Choose another tile.');
       return;
     }
     // On your turn, tapping the tile you picked again throws it.
-    if (
-      prompt?.type === "turn" &&
-      selected.length === 1 &&
-      selected[0] === tile
-    ) {
+    if (prompt?.type === 'turn' && selected.length === 1 && selected[0] === tile) {
       discard();
       return;
     }
     setNotice(null);
     setJokerWarned(false);
-    feel("pick");
-    playSound("tap");
-    setSelected((s) =>
-      s.includes(tile)
-        ? s.filter((t) => t !== tile)
-        : need === 1
-          ? [tile]
-          : s.length < need
-            ? [...s, tile]
-            : [...s.slice(1), tile],
-    );
+    feel('pick');
+    playSound('tap');
+    setSelected((s) => (s.includes(tile) ? s.filter((t) => t !== tile) : need === 1 ? [tile] : s.length < need ? [...s, tile] : [...s.slice(1), tile]));
   };
 
   const select = (tiles: number[]) => {
@@ -396,7 +274,7 @@ export function GameScreen({
   // Learning aid, like the hand analysers in other mahjong apps: pick the tiles that the
   // closest hands on the card don't use. Jokers are never suggested.
   const suggest = () => {
-    const scores = tileScores(card, view.hand, myExposures, "hard");
+    const scores = tileScores(card, view.hand, myExposures, 'hard');
     const picks = [...scores.entries()]
       .filter(([t]) => !isJoker(t))
       .sort((a, b) => a[1] - b[1])
@@ -407,7 +285,7 @@ export function GameScreen({
     setNotice(
       need === 1
         ? `Suggested: ${tileShort(picks[0]!)}. Your closest hands don’t need it.`
-        : `Suggested: ${picks.map(tileShort).join(", ")}. Your closest hands don’t need them.`,
+        : `Suggested: ${picks.map(tileShort).join(', ')}. Your closest hands don’t need them.`,
     );
   };
 
@@ -418,151 +296,92 @@ export function GameScreen({
       setJokerWarned(true);
       return;
     }
-    send({ type: "discard", tile });
+    send({ type: 'discard', tile });
   };
 
   const status = (() => {
     switch (phase.kind) {
-      case "charleston":
+      case 'charleston':
         return prompt
-          ? `Charleston${phase.round === 2 ? " (second round)" : ""}: choose 3 tiles to pass ${phase.direction} to ${nameOf(passTarget(me, phase.direction))}.`
+          ? `Charleston${phase.round === 2 ? ' (second round)' : ''}: choose 3 tiles to pass ${phase.direction} to ${nameOf(passTarget(me, phase.direction))}.`
           : `Passed. Waiting for ${names(phase.waitingFor)}.`;
-      case "charleston-vote":
-        return prompt
-          ? "First Charleston done. Pass again? Anyone can say stop."
-          : `Waiting for ${names(phase.waitingFor)} to vote.`;
-      case "courtesy-count":
-        return prompt
-          ? `Courtesy pass: trade up to 3 tiles with ${nameOf(passTarget(me, "across"))}, across from you.`
+      case 'charleston-vote':
+        return prompt ? 'First Charleston done. Pass again? Anyone can say stop.' : `Waiting for ${names(phase.waitingFor)} to vote.`;
+      case 'courtesy-count':
+        return prompt ? `Courtesy pass: trade up to 3 tiles with ${nameOf(passTarget(me, 'across'))}, across from you.` : `Waiting for ${names(phase.waitingFor)}.`;
+      case 'courtesy-select':
+        return prompt?.type === 'courtesy-pass'
+          ? `Choose ${prompt.count} ${prompt.count === 1 ? 'tile' : 'tiles'} to pass across to ${nameOf(passTarget(me, 'across'))}.`
           : `Waiting for ${names(phase.waitingFor)}.`;
-      case "courtesy-select":
-        return prompt?.type === "courtesy-pass"
-          ? `Choose ${prompt.count} ${prompt.count === 1 ? "tile" : "tiles"} to pass across to ${nameOf(passTarget(me, "across"))}.`
-          : `Waiting for ${names(phase.waitingFor)}.`;
-      case "turn":
-        if (myDead)
-          return `Your hand is dead. ${nameOf(phase.seat)} is playing.`;
+      case 'turn':
+        if (myDead) return `Your hand is dead. ${nameOf(phase.seat)} is playing.`;
         if (phase.seat !== me) return `${nameOf(phase.seat)} is playing.`;
-        if (selected.length === 1)
-          return `Tap ${tileShort(selected[0]!)} again to throw it, or pick another.`;
-        return view.drawn !== null
-          ? `Your turn. You drew ${tileShort(view.drawn)}. Discard a tile.`
-          : "Your turn. Discard a tile.";
-      case "claim":
-        return prompt
-          ? "Your call."
-          : `${who(phase.from)} threw ${tileShort(phase.tile)}. Seeing if anyone calls it.`;
-      case "ended":
-        return "Hand over.";
+        if (selected.length === 1) return `Tap ${tileShort(selected[0]!)} again to throw it, or pick another.`;
+        return view.drawn !== null ? `Your turn. You drew ${tileShort(view.drawn)}. Discard a tile.` : 'Your turn. Discard a tile.';
+      case 'claim':
+        return prompt ? 'Your call.' : `${who(phase.from)} threw ${tileShort(phase.tile)}. Seeing if anyone calls it.`;
+      case 'ended':
+        return 'Hand over.';
     }
   })();
 
   const timer = (() => {
-    if (seconds === null || phase.kind === "ended") return null;
+    if (seconds === null || phase.kind === 'ended') return null;
     if (prompt) return `${formatSeconds(seconds)} to move`;
-    if (phase.kind === "turn")
-      return `${nameOf(phase.seat)}: ${formatSeconds(seconds)}`;
+    if (phase.kind === 'turn') return `${nameOf(phase.seat)}: ${formatSeconds(seconds)}`;
     return formatSeconds(seconds);
   })();
 
   const actions = (() => {
     if (!prompt) return null;
     switch (prompt.type) {
-      case "charleston-pass":
+      case 'charleston-pass':
         return (
           <Button
-            title={
-              selected.length === 3
-                ? `Pass ${prompt.direction} to ${nameOf(passTarget(me, prompt.direction))}`
-                : `Choose ${3 - selected.length} more`
-            }
+            title={selected.length === 3 ? `Pass ${prompt.direction} to ${nameOf(passTarget(me, prompt.direction))}` : `Choose ${3 - selected.length} more`}
             disabled={selected.length !== 3}
             loading={busy}
-            onPress={() => send({ type: "charleston-pass", tiles: selected })}
+            onPress={() => send({ type: 'charleston-pass', tiles: selected })}
             testID="action-pass"
           />
         );
-      case "charleston-vote":
+      case 'charleston-vote':
         return (
           <Row gap={10}>
-            <Button
-              style={{ flex: 1 }}
-              title="Pass again"
-              onPress={() => send({ type: "charleston-vote", continue: true })}
-              loading={busy}
-              testID="action-vote-yes"
-            />
-            <Button
-              style={{ flex: 1 }}
-              variant="secondary"
-              title="Stop here"
-              onPress={() => send({ type: "charleston-vote", continue: false })}
-              disabled={busy}
-              testID="action-vote-no"
-            />
+            <Button style={{ flex: 1 }} title="Pass again" onPress={() => send({ type: 'charleston-vote', continue: true })} loading={busy} testID="action-vote-yes" />
+            <Button style={{ flex: 1 }} variant="secondary" title="Stop here" onPress={() => send({ type: 'charleston-vote', continue: false })} disabled={busy} testID="action-vote-no" />
           </Row>
         );
-      case "courtesy-count":
+      case 'courtesy-count':
         return (
           <View style={{ gap: 6 }}>
-            <Text style={styles.hint}>
-              You both pick a number; you trade the smaller one. Pick None to
-              keep your tiles.
-            </Text>
+            <Text style={styles.hint}>You both pick a number; you trade the smaller one. Pick None to keep your tiles.</Text>
             <Row gap={8}>
               {[0, 1, 2, 3].map((n) => (
-                <Chip
-                  key={n}
-                  label={n === 0 ? "None" : String(n)}
-                  disabled={busy}
-                  onPress={() => send({ type: "courtesy-count", count: n })}
-                  testID={`action-courtesy-${n}`}
-                />
+                <Chip key={n} label={n === 0 ? 'None' : String(n)} disabled={busy} onPress={() => send({ type: 'courtesy-count', count: n })} testID={`action-courtesy-${n}`} />
               ))}
             </Row>
           </View>
         );
-      case "courtesy-pass":
+      case 'courtesy-pass':
         return (
           <Button
-            title={
-              selected.length === prompt.count
-                ? `Pass ${prompt.count} across`
-                : `Choose ${prompt.count - selected.length} more`
-            }
+            title={selected.length === prompt.count ? `Pass ${prompt.count} across` : `Choose ${prompt.count - selected.length} more`}
             disabled={selected.length !== prompt.count}
             loading={busy}
-            onPress={() => send({ type: "courtesy-pass", tiles: selected })}
+            onPress={() => send({ type: 'courtesy-pass', tiles: selected })}
             testID="action-courtesy-pass"
           />
         );
-      case "turn": {
+      case 'turn': {
         const tile = selected[0];
         const joker = tile !== undefined && isJoker(tile);
         return (
           <View style={{ gap: 8 }}>
-            {prompt.canMahjong && (
-              <Button
-                title="Mahjong!"
-                icon="check"
-                onPress={() => send({ type: "declare-mahjong" })}
-                loading={busy}
-                testID="action-mahjong"
-              />
-            )}
+            {prompt.canMahjong && <Button title="Mahjong!" icon="check" onPress={() => send({ type: 'declare-mahjong' })} loading={busy} testID="action-mahjong" />}
             <Button
-              variant={
-                prompt.canMahjong || (joker && jokerWarned)
-                  ? "secondary"
-                  : "primary"
-              }
-              title={
-                tile === undefined
-                  ? "Tap a tile to discard"
-                  : joker && jokerWarned
-                    ? "Yes, discard the joker"
-                    : `Discard ${tileShort(tile)}`
-              }
+              variant={prompt.canMahjong || (joker && jokerWarned) ? 'secondary' : 'primary'}
+              title={tile === undefined ? 'Tap a tile to discard' : joker && jokerWarned ? 'Yes, discard the joker' : `Discard ${tileShort(tile)}`}
               disabled={tile === undefined || busy}
               onPress={discard}
               testID="action-discard"
@@ -574,13 +393,13 @@ export function GameScreen({
                 compact
                 title={`Swap your ${tileShort(x.tile)} for ${whose(x.target)} joker`}
                 disabled={busy}
-                onPress={() => send({ type: "exchange-joker", ...x })}
+                onPress={() => send({ type: 'exchange-joker', ...x })}
               />
             ))}
           </View>
         );
       }
-      case "claim":
+      case 'claim':
         return (
           <View style={styles.claim} testID="claim-prompt">
             <Row gap={12}>
@@ -590,23 +409,13 @@ export function GameScreen({
                   {who(prompt.from)} threw {tileShort(prompt.tile)}
                 </Text>
                 <Text style={styles.claimText}>
-                  {prompt.canMahjong
-                    ? "It completes your hand!"
-                    : `You can call it for a ${prompt.sizes.map(groupName).join(" or ")} and lay that group face up.`}
-                  {seconds !== null ? ` ${seconds}s to decide.` : ""}
+                  {prompt.canMahjong ? 'It completes your hand!' : `You can call it for a ${prompt.sizes.map(groupName).join(' or ')} and lay that group face up.`}
+                  {seconds !== null ? ` ${seconds}s to decide.` : ''}
                 </Text>
               </View>
             </Row>
             {prompt.canMahjong && (
-              <Button
-                title={`Mahjong on ${tileShort(prompt.tile)}!`}
-                icon="check"
-                onPress={() =>
-                  send({ type: "claim", response: { type: "mahjong" } })
-                }
-                loading={busy}
-                testID="action-claim-mahjong"
-              />
+              <Button title={`Mahjong on ${tileShort(prompt.tile)}!`} icon="check" onPress={() => send({ type: 'claim', response: { type: 'mahjong' } })} loading={busy} testID="action-claim-mahjong" />
             )}
             <Row gap={8}>
               {prompt.sizes.map((size) => (
@@ -617,23 +426,11 @@ export function GameScreen({
                   compact
                   title={`Call for a ${groupName(size)}`}
                   disabled={busy}
-                  onPress={() =>
-                    send({ type: "claim", response: { type: "expose", size } })
-                  }
+                  onPress={() => send({ type: 'claim', response: { type: 'expose', size } })}
                   testID={`action-call-${size}`}
                 />
               ))}
-              <Button
-                style={{ flex: 1 }}
-                variant="text"
-                compact
-                title="Pass"
-                disabled={busy}
-                onPress={() =>
-                  send({ type: "claim", response: { type: "pass" } })
-                }
-                testID="action-claim-pass"
-              />
+              <Button style={{ flex: 1 }} variant="text" compact title="Pass" disabled={busy} onPress={() => send({ type: 'claim', response: { type: 'pass' } })} testID="action-claim-pass" />
             </Row>
           </View>
         );
@@ -644,64 +441,33 @@ export function GameScreen({
   const markedSet = new Set(marked ?? []);
   const rackItems: RackItem[] = hand.map((t) => ({
     tile: t,
-    label: `${tileName(t)}${view.drawn === t ? ", just drawn" : ""}${receivedSet.has(t) ? ", just passed to you" : ""}${markedSet.has(t) ? ", Pip suggests it" : ""}`,
+    label: `${tileName(t)}${view.drawn === t ? ', just drawn' : ''}${receivedSet.has(t) ? ', just passed to you' : ''}${markedSet.has(t) ? ', Pip suggests it' : ''}`,
     selected: selected.includes(t),
-    highlight:
-      (view.drawn === t || receivedSet.has(t) || markedSet.has(t)) &&
-      !selected.includes(t),
-    badge: markedSet.has(t)
-      ? "Pip"
-      : receivedSet.has(t)
-        ? "New"
-        : view.drawn === t
-          ? "Drew"
-          : undefined,
+    highlight: (view.drawn === t || receivedSet.has(t) || markedSet.has(t)) && !selected.includes(t),
+    badge: markedSet.has(t) ? 'Pip' : receivedSet.has(t) ? 'New' : view.drawn === t ? 'Drew' : undefined,
   }));
 
   const footer = (
     <View style={{ gap: 8 }}>
-      <Row
-        style={{ justifyContent: "space-between", alignItems: "flex-start" }}
-        gap={10}
-      >
-        <Text
-          style={styles.status}
-          testID="table-status"
-          accessibilityLiveRegion="polite"
-        >
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }} gap={10}>
+        <Text style={styles.status} testID="table-status" accessibilityLiveRegion="polite">
           {status}
         </Text>
         {timer && (
-          <View
-            style={[
-              styles.timer,
-              prompt && seconds !== null && seconds <= 10 && styles.timerUrgent,
-            ]}
-            accessibilityLabel={`Time left: ${timer}`}
-          >
+          <View style={[styles.timer, prompt && seconds !== null && seconds <= 10 && styles.timerUrgent]} accessibilityLabel={`Time left: ${timer}`}>
             <Text style={styles.timerText}>{timer}</Text>
           </View>
         )}
       </Row>
       {timedOut && timedOut.at !== dismissedTimeout && !ended && (
         <View style={styles.banner} testID="timeout-notice">
-          <Text style={styles.bannerText}>
-            Your time ran out, so the computer made that move for you.
-          </Text>
-          <Button
-            variant="text"
-            compact
-            title="OK"
-            onPress={() => setDismissedTimeout(timedOut.at)}
-          />
+          <Text style={styles.bannerText}>Your time ran out, so the computer made that move for you.</Text>
+          <Button variant="text" compact title="OK" onPress={() => setDismissedTimeout(timedOut.at)} />
         </View>
       )}
       {received && !ended && (
         <Text style={styles.received} testID="received-notice">
-          {received.from !== null
-            ? `${nameOf(received.from)} passed you`
-            : "You received"}{" "}
-          {received.tiles.map(tileShort).join(", ")}. They’re marked New.
+          {received.from !== null ? `${nameOf(received.from)} passed you` : 'You received'} {received.tiles.map(tileShort).join(', ')}. They’re marked New.
         </Text>
       )}
       {myDead && !ended && (
@@ -717,18 +483,8 @@ export function GameScreen({
             variant="text"
             compact
             icon="help"
-            title={
-              why
-                ? "Got it"
-                : `Why can’t I call ${tileShort(lastDiscard.tile)}?`
-            }
-            onPress={() =>
-              setWhy(
-                why
-                  ? null
-                  : explainClaimForView(card, view, lastDiscard.tile).text,
-              )
-            }
+            title={why ? 'Got it' : `Why can’t I call ${tileShort(lastDiscard.tile)}?`}
+            onPress={() => setWhy(why ? null : explainClaimForView(card, view, lastDiscard.tile).text)}
             testID="why-call"
           />
           {why && (
@@ -741,87 +497,43 @@ export function GameScreen({
         </View>
       )}
       {/* A coached hand is played right here, so there's no move to be told about. */}
-      {data.table.mode === "turn" && !coach && !ended && !prompt && !myDead && (
-        <Text style={styles.small}>
-          Turn-based: we’ll let you know when it’s your move.
-        </Text>
-      )}
-      {jokerWarned && (
-        <Notice tone="warn">
-          Jokers fill any group of 3 or more, so throwing one away is rarely
-          right, and nobody can call it. Tap again to discard it anyway.
-        </Notice>
-      )}
+      {data.table.mode === 'turn' && !coach && !ended && !prompt && !myDead && <Text style={styles.small}>Turn-based: we’ll let you know when it’s your move.</Text>}
+      {jokerWarned && <Notice tone="warn">Jokers fill any group of 3 or more, so throwing one away is rarely right, and nobody can call it. Tap again to discard it anyway.</Notice>}
       {notice && (
-        <Text
-          style={[
-            styles.tip,
-            !notice.startsWith("Suggested") && styles.tipWarn,
-          ]}
-          testID="rack-notice"
-        >
+        <Text style={[styles.tip, !notice.startsWith('Suggested') && styles.tipWarn]} testID="rack-notice">
           {notice}
         </Text>
       )}
       {ended ? (
         <>
           {rematch ? (
-            <Button
-              title="Find another match"
-              icon="arrow"
-              onPress={rematch}
-              testID="rematch"
-            />
+            <Button title="Find another match" icon="arrow" onPress={rematch} testID="rematch" />
           ) : (
-            data.table.status === "between" && (
-              <Button
-                title="Deal the next hand"
-                icon="arrow"
-                onPress={nextHand}
-                loading={busy}
-                testID="next-hand"
-              />
-            )
+            data.table.status === 'between' && <Button title="Deal the next hand" icon="arrow" onPress={nextHand} loading={busy} testID="next-hand" />
           )}
           <Button title="Leave table" variant="text" onPress={leave} compact />
         </>
       ) : (
         <>
           {coach ? coach({ selected, select, send, moves: actions }) : actions}
-          <Row style={{ justifyContent: "space-between" }} gap={4}>
+          <Row style={{ justifyContent: 'space-between' }} gap={4}>
             <Text style={styles.mine} numberOfLines={1}>
               {SEAT_WINDS[me]} · {formatScore(scoreOf(me))}
             </Text>
             <Row gap={0}>
               <IconButton
-                icon={prefs.sounds ? "sound" : "mute"}
-                label={
-                  prefs.sounds
-                    ? "Turn table sounds off"
-                    : "Turn table sounds on"
-                }
+                icon={prefs.sounds ? 'sound' : 'mute'}
+                label={prefs.sounds ? 'Turn table sounds off' : 'Turn table sounds on'}
                 color={colors.muted}
                 onPress={() => updatePrefs({ sounds: !prefs.sounds })}
               />
               {/* A coach makes its own suggestions. */}
-              {need > 0 && !coach && (
-                <Button
-                  variant="text"
-                  compact
-                  icon="bulb"
-                  title="Suggest"
-                  onPress={suggest}
-                  disabled={busy}
-                  testID="suggest"
-                />
-              )}
+              {need > 0 && !coach && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
               <Button
                 variant="text"
                 compact
                 icon="sort"
-                title={
-                  own ? "Your order" : sort === "suit" ? "By suit" : "By number"
-                }
+                title={own ? 'Your order' : sort === 'suit' ? 'By suit' : 'By number'}
                 hint="Changes the order of your tiles"
                 onPress={nextOrder}
                 testID="rack-order"
@@ -839,60 +551,32 @@ export function GameScreen({
               Drag tiles to arrange them.
             </Text>
           )}
-          <Rack
-            items={rackItems}
-            tileWidth={tileWidth}
-            tapsDisabled={need === 0}
-            animate={ready}
-            onTap={toggle}
-            onArrange={arrange}
-            onLift={() => feel("pick")}
-          />
+          <Rack items={rackItems} tileWidth={tileWidth} tapsDisabled={need === 0} animate={ready} onTap={toggle} onArrange={arrange} onLift={() => feel('pick')} />
         </>
       )}
     </View>
   );
 
-  const active = (seat: Seat) =>
-    (phase.kind === "turn" && phase.seat === seat) ||
-    ("waitingFor" in phase && phase.waitingFor.includes(seat));
+  const active = (seat: Seat) => (phase.kind === 'turn' && phase.seat === seat) || ('waitingFor' in phase && phase.waitingFor.includes(seat));
 
   const board = (
     <TableBoard
       view={view}
-      caption={`Hand ${game.handNumber} · ${data.table.mode === "live" ? "Live" : "Turn-based"}`}
+      caption={`Hand ${game.handNumber} · ${data.table.mode === 'live' ? 'Live' : 'Turn-based'}`}
       large={prefs.largeTiles}
       seatInfo={seatInfo}
       scoreOf={scoreOf}
       nameOf={nameOf}
       active={active}
       width={boardWidth}
-      onPlayer={(info) =>
-        openPlayer({ id: info.principalId!, name: info.name })
-      }
+      onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
     />
   );
   const log =
     game.log.length > 0 ? (
-      <View
-        style={{ gap: 4 }}
-        accessible
-        accessibilityLabel={`Recent play: ${game.log
-          .slice(-3)
-          .map((e) => e.text)
-          .join(" ")}`}
-      >
+      <View style={{ gap: 4 }} accessible accessibilityLabel={`Recent play: ${game.log.slice(-3).map((e) => e.text).join(' ')}`}>
         {game.log.slice(-3).map((entry, i) => (
-          <Text
-            key={`${entry.at}-${i}`}
-            style={[
-              styles.log,
-              (entry.event.type === "timeout" ||
-                entry.event.type === "dead-hand") &&
-                styles.logTimeout,
-            ]}
-            numberOfLines={3}
-          >
+          <Text key={`${entry.at}-${i}`} style={[styles.log, (entry.event.type === 'timeout' || entry.event.type === 'dead-hand') && styles.logTimeout]} numberOfLines={3}>
             {entry.text}
           </Text>
         ))}
@@ -900,83 +584,46 @@ export function GameScreen({
     ) : null;
   const hints = ended ? null : prefs.showHints ? (
     <Card tone="sage">
-      <Row style={{ justifyContent: "space-between" }}>
+      <Row style={{ justifyContent: 'space-between' }}>
         <Heading>Closest hands</Heading>
-        <Button
-          variant="text"
-          compact
-          title="Hide"
-          onPress={() => updatePrefs({ showHints: false })}
-        />
+        <Button variant="text" compact title="Hide" onPress={() => updatePrefs({ showHints: false })} />
       </Row>
       <HandHints hand={view.hand} exposures={myExposures} />
     </Card>
   ) : (
-    <Button
-      variant="text"
-      compact
-      icon="bulb"
-      title="Show closest hands"
-      onPress={() => updatePrefs({ showHints: true })}
-    />
+    <Button variant="text" compact icon="bulb" title="Show closest hands" onPress={() => updatePrefs({ showHints: true })} />
   );
-  const resultPanel = view.result ? (
-    <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} />
-  ) : null;
+  const resultPanel = view.result ? <ResultPanel data={data} nameOf={nameOf} note={resultNote ?? null} /> : null;
 
   // On a phone, news takes one slot above your moves instead of stacking up and pushing the
   // table away: the newest thing that needs you first.
-  const message: {
-    text: string;
-    tone: "tip" | "warn";
-    testID: string;
-    dismiss?: () => void;
-  } | null = (() => {
+  const message: { text: string; tone: 'tip' | 'warn'; testID: string; dismiss?: () => void } | null = (() => {
     if (!compact) return null;
-    if (why)
-      return {
-        text: why,
-        tone: "tip",
-        testID: "why-call-text",
-        dismiss: () => setWhy(null),
-      };
+    if (why) return { text: why, tone: 'tip', testID: 'why-call-text', dismiss: () => setWhy(null) };
     if (jokerWarned)
       return {
-        text: "Jokers fill any group of 3 or more, so throwing one is rarely right, and nobody can call it. Tap it again to throw it anyway.",
-        tone: "warn",
-        testID: "joker-warning",
+        text: 'Jokers fill any group of 3 or more, so throwing one is rarely right, and nobody can call it. Tap it again to throw it anyway.',
+        tone: 'warn',
+        testID: 'joker-warning',
       };
-    if (notice)
-      return {
-        text: notice,
-        tone: notice.startsWith("Suggested") ? "tip" : "warn",
-        testID: "rack-notice",
-      };
+    if (notice) return { text: notice, tone: notice.startsWith('Suggested') ? 'tip' : 'warn', testID: 'rack-notice' };
     if (timedOut && timedOut.at !== dismissedTimeout)
-      return {
-        text: "Your time ran out, so the computer made that move for you.",
-        tone: "warn",
-        testID: "timeout-notice",
-        dismiss: () => setDismissedTimeout(timedOut.at),
-      };
+      return { text: 'Your time ran out, so the computer made that move for you.', tone: 'warn', testID: 'timeout-notice', dismiss: () => setDismissedTimeout(timedOut.at) };
     if (myDead)
       return {
         text: `Your hand is dead: ${myDead.text}. You sit out the rest of this hand and still pay the winner. Fresh tiles next hand!`,
-        tone: "warn",
-        testID: "dead-hand-notice",
+        tone: 'warn',
+        testID: 'dead-hand-notice',
       };
     if (received)
       return {
-        text: `${received.from !== null ? `${nameOf(received.from)} passed you` : "You received"} ${received.tiles.map(tileShort).join(", ")}. They’re marked New.`,
-        tone: "tip",
-        testID: "received-notice",
+        text: `${received.from !== null ? `${nameOf(received.from)} passed you` : 'You received'} ${received.tiles.map(tileShort).join(', ')}. They’re marked New.`,
+        tone: 'tip',
+        testID: 'received-notice',
       };
     return null;
   })();
-  const showLast =
-    lastDiscard !== undefined &&
-    (phase.kind === "claim" || phase.kind === "turn") &&
-    !(prompt?.type === "claim");
+  const showLast = lastDiscard !== undefined && (phase.kind === 'claim' || phase.kind === 'turn') && !(prompt?.type === 'claim');
 
   const compactTable = compact ? (
     <View style={styles.compact}>
@@ -988,76 +635,33 @@ export function GameScreen({
         nameOf={nameOf}
         scoreOf={scoreOf}
         active={active}
-        onPlayer={(info) =>
-          openPlayer({ id: info.principalId!, name: info.name })
-        }
+        onPlayer={(info) => openPlayer({ id: info.principalId!, name: info.name })}
       />
-      <DiscardPool
-        view={view}
-        display={who}
-        mode={poolMode}
-        onMode={setPoolMode}
-        latest={game.log.at(-1)?.text ?? null}
-      />
+      <DiscardPool view={view} display={who} mode={poolMode} onMode={setPoolMode} latest={game.log.at(-1)?.text ?? null} />
       <View style={styles.moves}>
         {/* A call prompt names the tile and who threw it, so on a phone it stands in for the
             status line unless there's a clock to show. */}
-        {!(prompt?.type === "claim" && !timer) && (
-          <Row gap={8} style={{ alignItems: "center" }}>
+        {!(prompt?.type === 'claim' && !timer) && (
+          <Row gap={8} style={{ alignItems: 'center' }}>
             {showLast && (
-              <View
-                accessible
-                accessibilityLabel={`Last discard: ${tileName(lastDiscard.tile)} from ${who(lastDiscard.seat)}`}
-              >
-                <Tile
-                  face={faceOf(lastDiscard.tile)}
-                  width={28}
-                  flat
-                  highlight={phase.kind === "claim"}
-                />
+              <View accessible accessibilityLabel={`Last discard: ${tileName(lastDiscard.tile)} from ${who(lastDiscard.seat)}`}>
+                <Tile face={faceOf(lastDiscard.tile)} width={28} flat highlight={phase.kind === 'claim'} />
               </View>
             )}
-            <Text
-              style={styles.statusCompact}
-              numberOfLines={2}
-              testID="table-status"
-              accessibilityLiveRegion="polite"
-            >
+            <Text style={styles.statusCompact} numberOfLines={2} testID="table-status" accessibilityLiveRegion="polite">
               {status}
             </Text>
             {timer && (
-              <View
-                style={[
-                  styles.timer,
-                  prompt &&
-                    seconds !== null &&
-                    seconds <= 10 &&
-                    styles.timerUrgent,
-                ]}
-                accessibilityLabel={`Time left: ${timer}`}
-              >
+              <View style={[styles.timer, prompt && seconds !== null && seconds <= 10 && styles.timerUrgent]} accessibilityLabel={`Time left: ${timer}`}>
                 <Text style={styles.timerText}>{timer}</Text>
               </View>
             )}
           </Row>
         )}
         {message && (
-          <View
-            style={[
-              styles.message,
-              message.tone === "warn" && styles.messageWarn,
-            ]}
-            testID={message.testID}
-          >
+          <View style={[styles.message, message.tone === 'warn' && styles.messageWarn]} testID={message.testID}>
             <Text style={styles.messageText}>{message.text}</Text>
-            {message.dismiss && (
-              <Button
-                variant="text"
-                compact
-                title={message.testID === "why-call-text" ? "Got it" : "OK"}
-                onPress={message.dismiss}
-              />
-            )}
+            {message.dismiss && <Button variant="text" compact title={message.testID === 'why-call-text' ? 'Got it' : 'OK'} onPress={message.dismiss} />}
           </View>
         )}
         {canAskWhy && !why && (
@@ -1066,9 +670,7 @@ export function GameScreen({
             compact
             icon="help"
             title={`Why can’t I call ${tileShort(lastDiscard.tile)}?`}
-            onPress={() =>
-              setWhy(explainClaimForView(card, view, lastDiscard.tile).text)
-            }
+            onPress={() => setWhy(explainClaimForView(card, view, lastDiscard.tile).text)}
             testID="why-call"
           />
         )}
@@ -1080,92 +682,43 @@ export function GameScreen({
           <Exposures exposures={myExposures} width={22} align="flex-start" />
         </View>
       )}
-      {prefs.showHints && (
-        <ClosestHand
-          hand={view.hand}
-          exposures={myExposures}
-          onPress={() => setHandsOpen(true)}
-        />
-      )}
-      {arrangeHint && !message && prompt?.type !== "claim" && (
+      {prefs.showHints && <ClosestHand hand={view.hand} exposures={myExposures} onPress={() => setHandsOpen(true)} />}
+      {arrangeHint && !message && prompt?.type !== 'claim' && (
         <Text style={styles.arrangeHint} testID="arrange-hint">
           Drag tiles to arrange them.
         </Text>
       )}
-      <Rack
-        items={rackItems}
-        tileWidth={tileWidth}
-        tapsDisabled={need === 0}
-        animate={ready}
-        onTap={toggle}
-        onArrange={arrange}
-        onLift={() => feel("pick")}
-      />
-      <Row
-        style={{ justifyContent: "space-between", alignItems: "center" }}
-        gap={2}
-      >
-        <Text
-          style={styles.mine}
-          numberOfLines={1}
-          accessibilityLabel={`You: ${SEAT_WINDS[me]} wind, score ${scoreOf(me)}`}
-        >
+      <Rack items={rackItems} tileWidth={tileWidth} tapsDisabled={need === 0} animate={ready} onTap={toggle} onArrange={arrange} onLift={() => feel('pick')} />
+      <Row style={{ justifyContent: 'space-between', alignItems: 'center' }} gap={2}>
+        <Text style={styles.mine} numberOfLines={1} accessibilityLabel={`You: ${SEAT_WINDS[me]} wind, score ${scoreOf(me)}`}>
           {SEAT_WINDS[me][0]} · {formatScore(scoreOf(me))}
         </Text>
-        <Row gap={0} style={{ alignItems: "center" }}>
+        <Row gap={0} style={{ alignItems: 'center' }}>
           <IconButton
-            icon={prefs.sounds ? "sound" : "mute"}
-            label={
-              prefs.sounds ? "Turn table sounds off" : "Turn table sounds on"
-            }
+            icon={prefs.sounds ? 'sound' : 'mute'}
+            label={prefs.sounds ? 'Turn table sounds off' : 'Turn table sounds on'}
             color={colors.muted}
             onPress={() => updatePrefs({ sounds: !prefs.sounds })}
           />
-          <IconButton
-            icon="card"
-            label="Closest hands on the card"
-            color={colors.muted}
-            onPress={() => setHandsOpen(true)}
-            testID="show-hands"
-          />
-          {need > 0 && !coach && (
-            <Button
-              variant="text"
-              compact
-              icon="bulb"
-              title="Suggest"
-              onPress={suggest}
-              disabled={busy}
-              testID="suggest"
-            />
-          )}
+          <IconButton icon="card" label="Closest hands on the card" color={colors.muted} onPress={() => setHandsOpen(true)} testID="show-hands" />
+          {need > 0 && !coach && <Button variant="text" compact icon="bulb" title="Suggest" onPress={suggest} disabled={busy} testID="suggest" />}
           <Button
             variant="text"
             compact
             icon="sort"
-            title={
-              own ? "Your order" : sort === "suit" ? "By suit" : "By number"
-            }
+            title={own ? 'Your order' : sort === 'suit' ? 'By suit' : 'By number'}
             hint="Changes the order of your tiles"
             onPress={nextOrder}
             testID="rack-order"
           />
         </Row>
       </Row>
-      <Sheet
-        visible={handsOpen}
-        title="Closest hands"
-        onClose={() => setHandsOpen(false)}
-      >
+      <Sheet visible={handsOpen} title="Closest hands" onClose={() => setHandsOpen(false)}>
         <HandHints hand={view.hand} exposures={myExposures} />
         <Button
           variant="text"
           compact
-          title={
-            prefs.showHints
-              ? "Stop pinning the closest hand"
-              : "Pin the closest hand above my rack"
-          }
+          title={prefs.showHints ? 'Stop pinning the closest hand' : 'Pin the closest hand above my rack'}
           onPress={() => updatePrefs({ showHints: !prefs.showHints })}
           testID="pin-closest"
         />
@@ -1217,15 +770,7 @@ export function GameScreen({
   );
 }
 
-function ResultPanel({
-  data,
-  nameOf,
-  note,
-}: {
-  data: TablePayload;
-  nameOf: (seat: number) => string;
-  note: string | null;
-}) {
+function ResultPanel({ data, nameOf, note }: { data: TablePayload; nameOf: (seat: number) => string; note: string | null }) {
   const game = data.game!;
   const view = game.view;
   const result = view.result!;
@@ -1233,61 +778,34 @@ function ResultPanel({
   const card = useActiveCard();
   const { contentWidth } = useLayout();
   const winner = result.winner;
-  const title =
-    result.kind === "wall"
-      ? "Wall game. Nobody wins this one."
-      : winner === me
-        ? "Mahjong! You won the hand."
-        : `${nameOf(winner!)} called Mahjong.`;
+  const title = result.kind === 'wall' ? 'Wall game. Nobody wins this one.' : winner === me ? 'Mahjong! You won the hand.' : `${nameOf(winner!)} called Mahjong.`;
   // The winning hand laid out group by group, the way it reads on the card.
   const arranged =
-    result.kind === "mahjong" && winner !== null && result.handId
-      ? arrangeWin(
-          card,
-          result.handId,
-          result.assignment ?? "",
-          result.hands[winner] ?? [],
-          view.players[winner]?.exposures ?? [],
-        )
+    result.kind === 'mahjong' && winner !== null && result.handId
+      ? arrangeWin(card, result.handId, result.assignment ?? '', result.hands[winner] ?? [], view.players[winner]?.exposures ?? [])
       : null;
-  const groupTile = Math.max(
-    16,
-    Math.min(30, Math.floor((Math.min(contentWidth, 560) - 32 - 6 * 6) / 14)),
-  );
+  const groupTile = Math.max(16, Math.min(30, Math.floor((Math.min(contentWidth, 560) - 32 - 6 * 6) / 14)));
   const pip =
-    result.kind === "wall"
-      ? {
-          mood: "think" as const,
-          text: "A wall game: nobody wins, nobody pays. On to the next one!",
-        }
+    result.kind === 'wall'
+      ? { mood: 'think' as const, text: 'A wall game: nobody wins, nobody pays. On to the next one!' }
       : winner === me
-        ? {
-            mood: "cheer" as const,
-            text: "Mahjong! Pip is doing a happy little dance for you.",
-          }
-        : {
-            mood: "happy" as const,
-            text: `${nameOf(winner!)} got there first. Every hand teaches something. Deal again?`,
-          };
+        ? { mood: 'cheer' as const, text: 'Mahjong! Pip is doing a happy little dance for you.' }
+        : { mood: 'happy' as const, text: `${nameOf(winner!)} got there first. Every hand teaches something. Deal again?` };
   return (
-    <Card tone={winner === me ? "pink" : "default"} testID="result-panel">
+    <Card tone={winner === me ? 'pink' : 'default'} testID="result-panel">
       <Text style={styles.resultTitle} accessibilityRole="header">
         {title}
       </Text>
       <PipSays mood={pip.mood} size={52} testID="result-pip">
         {pip.text}
       </PipSays>
-      {result.kind === "mahjong" && result.pattern && (
+      {result.kind === 'mahjong' && result.pattern && (
         <View style={{ gap: 6 }}>
           <Pattern pattern={result.pattern} />
           {arranged && (
-            <View
-              style={styles.groups}
-              accessible
-              accessibilityLabel={`Winning hand: ${arranged.map((g) => g.map(tileName).join(", ")).join("; ")}`}
-            >
+            <View style={styles.groups} accessible accessibilityLabel={`Winning hand: ${arranged.map((g) => g.map(tileName).join(', ')).join('; ')}`}>
               {arranged.map((g, i) => (
-                <View key={i} style={{ flexDirection: "row", gap: 1 }}>
+                <View key={i} style={{ flexDirection: 'row', gap: 1 }}>
                   {g.map((t) => (
                     <Tile key={t} face={faceOf(t)} width={groupTile} flat />
                   ))}
@@ -1296,52 +814,29 @@ function ResultPanel({
             </View>
           )}
           <Body small muted>
-            {result.value} points ·{" "}
-            {result.from === null
-              ? "self-drawn"
-              : `on ${result.from === me ? "your" : `${nameOf(result.from)}’s`} discard`}
-            {result.jokerless ? " · jokerless, doubled" : ""}
+            {result.value} points · {result.from === null ? 'self-drawn' : `on ${result.from === me ? 'your' : `${nameOf(result.from)}’s`} discard`}
+            {result.jokerless ? ' · jokerless, doubled' : ''}
           </Body>
         </View>
       )}
       <View style={{ gap: 10 }}>
         {[0, 1, 2, 3].map((seat) => {
           const exposures = view.players[seat]?.exposures ?? [];
-          const concealed = sortTiles(result.hands[seat] ?? [], "suit");
+          const concealed = sortTiles(result.hands[seat] ?? [], 'suit');
           const paid = result.payments[seat] ?? 0;
           return (
             <View key={seat} style={{ gap: 4 }}>
-              <Row style={{ justifyContent: "space-between" }}>
+              <Row style={{ justifyContent: 'space-between' }}>
                 <Text style={styles.player}>
-                  {seat === me ? "You" : nameOf(seat)}
-                  {winner === seat ? " · Mahjong" : ""}
+                  {seat === me ? 'You' : nameOf(seat)}
+                  {winner === seat ? ' · Mahjong' : ''}
                 </Text>
-                <Text
-                  style={[
-                    styles.payment,
-                    {
-                      color:
-                        paid > 0
-                          ? colors.online
-                          : paid < 0
-                            ? colors.danger
-                            : colors.muted,
-                    },
-                  ]}
-                >
-                  {formatScore(paid)}
-                </Text>
+                <Text style={[styles.payment, { color: paid > 0 ? colors.online : paid < 0 ? colors.danger : colors.muted }]}>{formatScore(paid)}</Text>
               </Row>
               {!(winner === seat && arranged) && (
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
-                >
-                  {exposures.length > 0 && (
-                    <Exposures exposures={exposures} width={18} />
-                  )}
-                  <View
-                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 1 }}
-                  >
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {exposures.length > 0 && <Exposures exposures={exposures} width={18} />}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 1 }}>
                     {concealed.map((t) => (
                       <Tile key={t} face={faceOf(t)} width={18} flat />
                     ))}
@@ -1358,137 +853,44 @@ function ResultPanel({
         </Text>
       )}
       <Body small muted>
-        Table totals:{" "}
-        {data.table.seats
-          .map(
-            (s, p) =>
-              `${s.position === data.mySeat ? "You" : shortName(s.name)} ${formatScore(data.table.scores[p] ?? 0)}`,
-          )
-          .join(" · ")}
+        Table totals: {data.table.seats.map((s, p) => `${s.position === data.mySeat ? 'You' : shortName(s.name)} ${formatScore(data.table.scores[p] ?? 0)}`).join(' · ')}
       </Body>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  status: {
-    flex: 1,
-    fontFamily: fonts.serif,
-    fontSize: 17,
-    lineHeight: 22,
-    color: colors.ink,
-  },
-  tip: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.ink,
-    backgroundColor: colors.sage,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tipWarn: { backgroundColor: "#FFF2CC" },
-  timer: {
-    backgroundColor: colors.felt,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+  status: { flex: 1, fontFamily: fonts.serif, fontSize: 17, lineHeight: 22, color: colors.ink },
+  tip: { fontSize: 13, lineHeight: 18, color: colors.ink, backgroundColor: colors.sage, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  tipWarn: { backgroundColor: '#FFF2CC' },
+  timer: { backgroundColor: colors.felt, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   timerUrgent: { backgroundColor: colors.danger },
-  timerText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
-    fontVariant: ["tabular-nums"],
-  },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#FFF2CC",
-    borderRadius: 12,
-    paddingLeft: 12,
-  },
+  timerText: { color: '#fff', fontWeight: '800', fontSize: 14, fontVariant: ['tabular-nums'] },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF2CC', borderRadius: 12, paddingLeft: 12 },
   bannerText: { flex: 1, fontSize: 14, color: colors.ink },
-  received: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.ink,
-    backgroundColor: "#FFF2CC",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  received: { fontSize: 13, lineHeight: 18, color: colors.ink, backgroundColor: '#FFF2CC', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   hint: { fontSize: 14, color: colors.muted },
-  claim: {
-    gap: 10,
-    backgroundColor: colors.pink,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
+  claim: { gap: 10, backgroundColor: colors.pink, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: colors.primary },
   claimTitle: { fontFamily: fonts.serif, fontSize: 19, color: colors.ink },
   claimText: { fontSize: 14, color: colors.ink, lineHeight: 19 },
-  mine: { fontSize: 13, fontWeight: "700", color: colors.ink, flexShrink: 1 },
+  mine: { fontSize: 13, fontWeight: '700', color: colors.ink, flexShrink: 1 },
   small: { fontSize: 12, color: colors.muted },
-  myExposures: { flexDirection: "row", alignItems: "center", gap: 8 },
-  arrangeHint: { fontSize: 12, color: colors.muted, textAlign: "center" },
+  myExposures: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  arrangeHint: { fontSize: 12, color: colors.muted, textAlign: 'center' },
   log: { fontSize: 13, color: colors.muted },
-  logTimeout: { color: colors.ink, fontWeight: "700" },
-  note: { fontSize: 16, fontWeight: "700", color: colors.primary },
-  dead: { backgroundColor: "#FFF2CC", borderRadius: 14, padding: 10 },
-  compact: {
-    flex: 1,
-    paddingHorizontal: COMPACT_PAD,
-    marginBottom: -14,
-    gap: 6,
-  },
+  logTimeout: { color: colors.ink, fontWeight: '700' },
+  note: { fontSize: 16, fontWeight: '700', color: colors.primary },
+  dead: { backgroundColor: '#FFF2CC', borderRadius: 14, padding: 10 },
+  compact: { flex: 1, paddingHorizontal: COMPACT_PAD, marginBottom: -14, gap: 6 },
   moves: { gap: 6 },
-  statusCompact: {
-    flex: 1,
-    fontFamily: fonts.serif,
-    fontSize: 16,
-    lineHeight: 20,
-    color: colors.ink,
-  },
-  message: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.sage,
-    borderRadius: 10,
-    paddingLeft: 10,
-    paddingVertical: 4,
-  },
-  messageWarn: { backgroundColor: "#FFF2CC" },
-  messageText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.ink,
-    paddingVertical: 2,
-  },
+  statusCompact: { flex: 1, fontFamily: fonts.serif, fontSize: 16, lineHeight: 20, color: colors.ink },
+  message: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.sage, borderRadius: 10, paddingLeft: 10, paddingVertical: 4 },
+  messageWarn: { backgroundColor: '#FFF2CC' },
+  messageText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.ink, paddingVertical: 2 },
   why: { backgroundColor: colors.sage, borderRadius: 14, padding: 10 },
-  side: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-  },
-  resultTitle: {
-    fontFamily: fonts.serif,
-    fontSize: 26,
-    lineHeight: 31,
-    color: colors.ink,
-  },
-  groups: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  player: { fontSize: 16, fontWeight: "700", color: colors.ink },
-  payment: { fontSize: 16, fontWeight: "800" },
+  side: { backgroundColor: colors.surface, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 14 },
+  resultTitle: { fontFamily: fonts.serif, fontSize: 26, lineHeight: 31, color: colors.ink },
+  groups: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 4 },
+  player: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  payment: { fontSize: 16, fontWeight: '800' },
 });
